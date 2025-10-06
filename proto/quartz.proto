@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+option go_package = "quartz/proto";
+
+package quartzservice;
+
+service QuartzInternalCryptoService {
+  rpc StartRegistration (StartRegistrationRequest) returns (StartRegistrationResponse);
+  rpc FinishRegistration (FinishRegistrationRequest) returns (FinishRegistrationResponse);
+
+  rpc StartLogin (StartLoginRequest) returns (StartLoginResponse);
+  rpc FinishLogin (FinishLoginRequest) returns (FinishLoginResponse);
+
+}
+
+message StartRegistrationRequest {
+  string registrationRequest = 1;
+  string email = 2;
+}
+
+message StartRegistrationResponse {
+  string nonce = 1;
+  string registrationResponse = 2;
+}
+
+message FinishRegistrationRequest {
+  string registrationRecord = 1;
+  string nonce = 2;
+}
+
+message FinishRegistrationResponse {
+  bool status = 1;
+  string uuid = 2;
+}
+
+message StartLoginRequest {
+  string email = 1;
+  string userIdentifier = 2;
+  string startLoginRequest = 3;
+  string registrationRecord = 4;
+}
+
+message StartLoginResponse {
+  string nonce = 1;
+  string loginResponse = 2;
+}
+
+message FinishLoginRequest {
+  string nonce = 1;
+  string finishLoginRequest = 2;
+}
+
+message FinishLoginResponse {
+  string sessionKey = 1;
+  string email = 2;
+}

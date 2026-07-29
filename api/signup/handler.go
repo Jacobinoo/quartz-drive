@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-
+	"quartz/config"
 	"quartz/internal/dto"
 	"quartz/internal/model"
 	pb "quartz/proto"
@@ -70,7 +70,6 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(registrationResponse)
 }
 
-// Signup: store new user in DB (opaque receive m3)
 func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -85,8 +84,8 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) {
 	}
 
 	grpcFinishRegistrationReq := &pb.FinishRegistrationRequest{
-		Nonce:              m3.RegistrationNonce,
-		RegistrationRecord: m3.RegistrationRecord,
+		Nonce:              m3.User.APAKE.RegistrationNonce,
+		RegistrationRecord: m3.User.APAKE.RegistrationRecord,
 	}
 
 	finishRegRes, finishRegErr := h.grpc.FinishRegistration(h.ctx, grpcFinishRegistrationReq)
@@ -103,22 +102,112 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storedUser := model.User{
-		ID: credID,
-		M3: dto.M3{
-			Email:               m3.Email,
-			Salt:                m3.Salt,
-			PublicKey:           m3.PublicKey,
-			EncryptedPrivateKey: m3.EncryptedPrivateKey,
-			Nonce:               m3.Nonce,
-			RegistrationRecord:  m3.RegistrationRecord,
-			RegistrationNonce:   m3.RegistrationNonce,
-		},
-	}
+	err := h.db.Transaction(func(tx *gorm.DB) error {
+		storedUserKeyStore := model.UserKeyStore{
+			UserID:                               credID,
+			MasterKdfSalt:                        m3.User.Keys.MasterKdfSalt,
+			AccountEncryptionPublicKey:           m3.User.Keys.AccountEncryptionPublicKey,
+			EncryptedAccountEncryptionPrivateKey: m3.User.Keys.EncryptedAccountEncryptionPrivateKey,
+			AccountEncryptionKeyNonce:            m3.User.Keys.AccountEncryptionKeyNonce,
+			AccountSigningPublicKey:              m3.User.Keys.AccountSigningPublicKey,
+			EncryptedAccountSigningPrivateKey:    m3.User.Keys.EncryptedAccountSigningPrivateKey,
+			AccountSigningKeyNonce:               m3.User.Keys.AccountSigningKeyNonce,
+		}
 
-	if err := h.db.Create(&storedUser).Error; err != nil {
-		// registrationSessions.Delete(m3.RegistrationNonce)
-		http.Error(w, err.Error(), http.StatusConflict)
+		storedUser := model.User{
+			ID:                 credID,
+			Email:              m3.User.Email,
+			RegistrationRecord: m3.User.APAKE.RegistrationRecord,
+			RegistrationNonce:  m3.User.APAKE.RegistrationNonce,
+			KdfParams: dto.KdfParams{
+				KdfAlg:      config.Cfg.CRYPTO.KdfAlg,
+				KdfOpsLimit: config.Cfg.CRYPTO.KdfOpsLimit,
+				KdfMemLimit: config.Cfg.CRYPTO.KdfMemLimit,
+			},
+			EncryptionVersion: config.Cfg.CRYPTO.EncryptionVersion,
+		}
+
+		shareUUID := uuid.New()
+		linkUUID := uuid.New()
+		nodeUUID := uuid.New()
+
+		storedShare := model.Share{
+			ID:                     shareUUID,
+			TargetLinkID:           linkUUID,
+			Type:                   "DEFAULT",
+			OwnerID:                credID,
+			SharePublicKey:         m3.Drive.DefaultShare.PublicKey,
+			WrappedSharePrivateKey: m3.Drive.DefaultShare.WrappedPrivateKey,
+			SharePrivNonce:         m3.Drive.DefaultShare.PrivKeyNonce,
+		}
+
+		storedNode := model.Node{
+			ID:                nodeUUID,
+			Type:              model.NodeTypeFolder,
+			EncryptedMetadata: "",
+			MetadataNonce:     "",
+			OwnerID:           credID,
+			NodePublicKey:     m3.Drive.RootNode.PublicKey,
+			WrappedNodeKey:    m3.Drive.RootNode.WrappedPrivateKey,
+			NodePrivNonce:     m3.Drive.RootNode.PrivKeyNonce,
+			Signature:         m3.Drive.RootNode.SignedEncryptedPassphrase,
+		}
+
+		storedLink := model.Link{
+			ID:                            linkUUID,
+			ParentNodeID:                  nil,
+			ChildNodeID:                   &nodeUUID,
+			EncryptedName:                 "",
+			NameNonce:                     "",
+			EncryptedNodePassphrase:       m3.Drive.RootNode.EncryptedPassphrase,
+			SignedEncryptedNodePassphrase: m3.Drive.RootNode.SignedEncryptedPassphrase,
+			AuthorID:                      credID,
+		}
+
+		storedShareMember := model.ShareMember{
+			ShareID:                        shareUUID,
+			UserID:                         credID,
+			Permissions:                    255, // Full Admin
+			EncryptedSharePassphrase:       m3.Drive.DefaultShare.EncryptedPassphraseForOwner,
+			SignedEncryptedSharePassphrase: m3.Drive.DefaultShare.SignedEncryptedPassphraseForOwner,
+		}
+
+		if err := tx.Create(&storedUser).Error; err != nil {
+			// registrationSessions.Delete(m3.RegistrationNonce)
+			http.Error(w, err.Error(), http.StatusConflict)
+			return err
+		}
+
+		if err := tx.Create(&storedUserKeyStore).Error; err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return err
+		}
+
+		if err := tx.Create(&storedNode).Error; err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return err
+		}
+
+		if err := tx.Create(&storedLink).Error; err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return err
+		}
+
+		if err := tx.Create(&storedShare).Error; err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return err
+		}
+
+		if err := tx.Create(&storedShareMember).Error; err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 

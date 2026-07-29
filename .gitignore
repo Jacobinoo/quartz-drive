@@ -4,3 +4,4 @@ cert
 *.key
 *.env
 build/
+.idea/

@@ -24,9 +24,15 @@ func New() (db *gorm.DB, err error) {
 			if config.Cfg.DB.AutoMigrate {
 				log.Println("auto migration is running...")
 				err = db.AutoMigrate(
-					&model.GormRefreshToken{},
-					&model.File{},
 					&model.User{},
+					&model.UserKeyStore{},
+					&model.GormRefreshToken{},
+					&model.FileBlock{},
+					&model.Node{},
+					&model.Link{},
+					&model.Share{},
+					&model.ShareMember{},
+					&model.Session{},
 				)
 			}
 			return db, err

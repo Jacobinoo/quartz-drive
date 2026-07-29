@@ -7,12 +7,27 @@ import (
 )
 
 type GormRefreshToken struct {
-	TokenHash  string    `gorm:"primarykey;not null"`
-	UserID     uuid.UUID `gorm:"type:uuid;not null"`
-	CreatedAt  time.Time
-	ExpiresAt  time.Time
+	//UUIDv7
+	ID uuid.UUID `gorm:"primarykey;not null;default:uuidv7()"`
+
+	//UUIDv4
+	UserID uuid.UUID `gorm:"type:uuid;index;not null"`
+
+	TokenHash string `gorm:"type:varchar(64);uniqueIndex;not null"`
+
+	FamilyID  uuid.UUID `gorm:"type:uuid;index;not null"`
+	IsRevoked bool      `gorm:"default:false;not null"`
+
 	LastUsedAt time.Time `gorm:"default:null"`
-	CsrfToken  string    `gorm:"not null"`
+
+	CsrfTokenHash string `gorm:"not null"`
+	DpopJKT       string `gorm:"type:varchar(45);not null"`
+
+	SessionID uuid.UUID `gorm:"type:uuid;index;not null"`
+	Session   Session   `gorm:"foreignKey:SessionID"`
+
+	ExpiresAt time.Time `gorm:"index"` //żeby kasować szybko stare tokeny
+	CreatedAt time.Time
 }
 
 // override the table name

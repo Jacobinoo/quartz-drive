@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"quartz/api/files"
 	"quartz/api/refresh"
 	"quartz/api/signin"
+	"quartz/api/signout"
 	"quartz/api/signup"
 	"quartz/config"
 	"quartz/pkg/database"
+	"quartz/pkg/storage"
 	pb "quartz/proto"
 
 	"google.golang.org/grpc"
@@ -28,10 +31,16 @@ func Run() {
 		return
 	}
 
+	s3Service, err := storage.NewS3Service()
+	if err != nil {
+		log.Fatal("storage s3 service connection failed")
+	}
+
 	state := &ServerState{
 		DB:          db,
 		GRPCClient:  *grpcClient,
 		GRPCContext: context.WithoutCancel(context.Background()),
+		S3Service:   s3Service,
 	}
 
 	router := initRouter(state)
@@ -84,11 +93,17 @@ func initV1Mux(state *ServerState) *http.ServeMux {
 	signinHandler := signin.NewHandler(state.DB, state.GRPCClient, state.GRPCContext)
 	signin.RegisterRoutes(mux, signinHandler)
 
+	signoutHandler := signout.NewHandler(state.DB)
+	signout.RegisterRoutes(mux, signoutHandler)
+
 	signupHandler := signup.NewHandler(state.DB, state.GRPCClient, state.GRPCContext)
 	signup.RegisterRoutes(mux, signupHandler)
 
 	refreshHandler := refresh.NewHandler(state.DB)
 	refresh.RegisterRoutes(mux, refreshHandler)
+
+	filesHandler := files.NewHandler(state.DB, state.S3Service)
+	files.RegisterRoutes(mux, filesHandler)
 
 	return mux
 }

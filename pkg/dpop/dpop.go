@@ -5,23 +5,96 @@ import (
 	"crypto/elliptic"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math/big"
+	"net/http"
+	"strings"
+	"time"
 
 	jwt "github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
-func validateDpopProof(dpopProof string) error {
+func fullURL(r *http.Request) string {
+	builder := strings.Builder{}
+
+	if r.TLS != nil {
+		builder.WriteString("https://")
+	} else {
+		builder.WriteString("http://")
+	}
+
+	builder.WriteString(r.Host)
+	builder.WriteString(r.RequestURI)
+
+	// if r.URL.RawQuery != "" {
+	// 	builder.WriteString("?" + r.URL.RawQuery)
+	// }
+
+	// if r.URL.Fragment != "" {
+	// 	builder.WriteString("#" + r.URL.Fragment)
+	// }
+
+	return builder.String()
+}
+
+func ValidateDpopProof(dpopProof string, r *http.Request) (string, error) {
+	if dpopProof == "" {
+		log.Printf("dpop proof is empty")
+		return "", errors.New("invaid_dpop_proof")
+	}
+
 	parser := jwt.NewParser(jwt.WithValidMethods([]string{jwt.SigningMethodES256.Alg()}))
 
-	token, err := parser.Parse(dpopProof, func(t *jwt.Token) (interface{}, error) {
-		//Extract JWK from token header
+	thumbprint := ""
+
+	_, err := parser.Parse(dpopProof, func(t *jwt.Token) (interface{}, error) {
+		alg, ok := t.Header["alg"]
+		if !ok || alg != "ES256" {
+			return nil, errors.New("alg claim is invalid")
+		}
+
+		typ, ok := t.Header["typ"]
+		if !ok || typ != "dpop+jwt" {
+			return nil, errors.New("typ claim is invalid")
+		}
+
 		rawJwk, ok := t.Header["jwk"]
+		if !ok || rawJwk == "" {
+			return nil, errors.New("jwk is invalid")
+		}
+
+		htm, ok := t.Claims.(jwt.MapClaims)["htm"]
+		if !ok || htm != r.Method {
+			return nil, errors.New("htm claim is invalid")
+		}
+
+		htu, ok := t.Claims.(jwt.MapClaims)["htu"]
+		if !ok || htu != fullURL(r) {
+			log.Printf("htu %s VS requestUrl %s", htu, fullURL(r))
+			return nil, errors.New("htu claim is invalid")
+		}
+
+		jti, ok := t.Claims.(jwt.MapClaims)["jti"].(string)
+		_, err := uuid.Parse(jti)
+		if !ok || err != nil {
+			return nil, errors.New("jti claim is invalid")
+		}
+
+		iat, ok := t.Claims.(jwt.MapClaims)["iat"].(float64)
 		if !ok {
-			return nil, errors.New("missing jwk in dpop header")
+			return nil, errors.New("iat claim is invalid")
+		}
+		if err != nil {
+			return nil, errors.New("iat claim could not be parsed")
+		}
+		timeIat := time.Unix(int64(iat), 0)
+		expired := timeIat.After(time.Now().Add(30 * time.Second))
+		if expired {
+			return nil, errors.New("dpop proof expired")
 		}
 
 		jwkBytes, err := json.Marshal(rawJwk)
@@ -34,12 +107,10 @@ func validateDpopProof(dpopProof string) error {
 			return nil, err
 		}
 
-		thumbprint, err := computeJWKThumbprint(rawJwk)
+		thumbprint, err = computeJWKThumbprint(rawJwk)
 		if err != nil {
 			return nil, err
 		}
-
-		fmt.Println("JWK Thumbprint:", thumbprint)
 
 		return pubKey, nil
 	})
@@ -48,22 +119,8 @@ func validateDpopProof(dpopProof string) error {
 		return "", err
 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return errors.New("invalid claims")
-	}
-
-	// Validate the 'htm' claim
-	if htm, ok := claims["htm"].(string); !ok || htm != "POST" {
-		return "", errors.New("invalid htm claim")
-	}
-
-	// Validate the 'htu' claim
-	if htu, ok := claims["htu"].(string); !ok || htu != "https://localhost:3100/v1/signin/m3" {
-		return "", errors.New("invalid htu claim")
-	}
-
-	return nil
+	fmt.Println("JWK Thumbprint:", thumbprint)
+	return thumbprint, nil
 }
 
 func parseJWK(jwkBytes []byte) (*ecdsa.PublicKey, error) {
@@ -116,11 +173,5 @@ func computeJWKThumbprint(jwkRaw interface{}) (string, error) {
 	}
 
 	hash := sha256.Sum256(canonicalJSON)
-	return base64.RawStdEncoding.EncodeToString(hash[:]), nil
-}
-
-func computeDpopJwkThumbprint(canonicalJwk string) string {
-	// Compute the SHA-256 hash of the canonical JWK
-	hash := sha256.Sum256([]byte(canonicalJwk))
-	return hex.EncodeToString(hash[:])
+	return base64.RawURLEncoding.EncodeToString(hash[:]), nil
 }

@@ -18,6 +18,7 @@ type (
 		DB
 		GRPC
 		JWT
+		CRYPTO
 	}
 
 	App struct {
@@ -45,6 +46,13 @@ type (
 	JWT struct {
 		SecretKey string `env:"JWT_PRIVATE_KEY_HEX,required"`
 		PublicKey string `env:"JWT_PUBLIC_KEY_HEX,required"`
+	}
+
+	CRYPTO struct {
+		KdfOpsLimit       int8  `env:"KDF_OPSLIMIT,required"`
+		KdfMemLimit       int64 `env:"KDF_MEMLIMIT,required"`
+		KdfAlg            int8  `env:"KDF_ALG,required"`
+		EncryptionVersion int16 `env:"ENC_VERSION,required"`
 	}
 )
 

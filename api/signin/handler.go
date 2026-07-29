@@ -11,9 +11,13 @@ import (
 	"net/http"
 	"quartz/internal/dto"
 	"quartz/internal/model"
+	"quartz/pkg/dpop"
 	"quartz/pkg/token"
 	pb "quartz/proto"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/mssola/useragent"
 
 	"gorm.io/gorm"
 )
@@ -90,6 +94,14 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	dpopHeader := r.Header.Get("DPoP")
+	thumbprint, err := dpop.ValidateDpopProof(dpopHeader, r)
+	if err != nil {
+		log.Printf("invalid dpop proof, err: %v", err)
+		http.Error(w, "invalid_dpop_proof", http.StatusBadRequest)
+		return
+	}
+
 	var m3 dto.M3Login
 	if err := json.NewDecoder(r.Body).Decode(&m3); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -103,38 +115,78 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) {
 
 	finishLogRes, finishLogErr := h.grpc.FinishLogin(h.ctx, grpcFinishLoginReq)
 	if finishLogErr != nil {
-		log.Printf("grpc StartLogin call failed: %v", finishLogErr)
+		log.Printf("grpc FinishLogin call failed: %v", finishLogErr)
 	} else {
-		log.Println("grpc StartLogin call succeeded")
+		log.Println("grpc FinishLogin call succeeded")
 	}
 
 	fmt.Println("Established a new trusted session key: ", finishLogRes.SessionKey)
 
 	var trustedUserInfo dto.TrustedUserInformation
 
-	if err := h.db.Where("email = ?", finishLogRes.Email).First(&trustedUserInfo).Error; err != nil {
+	err = h.db.Model(&model.User{}).
+		Select("users.*, user_key_stores.*").
+		Joins("INNER JOIN user_key_stores ON user_key_stores.user_id = users.id").
+		Where("users.email = ?", finishLogRes.Email).
+		First(&trustedUserInfo).Error
+
+	if err != nil {
 		http.Error(w, "user not found", http.StatusNotFound)
 		return
 	}
 
-	var refreshToken = token.IssueRefreshToken()
+	uaHeader := r.Header.Get("User-Agent")
+	ua := useragent.New(uaHeader)
+
+	fmt.Printf("Mobile: %v\n", ua.Mobile())   // => true
+	fmt.Printf("Bot: %v\n", ua.Bot())         // => false
+	fmt.Printf("Mozilla: %v\n", ua.Mozilla()) // => "5.0"
+	fmt.Printf("Model: %v\n", ua.Model())     // => "Nexus One"
+
+	fmt.Printf("Platform: %v\n", ua.Platform()) // => "Linux"
+	fmt.Printf("OS: %v\n", ua.OS())             // => "Android 2.3.7"
+
+	name, version := ua.Engine()
+	fmt.Printf("Engine: %v\n", name)     // => "AppleWebKit"
+	fmt.Printf("Version: %v\n", version) // => "533.1"
+
+	name, version = ua.Browser()
+	fmt.Printf("Browser: %v\n", name)    // => "Android"
+	fmt.Printf("Version: %v\n", version) // => "4.0"
+
+	displayedDeviceName := ua.OS() + " - " + ua.Model() + " - " + name
+
+	newSessionEntry := model.Session{
+		UserID:            trustedUserInfo.ID,
+		SessionPrivateKey: m3.SessionPrivateKey,
+		UserAgent:         uaHeader,
+		DeviceName:        displayedDeviceName,
+		LastActiveAt:      time.Now(),
+	}
+
+	familyID := uuid.New()
+	refreshToken := token.IssueRefreshToken()
 	newCsrfToken := token.IssueCsrfToken()
 
-	var refreshTokenEntry = model.GormRefreshToken{
-		TokenHash: refreshToken.TokenSha256Hash,
-		UserID:    trustedUserInfo.ID,
-		ExpiresAt: time.Now().Add(7 * 24 * time.Hour), // default 7 days
-		CsrfToken: newCsrfToken.Token,
+	refreshTokenEntry := model.GormRefreshToken{
+		UserID:        trustedUserInfo.ID,
+		TokenHash:     refreshToken.TokenSha256Hash,
+		FamilyID:      familyID,
+		IsRevoked:     false,
+		ExpiresAt:     time.Now().Add(7 * 24 * time.Hour), // default 7 days
+		CsrfTokenHash: newCsrfToken.TokenSha256Hash,
+		Session:       newSessionEntry,
+		DpopJKT:       thumbprint,
 	}
 
 	fingerprintBytes := make([]byte, 64)
-	rand.Read(fingerprintBytes)
+	_, _ = rand.Read(fingerprintBytes)
 	fingerprint := hex.EncodeToString(fingerprintBytes)
 
 	fingerprintHashBytes := sha256.Sum256(fingerprintBytes)
 	fingerprintHash := hex.EncodeToString(fingerprintHashBytes[:])
 
-	accessToken, expTime := token.IssueAccessToken(fingerprintHash)
+	accessToken, expTime := token.IssueAccessToken(fingerprintHash, thumbprint, trustedUserInfo.ID.String(), trustedUserInfo.Email)
 	maxAge := time.Until(expTime)
 
 	http.SetCookie(w, &http.Cookie{
@@ -158,7 +210,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err := h.db.Create(&refreshTokenEntry).Error; err != nil {
-		log.Printf("failed to store refresh token: %v", err)
+		log.Printf("failed to store login data: %v", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -173,11 +225,10 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) {
 		CsrfToken:              newCsrfToken.Token,
 	}
 
-	err := json.NewEncoder(w).Encode(loginTrustAttestation)
+	err = json.NewEncoder(w).Encode(loginTrustAttestation)
 	if err != nil {
-		log.Fatalln(err)
-		// loginSessions.Delete(m3.Nonce)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		// loginSessions.Delete(m3.Nonce)
 		return
 	}
 }

@@ -29,6 +29,57 @@ import { fetchFiles } from "@/crypto/files";
 import { getSodium } from "@/lib/crypto/sodium";
 import { routerServerGlobal } from "next/dist/server/lib/router-utils/router-server-context";
 import Router from "next/router";
+import { customFetch } from "@/lib/api";
+
+function StorageQuota() {
+    const [used, setUsed] = useState(0);
+    const [max, setMax] = useState(15 * 1024 * 1024 * 1024);
+
+    useEffect(() => {
+        async function fetchQuota() {
+            try {
+                // In production, wire this to use your customFetch with DPoP!
+                const res = await customFetch("https://localhost:3100/v1/files/quota");
+                if (res.ok) {
+                    const data = await res.json();
+                    setUsed(data.usedBytes);
+                    setMax(data.maxBytes);
+                }
+            } catch (e) {
+                console.error("Failed to fetch quota:", e);
+            }
+        }
+        fetchQuota();
+    }, []);
+
+    const formatBytes = (bytes: number) => {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
+
+    const percentage = Math.min(100, Math.round((used / max) * 100));
+
+    return (
+        <SidebarGroup className="mt-auto mb-2">
+            <SidebarGroupLabel>Storage</SidebarGroupLabel>
+            <SidebarGroupContent className="px-4 py-2">
+                <div className="w-full bg-gray-200 dark:bg-gray-800 rounded-full h-2 mb-2 overflow-hidden">
+                    <div
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-1000 ease-out"
+                        style={{ width: `${percentage}%` }}
+                    />
+                </div>
+                <div className="text-xs text-gray-500 flex justify-between font-medium">
+                    <span>{formatBytes(used)} used</span>
+                    <span>{formatBytes(max)} total</span>
+                </div>
+            </SidebarGroupContent>
+        </SidebarGroup>
+    );
+}
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const router = useRouter();
@@ -72,6 +123,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        <StorageQuota />
+
       </SidebarContent>
       <SidebarRail />
     </Sidebar>

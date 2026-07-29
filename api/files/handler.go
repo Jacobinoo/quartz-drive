@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"sync"
 	"quartz/internal/dto"
 	"quartz/internal/model"
 	"quartz/pkg/storage"
+	"sync"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -135,21 +135,21 @@ func (h *Handler) FinishUpload(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func(chunkIndex int) {
 			defer wg.Done()
-			
+
 			nonce := ""
 			if chunkIndex < len(req.ChunkNonces) {
 				nonce = req.ChunkNonces[chunkIndex]
 			}
-			
+
 			objectKey := fmt.Sprintf("%s/chunk_%d", req.NodeID, chunkIndex)
-			
+
 			// Verify physical size directly from S3!
 			size, err := h.s3.GetChunkSize(objectKey)
 			if err != nil {
 				errCh <- fmt.Errorf("chunk %d missing in S3: %v", chunkIndex, err)
 				return
 			}
-			
+
 			mu.Lock()
 			trueTotalSize += size
 			blocks = append(blocks, model.FileBlock{
@@ -167,7 +167,7 @@ func (h *Handler) FinishUpload(w http.ResponseWriter, r *http.Request) {
 
 	wg.Wait()
 	close(errCh)
-	
+
 	if len(errCh) > 0 {
 		err := <-errCh
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -573,4 +573,34 @@ func (h *Handler) EmptyTrash(w http.ResponseWriter, r *http.Request) {
 	}(trashedLinks)
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) GetQuota(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// For MVP, we fetch the first ShareMember (mimicking an authenticated user)
+	var shareMember model.ShareMember
+	if err := h.db.First(&shareMember).Error; err != nil {
+		http.Error(w, "user not found", http.StatusNotFound)
+		return
+	}
+
+	var usedBytes int64
+	// Because trashed items are NOT soft-deleted in the nodes table, this correctly includes trash!
+	h.db.Model(&model.Node{}).
+		Where("owner_id = ?", shareMember.UserID).
+		Select("COALESCE(SUM(size_bytes), 0)").
+		Scan(&usedBytes)
+
+	// 15 GB default quota
+	var maxBytes int64 = 5 * 1024 * 1024 * 1024
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"usedBytes": usedBytes,
+		"maxBytes":  maxBytes,
+	})
 }

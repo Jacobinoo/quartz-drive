@@ -27,6 +27,9 @@ type FinishFileUploadRequest struct {
 	CreatedAt                     time.Time `json:"createdAt"`
 	ChunkNonces                   []string  `json:"chunkNonces"` // Array of nonces used for each 4MB chunk
 	ChunkSizes                    []int     `json:"chunkSizes"`  // Array of sizes in bytes for each chunk
+
+	EncryptedMetadata string `json:"encryptedMetadata"`
+	MetadataNonce     string `json:"metadataNonce"`
 }
 
 type CreateFolderRequest struct {

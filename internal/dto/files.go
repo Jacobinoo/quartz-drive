@@ -18,4 +18,7 @@ type FileListResponseItem struct {
 	HasChildren bool `json:"hasChildren"`
 
 	CreatedAt time.Time `json:"createdAt"`
+
+	EncryptedMetadata string `json:"encryptedMetadata"`
+	MetadataNonce     string `json:"metadataNonce"`
 }

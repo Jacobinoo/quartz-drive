@@ -102,8 +102,8 @@ func (h *Handler) FinishUpload(w http.ResponseWriter, r *http.Request) {
 		ID:                nodeUUID,
 		Type:              model.NodeTypeFile,
 		SizeBytes:         req.SizeBytes,
-		EncryptedMetadata: "", // Or fill if sending extra encrypted metadata
-		MetadataNonce:     "",
+		EncryptedMetadata: req.EncryptedMetadata,
+		MetadataNonce:     req.MetadataNonce,
 		OwnerID:           ownerID,
 		NodePublicKey:     req.NodePublicKey,
 		WrappedNodeKey:    req.WrappedNodeKey,
@@ -254,6 +254,9 @@ func (h *Handler) Files(w http.ResponseWriter, r *http.Request) {
 
 			HasChildren: hasChildren,
 			CreatedAt:   link.CreatedAt,
+
+			EncryptedMetadata: link.ChildNode.EncryptedMetadata,
+			MetadataNonce:     link.ChildNode.MetadataNonce,
 		})
 	}
 

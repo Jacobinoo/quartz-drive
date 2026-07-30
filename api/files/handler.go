@@ -595,8 +595,8 @@ func (h *Handler) GetQuota(w http.ResponseWriter, r *http.Request) {
 		Select("COALESCE(SUM(size_bytes), 0)").
 		Scan(&usedBytes)
 
-	// 15 GB default quota
-	var maxBytes int64 = 5 * 1024 * 1024 * 1024
+	// 100 MB default quota
+	var maxBytes int64 = 100 * 1024 * 1024
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{

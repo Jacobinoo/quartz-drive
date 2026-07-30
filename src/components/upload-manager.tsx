@@ -1,5 +1,6 @@
 'use client';
 
+import { getSodium } from '@/lib/crypto/sodium';
 import { useEffect, useRef } from 'react';
 import { useUploadStore } from '@/hooks/use-upload-store';
 import {UploadWorkerInput, UploadWorkerOutput} from "@/types/crypto-worker-types";
@@ -34,7 +35,25 @@ export function UploadManager() {
                         const job = useUploadStore.getState().jobs.find(j => j.id === data.taskId);
 
                         if (job) {
-                            try {
+                          try {
+                            const sodium = await getSodium();
+
+                            const metadata = {
+                                            mimeType: job.file.type || "application/octet-stream",
+                                            lastModified: job.file.lastModified,
+                                            originalSizeBytes: job.file.size,
+                                            fileExtension: job.file.name.split('.').pop() || ""
+                                        };
+                            const metadataJson = JSON.stringify(metadata);
+
+                            const metadataNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+                                        const encryptedMetadata = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+                                            sodium.from_string(metadataJson),
+                                            null,
+                                            null,
+                                            metadataNonce,
+                                            job.fileKey // The exact key that protects the file contents!
+                                        );
                                 // 2. Call our new backend endpoint!
                                 await finishFileUpload({
                                     nodeId: job.nodeId,
@@ -46,7 +65,10 @@ export function UploadManager() {
                                     encryptedNodePassphrase: job.encryptedNodePassphrase,
                                     signedEncryptedNodePassphrase: "", // Signature implementation later
                                     chunkNonces: [], // If worker doesn't report nonces, keep empty for now
-                                    chunkSizes: []
+                                  chunkSizes: [],
+
+                                  encryptedMetadata: sodium.to_base64(encryptedMetadata),
+                                  metadataNonce: sodium.to_base64(metadataNonce)
                                 });
                                 console.log(`Successfully saved ${job.file.name} metadata to Postgres!`);
                                 updateJob(data.taskId, { status: 'SUCCESS', progress: 100 });

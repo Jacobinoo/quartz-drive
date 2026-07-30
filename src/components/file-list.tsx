@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { fetchFiles, getDownloadUrls } from "@/crypto/files";
 import { getSodium } from "@/lib/crypto/sodium";
 import { useDriveStore } from "@/lib/driveStore";
-import { FileIcon, FolderIcon, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { FileIcon, FolderIcon, Info, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { customFetch } from "@/lib/api"; // Added for our direct API calls
 import {
     DropdownMenu,
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/table";
 import { initializeDriveKeys } from "@/crypto/drive";
 import { FolderPickerModal } from "./folder-picker";
+import { FileDetailsModal } from "./file-details-modal";
 
 export function FileList() {
     const currentFolder = useDriveStore(s => s.getCurrentFolder());
@@ -29,6 +30,7 @@ export function FileList() {
     const setDraggedItem = useDriveStore(s => s.setDraggedItem);
   const [files, setFiles] = useState<any[]>([]);
   const [pickerItemToMove, setPickerItemToMove] = useState<any>(null);
+  const [detailsFile, setDetailsFile] = useState<any>(null);
 
       useEffect(() => {
           initializeDriveKeys().catch(console.error);
@@ -52,7 +54,28 @@ export function FileList() {
                         const decryptedBytes = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
                             null, ciphertext, null, nonce, currentFolder!.privateKey
                         );
-                        return { ...file, plaintextName: sodium.to_string(decryptedBytes) };
+                      let metadata = null;
+
+                      if (file.encryptedMetadata && file.type === 'FILE') {
+                                  // First, unwrap the File Key
+                                  const fileKey = sodium.crypto_box_seal_open(
+                                      sodium.from_base64(file.encryptedNodePassphrase),
+                                      currentFolder!.publicKey, currentFolder!.privateKey
+                                  );
+
+                                  // Second, decrypt the JSON string
+                                  const decryptedMetaBytes = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+                                      null,
+                                      sodium.from_base64(file.encryptedMetadata),
+                                      null,
+                                      sodium.from_base64(file.metadataNonce),
+                                      fileKey
+                                  );
+                                  metadata = JSON.parse(sodium.to_string(decryptedMetaBytes));
+                              }
+
+
+                        return { ...file, plaintextName: sodium.to_string(decryptedBytes), metadata };
                     } catch (e) {
                         return { ...file, plaintextName: "Decryption Failed" };
                     }
@@ -236,7 +259,9 @@ export function FileList() {
                                     </div>
                                 </TableCell>
                                 <TableCell className="text-gray-500 py-3">
-                                    {file.sizeBytes ? `${(file.sizeBytes / 1024 / 1024).toFixed(2)} MB` : '--'}
+                                  {file.metadata?.originalSizeBytes
+                                      ? `${(file.metadata.originalSizeBytes / 1024 / 1024).toFixed(2)} MB`
+                                      : (file.sizeBytes ? `${(file.sizeBytes / 1024 / 1024).toFixed(2)} MB` : '--')}
                                 </TableCell>
                                 <TableCell className="text-right py-3">
                                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -266,7 +291,11 @@ export function FileList() {
                                                 <DropdownMenuItem onClick={() => handleTrash(file)} className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950 cursor-pointer">
                                                     <Trash2 className="w-4 h-4 mr-2" />
                                                     Move to Trash
-                                                </DropdownMenuItem>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => setDetailsFile(file)} className="cursor-pointer">
+                                        <Info className="w-4 h-4 mr-2" />
+                                        File Details
+                                    </DropdownMenuItem>
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </div>
@@ -282,7 +311,15 @@ export function FileList() {
                             onClose={() => setPickerItemToMove(null)}
                         />
                     )}
-        </div>
+
+            {detailsFile && (
+                <FileDetailsModal
+                    file={detailsFile}
+                    breadcrumbs={useDriveStore.getState().breadcrumbs}
+                    onClose={() => setDetailsFile(null)}
+                />
+            )}
+      </div>
     );
 }
 

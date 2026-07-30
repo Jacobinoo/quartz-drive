@@ -34,6 +34,9 @@ export async function finishFileUpload(payload: {
     nodePrivNonce?: string;
     chunkNonces: string[];
     chunkSizes: number[];
+
+    encryptedMetadata: string;
+     metadataNonce: string;
 }): Promise<any> {
     const res = await customFetch(`https://localhost:3100/v1/files/finish`, {
         method: "POST",
@@ -54,6 +57,9 @@ export async function finishFileUpload(payload: {
             nodePrivNonce: payload.nodePrivNonce || "",
             chunkNonces: payload.chunkNonces,
             chunkSizes: payload.chunkSizes,
+
+            encryptedMetadata: payload.encryptedMetadata,
+            metadataNonce: payload.metadataNonce,
         }),
         credentials: "include",
     });

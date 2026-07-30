@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"quartz/internal/dto"
+	"quartz/internal/middleware"
 	"quartz/internal/model"
 	"quartz/pkg/storage"
 	"sync"
@@ -650,4 +651,66 @@ func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) GetAllFiles(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 1. Get the current User ID from the Auth Middleware Context!
+	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var links []model.Link
+	// 2. Fetch every single file/folder the user owns in one highly optimized query
+	// We join the `nodes` table so we can filter by the OwnerID!
+	err := h.db.Joins("JOIN nodes ON nodes.id = links.child_node_id").
+		Where("nodes.owner_id = ?", userID).
+		Preload("ChildNode").
+		Find(&links).Error
+
+	if err != nil {
+		http.Error(w, "failed to fetch files for search index", http.StatusInternalServerError)
+		return
+	}
+
+	var response []dto.FileListResponseItem
+	for _, link := range links {
+		// 1. Safely handle nil pointers for ParentNodeID and ChildNodeID
+		parentIDStr := ""
+		if link.ParentNodeID != nil {
+			parentIDStr = link.ParentNodeID.String()
+		}
+
+		childIDStr := ""
+		if link.ChildNodeID != nil {
+			childIDStr = link.ChildNodeID.String()
+		}
+
+		response = append(response, dto.FileListResponseItem{
+			NodeID:                        childIDStr,
+			ParentNodeID:                  parentIDStr, // <-- Now safe from panics!
+			Type:                          string(link.ChildNode.Type),
+			SizeBytes:                     link.ChildNode.SizeBytes,
+			EncryptedName:                 link.EncryptedName,
+			NameNonce:                     link.NameNonce,
+			EncryptedNodePassphrase:       link.EncryptedNodePassphrase,
+			SignedEncryptedNodePassphrase: link.SignedEncryptedNodePassphrase,
+
+			NodePublicKey:  link.ChildNode.NodePublicKey,
+			WrappedNodeKey: link.ChildNode.WrappedNodeKey,
+			NodePrivNonce:  link.ChildNode.NodePrivNonce,
+
+			CreatedAt:         link.CreatedAt,
+			EncryptedMetadata: link.ChildNode.EncryptedMetadata,
+			MetadataNonce:     link.ChildNode.MetadataNonce,
+		})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }

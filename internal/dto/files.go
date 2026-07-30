@@ -4,6 +4,7 @@ import "time"
 
 type FileListResponseItem struct {
 	NodeID                        string `json:"nodeId"`
+	ParentNodeID                  string `json:"parentNodeId"`
 	Type                          string `json:"type"` // 'FILE' or 'FOLDER'
 	SizeBytes                     int64  `json:"sizeBytes"`
 	EncryptedName                 string `json:"encryptedName"`

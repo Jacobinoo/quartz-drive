@@ -24,4 +24,5 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 	mux.HandleFunc("/files/trash/empty", middleware.CorsMiddleware(middleware.DpopMiddleware(h.EmptyTrash)))
 	mux.HandleFunc("/files/quota", middleware.CorsMiddleware(middleware.DpopMiddleware(h.GetQuota)))
 	mux.HandleFunc("/files/move", middleware.CorsMiddleware(middleware.DpopMiddleware(h.MoveFile)))
+	mux.HandleFunc("/files/all", middleware.CorsMiddleware(middleware.DpopMiddleware(middleware.AccessTokenMiddleware(h.GetAllFiles))))
 }

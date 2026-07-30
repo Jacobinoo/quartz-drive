@@ -50,3 +50,15 @@ type RenameRequest struct {
 	EncryptedName string `json:"encryptedName"`
 	NameNonce     string `json:"nameNonce"`
 }
+
+type MoveFileRequest struct {
+	NodeID            string `json:"nodeId"`
+	OldParentFolderID string `json:"oldParentFolderId"`
+	NewParentFolderID string `json:"newParentFolderId"`
+
+	// newly wrapped payloads for the Destination Folder
+	NewEncryptedName             string `json:"newEncryptedName"`
+	NewNameNonce                 string `json:"newNameNonce"`
+	NewEncryptedNodePassphrase   string `json:"newEncryptedNodePassphrase"`
+	NewSignedEncryptedPassphrase string `json:"newSignedEncryptedNodePassphrase"`
+}

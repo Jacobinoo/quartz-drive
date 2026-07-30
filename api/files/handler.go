@@ -604,3 +604,47 @@ func (h *Handler) GetQuota(w http.ResponseWriter, r *http.Request) {
 		"maxBytes":  maxBytes,
 	})
 }
+
+func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req dto.MoveFileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	// 1. Validate UUIDs
+	nodeUUID, err1 := uuid.Parse(req.NodeID)
+	oldParentUUID, err2 := uuid.Parse(req.OldParentFolderID)
+	newParentUUID, err3 := uuid.Parse(req.NewParentFolderID)
+	if err1 != nil || err2 != nil || err3 != nil {
+		http.Error(w, "invalid UUIDs", http.StatusBadRequest)
+		return
+	}
+
+	// 2. Find the exact Link connecting the File to the Old Folder
+	var link model.Link
+	if err := h.db.Where("child_node_id = ? AND parent_node_id = ?", nodeUUID, oldParentUUID).First(&link).Error; err != nil {
+		http.Error(w, "file not found in the specified source folder", http.StatusNotFound)
+		return
+	}
+
+	// 3. Cryptographic Re-link! Update the parent and overwrite all crypto fields
+	link.ParentNodeID = &newParentUUID
+	link.EncryptedName = req.NewEncryptedName
+	link.NameNonce = req.NewNameNonce
+	link.EncryptedNodePassphrase = req.NewEncryptedNodePassphrase
+	link.SignedEncryptedNodePassphrase = req.NewSignedEncryptedPassphrase
+
+	// 4. Save the new Link to the database
+	if err := h.db.Save(&link).Error; err != nil {
+		http.Error(w, "failed to move file", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}

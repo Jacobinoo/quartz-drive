@@ -12,11 +12,21 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+} from "@/components/ui/table";
 import { initializeDriveKeys } from "@/crypto/drive";
 
 export function FileList() {
     const currentFolder = useDriveStore(s => s.getCurrentFolder());
-  const [files, setFiles] = useState<any[]>([]);
+    const draggedItem = useDriveStore(s => s.draggedItem);
+    const setDraggedItem = useDriveStore(s => s.setDraggedItem);
+    const [files, setFiles] = useState<any[]>([]);
 
       useEffect(() => {
           initializeDriveKeys().catch(console.error);
@@ -51,6 +61,10 @@ export function FileList() {
             }
         }
         loadAndDecrypt();
+
+        const handleRefresh = () => loadAndDecrypt();
+        window.addEventListener('refreshFiles', handleRefresh);
+        return () => window.removeEventListener('refreshFiles', handleRefresh);
     }, [currentFolder]);
 
     // --- NEW: Rename Handler ---
@@ -105,54 +119,153 @@ export function FileList() {
         }
     };
 
+    const handleMoveItem = async (itemToMove: any, targetFolder: any) => {
+        try {
+            if (!currentFolder) return;
+            const sodium = await getSodium();
+
+            // 1. Unwrap the moving item's Passphrase using our CURRENT folder's private key
+            const fileKey = sodium.crypto_box_seal_open(
+                sodium.from_base64(itemToMove.encryptedNodePassphrase),
+                currentFolder.publicKey,
+                currentFolder.privateKey
+            );
+
+            // 2. We need the TARGET folder's Public & Private keys!
+            // First, unwrap the target folder's Passphrase (using current folder's private key)
+            const targetFolderPassphrase = sodium.crypto_box_seal_open(
+                sodium.from_base64(targetFolder.encryptedNodePassphrase),
+                currentFolder.publicKey,
+                currentFolder.privateKey
+            );
+
+            // Second, decrypt the target folder's Private Key using its Passphrase
+            const targetPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+                null, sodium.from_base64(targetFolder.wrappedNodeKey),
+                sodium.from_string("FolderNode"), sodium.from_base64(targetFolder.nodePrivNonce),
+                targetFolderPassphrase
+            );
+            const targetPublicKey = sodium.from_base64(targetFolder.nodePublicKey);
+
+            // 3. Re-wrap the moving item's Passphrase for the TARGET folder!
+            const newEncryptedNodePassphrase = sodium.crypto_box_seal(fileKey, targetPublicKey);
+
+            // 4. Re-encrypt the moving item's name using the TARGET folder's Private Key!
+            const nameNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+            const newEncryptedName = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+                sodium.from_string(itemToMove.plaintextName),
+                null, null, nameNonce, targetPrivateKey
+            );
+
+            await customFetch("https://localhost:3100/v1/files/move", {
+                method: "PATCH",
+                body: JSON.stringify({
+                    nodeId: itemToMove.nodeId,
+                    oldParentFolderId: currentFolder.nodeId,
+                    newParentFolderId: targetFolder.nodeId,
+                    newEncryptedName: sodium.to_base64(newEncryptedName),
+                    newNameNonce: sodium.to_base64(nameNonce),
+                    newEncryptedNodePassphrase: sodium.to_base64(newEncryptedNodePassphrase),
+                    newSignedEncryptedNodePassphrase: "TODO" // MVP Bypass
+                })
+            });
+
+            // Remove the moved item from the current view
+            setFiles(prev => prev.filter(f => f.nodeId !== itemToMove.nodeId));
+
+        } catch (e) {
+            console.error("Failed to move file cryptographically", e);
+            alert("Failed to move item.");
+        }
+    };
+
     return (
-        <div className="mt-8">
-            <h2 className="text-xl font-bold mb-4">{currentFolder?.name || "My Files"}</h2>
+        <div className="mt-8 bg-white dark:bg-black rounded-lg shadow-sm border dark:border-gray-800">
+            <div className="p-4 border-b dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/20">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{currentFolder?.name || "My Files"}</h2>
+            </div>
 
             {files.length === 0 ? (
-                <div className="p-8 text-center text-gray-500 border border-dashed rounded">
+                <div className="p-16 text-center text-gray-500">
+                    <FolderIcon className="w-12 h-12 mx-auto mb-3 opacity-20" />
                     This folder is empty.
                 </div>
             ) : (
-                <div className="flex flex-col gap-2">
-                    {files.map(f => (
-                        <div key={f.nodeId} className="p-4 border rounded shadow flex justify-between items-center group">
-
-                            {/* Left Side: Icon & Name */}
-                            <div className="flex items-center cursor-pointer" onClick={() => f.type === 'FOLDER' ? handleFolderClick(f) : null}>
-                                {f.type === 'FOLDER' ? <FolderIcon className="mr-3 text-blue-500" /> : <FileIcon className="mr-3 text-gray-500" />}
-                                <span className={f.type === 'FOLDER' ? "font-semibold hover:underline" : ""}>{f.plaintextName}</span>
-                            </div>
-
-                            {/* Right Side: Actions */}
-                            <div className="flex items-center gap-2">
-                                {f.type === 'FILE' && (
-                                    <button onClick={() => handleDownload(f)} className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 transition-colors">
-                                        Download
-                                    </button>
-                                )}
-
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors text-gray-500">
-                                            <MoreVertical className="w-4 h-4" />
-                                        </button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                        <DropdownMenuItem onClick={() => handleRename(f)} className="cursor-pointer">
-                                            <Pencil className="w-4 h-4 mr-2" />
-                                            Rename
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => handleTrash(f)} className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950 cursor-pointer">
-                                            <Trash2 className="w-4 h-4 mr-2" />
-                                            Move to Trash
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                <Table>
+                    <TableHeader className="bg-gray-50/50 dark:bg-gray-900/50">
+                        <TableRow>
+                            <TableHead className="w-[60%]">Name</TableHead>
+                            <TableHead className="w-[20%]">Size</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {files.map(file => (
+                            <TableRow 
+                                key={file.nodeId} 
+                                className={`group cursor-pointer ${draggedItem?.nodeId === file.nodeId ? 'opacity-30 bg-blue-50 dark:bg-blue-900/20' : ''}`}
+                                
+                                // Make the row draggable
+                                draggable={true}
+                                onDragStart={(e) => {
+                                    setDraggedItem(file);
+                                    e.dataTransfer.effectAllowed = "move";
+                                }}
+                                onDragEnd={() => setDraggedItem(null)}
+                                
+                                // Make FOLDERS act as Drop Targets
+                                onDragOver={(e) => {
+                                    if (file.type === 'FOLDER' && draggedItem && draggedItem.nodeId !== file.nodeId) {
+                                        e.preventDefault();
+                                        e.dataTransfer.dropEffect = "move";
+                                    }
+                                }}
+                                onDrop={(e) => {
+                                    e.preventDefault();
+                                    if (file.type === 'FOLDER' && draggedItem && draggedItem.nodeId !== file.nodeId) {
+                                        handleMoveItem(draggedItem, file);
+                                    }
+                                }}
+                            >
+                                <TableCell className="font-medium py-3">
+                                    <div className="flex items-center" onClick={() => file.type === 'FOLDER' ? handleFolderClick(file) : null}>
+                                        {file.type === 'FOLDER' ? <FolderIcon className="mr-3 w-5 h-5 text-blue-500 fill-blue-500/20" /> : <FileIcon className="mr-3 w-5 h-5 text-gray-400" />}
+                                        <span className={file.type === 'FOLDER' ? "hover:underline hover:text-blue-600 transition-colors" : ""}>{file.plaintextName}</span>
+                                    </div>
+                                </TableCell>
+                                <TableCell className="text-gray-500 py-3">
+                                    {file.sizeBytes ? `${(file.sizeBytes / 1024 / 1024).toFixed(2)} MB` : '--'}
+                                </TableCell>
+                                <TableCell className="text-right py-3">
+                                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        {file.type === 'FILE' && (
+                                            <button onClick={() => handleDownload(file)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium mr-2 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
+                                                Download
+                                            </button>
+                                        )}
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <button className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors text-gray-500">
+                                                    <MoreVertical className="w-4 h-4" />
+                                                </button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={() => handleRename(file)} className="cursor-pointer">
+                                                    <Pencil className="w-4 h-4 mr-2" />
+                                                    Rename
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => handleTrash(file)} className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950 cursor-pointer">
+                                                    <Trash2 className="w-4 h-4 mr-2" />
+                                                    Move to Trash
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
             )}
         </div>
     );

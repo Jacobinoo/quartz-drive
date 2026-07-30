@@ -27,6 +27,7 @@ import { FileList } from "@/components/file-list";
 import { useDriveStore, FolderKey } from "@/lib/driveStore";
 import { getSodium } from "@/lib/crypto/sodium";
 import { customFetch } from "@/lib/api";
+import { SearchBar } from "@/components/search-bar";
 
 export default function DriveHomePage() {
   const router = useRouter();
@@ -35,31 +36,31 @@ export default function DriveHomePage() {
       e.preventDefault();
       const draggedItem = useDriveStore.getState().draggedItem;
       if (!draggedItem || draggedItem.nodeId === targetFolder.nodeId) return;
-  
+
       try {
           const currentFolder = useDriveStore.getState().getCurrentFolder();
           if (!currentFolder) return;
           const sodium = await getSodium();
-  
+
           // 1. Unwrap the moving item's Passphrase using CURRENT folder
           const fileKey = sodium.crypto_box_seal_open(
               sodium.from_base64(draggedItem.encryptedNodePassphrase),
               currentFolder.publicKey, currentFolder.privateKey
           );
-  
+
           // 2. We ALREADY HAVE the target folder's keys from the Breadcrumb!
           const targetPublicKey = targetFolder.publicKey;
           const targetPrivateKey = targetFolder.privateKey;
-  
+
           // 3. Re-wrap
           const newEncryptedNodePassphrase = sodium.crypto_box_seal(fileKey, targetPublicKey);
-  
+
           // 4. Re-encrypt name
           const nameNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
           const newEncryptedName = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
               sodium.from_string(draggedItem.plaintextName), null, null, nameNonce, targetPrivateKey
           );
-  
+
           // 5. Send API
           const res = await customFetch("https://localhost:3100/v1/files/move", {
               method: "PATCH",
@@ -73,7 +74,7 @@ export default function DriveHomePage() {
                   newSignedEncryptedNodePassphrase: "TODO"
               })
           });
-          
+
           if (res.ok) {
               useDriveStore.getState().setDraggedItem(null);
               window.dispatchEvent(new Event('refreshFiles'));
@@ -90,7 +91,7 @@ export default function DriveHomePage() {
       <AppSidebar />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 justify-between border-b px-4">
-          <Input placeholder="Search" />
+          <SearchBar />
           <Separator
             orientation="vertical"
             className="mr- data-[orientation=vertical]:h-4 mx-5"
@@ -122,7 +123,7 @@ export default function DriveHomePage() {
 
                 return (
                   <div key={folder.nodeId} className="flex items-center">
-                    <BreadcrumbItem 
+                    <BreadcrumbItem
                         className="hidden md:block transition-all"
                         onDragOver={(e) => {
                             const draggedItem = useDriveStore.getState().draggedItem;

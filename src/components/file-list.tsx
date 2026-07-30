@@ -23,6 +23,7 @@ import {
 import { initializeDriveKeys } from "@/crypto/drive";
 import { FolderPickerModal } from "./folder-picker";
 import { FileDetailsModal } from "./file-details-modal";
+import { formatBytes } from "@/lib/utils/size";
 
 export function FileList() {
     const currentFolder = useDriveStore(s => s.getCurrentFolder());
@@ -260,8 +261,9 @@ export function FileList() {
                                 </TableCell>
                                 <TableCell className="text-gray-500 py-3">
                                   {file.metadata?.originalSizeBytes
-                                      ? `${(file.metadata.originalSizeBytes / 1024 / 1024).toFixed(2)} MB`
-                                      : (file.sizeBytes ? `${(file.sizeBytes / 1024 / 1024).toFixed(2)} MB` : '--')}
+                                      ? formatBytes(file.metadata.originalSizeBytes)
+                                      : (file.sizeBytes ? formatBytes(file.sizeBytes) : '--')
+                                  }
                                 </TableCell>
                                 <TableCell className="text-right py-3">
                                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">

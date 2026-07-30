@@ -30,6 +30,7 @@ import { getSodium } from "@/lib/crypto/sodium";
 import { routerServerGlobal } from "next/dist/server/lib/router-utils/router-server-context";
 import Router from "next/router";
 import { customFetch } from "@/lib/api";
+import { formatBytes } from "@/lib/utils/size";
 
 function StorageQuota() {
     const [used, setUsed] = useState(0);
@@ -51,14 +52,6 @@ function StorageQuota() {
         }
         fetchQuota();
     }, []);
-
-    const formatBytes = (bytes: number) => {
-        if (bytes === 0) return '0 B';
-        const k = 1024;
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    };
 
     const percentage = Math.min(100, Math.round((used / max) * 100));
 

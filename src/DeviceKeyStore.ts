@@ -1,11 +1,10 @@
 const DB_NAME = "quartz-device-keys";
-const STORE_NAME = "session-store";
-const RECORD_ID = "active-session";
+const STORE_NAME = "device-store";
+const RECORD_ID = "active-device";
 
-export interface StoredSessionKeys {
+export interface StoredDeviceKeys {
   id: string;
-  wrappedPrivateKeys: Uint8Array;
-  sessionNonce: Uint8Array;
+  devicePrivateKey: CryptoKey;
   createdAt: number;
 }
 
@@ -23,15 +22,15 @@ function openDB(): Promise<IDBDatabase> {
   });
 }
 
-export async function saveSessionKeys(wrappedPrivateKeys: Uint8Array, sessionNonce: Uint8Array): Promise<void> {
+// Changed parameter type to CryptoKey
+export async function saveDevicePrivateKey(devicePrivateKey: CryptoKey): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
     const store = tx.objectStore(STORE_NAME);
     store.put({
       id: RECORD_ID,
-      wrappedPrivateKeys,
-      sessionNonce,
+      devicePrivateKey, // The CryptoKey object is natively supported by IndexedDB!
       createdAt: Date.now(),
     });
     tx.oncomplete = () => {
@@ -45,7 +44,8 @@ export async function saveSessionKeys(wrappedPrivateKeys: Uint8Array, sessionNon
   });
 }
 
-export async function loadSessionKeys(): Promise<{ wrappedPrivateKeys: Uint8Array; sessionNonce: Uint8Array } | null> {
+// Changed return type to CryptoKey
+export async function loadDevicePrivateKey(): Promise<CryptoKey | null> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readonly");
@@ -54,10 +54,7 @@ export async function loadSessionKeys(): Promise<{ wrappedPrivateKeys: Uint8Arra
     req.onsuccess = () => {
       db.close();
       if (req.result) {
-        resolve({
-          wrappedPrivateKeys: req.result.wrappedPrivateKeys,
-          sessionNonce: req.result.sessionNonce,
-        });
+        resolve(req.result.devicePrivateKey);
       } else {
         resolve(null);
       }
@@ -69,7 +66,7 @@ export async function loadSessionKeys(): Promise<{ wrappedPrivateKeys: Uint8Arra
   });
 }
 
-export async function deleteSessionKeys(): Promise<void> {
+export async function deleteDeviceKeys(): Promise<void> {
   return new Promise((resolve) => {
     const req = indexedDB.deleteDatabase(DB_NAME);
     req.onsuccess = () => resolve();

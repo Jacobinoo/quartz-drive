@@ -46,16 +46,6 @@ async function registerKeyMaterial(email: string, password: string): Promise<Key
     const sessionKey = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES);
     const sessionNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
 
-    const combinedAccountPrivateKeys = new Uint8Array([...accountSigningKeyPair.privateKey, ...accountEncryptionKeyPair.privateKey]);
-    const wrappedAccountKeysForSession = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
-        combinedAccountPrivateKeys,
-        sodium.from_string("SessionPersistence"),
-        null,
-        sessionNonce,
-        sessionKey
-    );
-
-
     // Layer 3 - Default Share
     const shareKeyPair = sodium.crypto_box_keypair();
     const sharePassphrase = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES);
@@ -113,9 +103,6 @@ async function registerKeyMaterial(email: string, password: string): Promise<Key
         encAccountSigningPrivateKey: sodium.to_base64(encryptedAccountSigningPrivateKey),
         accountSigningKeyNonce: sodium.to_base64(accountSigningPrivNonce),
 
-        sessionPrivateKey: sodium.to_base64(sessionKey),
-        sessionNonce: sodium.to_base64(sessionNonce),
-
         sharePublicKey: sodium.to_base64(shareKeyPair.publicKey),
         wrappedSharePrivateKey: sodium.to_base64(wrappedSharePrivateKey),
         sharePrivNonce: sodium.to_base64(sharePrivNonce),
@@ -124,9 +111,9 @@ async function registerKeyMaterial(email: string, password: string): Promise<Key
 
         rootNodePublicKey: sodium.to_base64(rootNodeKeyPair.publicKey),
         wrappedRootNodePrivateKey: sodium.to_base64(wrappedRootNodePrivateKey),
-        rootNodePrivNonce: sodium.to_base64(rootNodePrivNonce),
+      rootNodePrivNonce: sodium.to_base64(rootNodePrivNonce),
 
-        encryptedRootNodePassphrase: sodium.to_base64(encryptedRootNodePassphrase),
+      encryptedRootNodePassphrase: sodium.to_base64(encryptedRootNodePassphrase),
         signedEncryptedRootNodePassphrase: sodium.to_base64(signedEncryptedRootNodePassphrase),
 
     };
@@ -189,11 +176,9 @@ export async function signUp(email: string, password: string) {
 
                 accountSigningPublicKey: km.accountSigningPublicKey,
                 encAccountSigningPrivateKey: km.encAccountSigningPrivateKey,
-                accountSigningKeyNonce: km.accountSigningKeyNonce,
+              accountSigningKeyNonce: km.accountSigningKeyNonce,
 
-                sessionPrivateKey: km.sessionPrivateKey,
-                sessionNonce: km.sessionNonce,
-            },
+        },
         },
         drive: {
             defaultShare: {
@@ -224,10 +209,4 @@ export async function signUp(email: string, password: string) {
     const m3ResponseData = await m3Response.json();
 
     console.log(m3ResponseData)
-
-    storeSessionNonce(km.sessionNonce);
-}
-
-function storeSessionNonce(sessionNonce: Base64String) {
-    localStorage.setItem("sessionNonce", sessionNonce);
 }

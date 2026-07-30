@@ -37,9 +37,9 @@ type KeyRegisterMaterial = {
 
     rootNodePublicKey: Base64String;
     wrappedRootNodePrivateKey: Base64String;
-    rootNodePrivNonce: Base64String;
+  rootNodePrivNonce: Base64String;
 
-    encryptedRootNodePassphrase: Base64String;
+  encryptedRootNodePassphrase: Base64String;
     signedEncryptedRootNodePassphrase: Base64String;
 }
 
@@ -60,9 +60,6 @@ export default interface M3ServerPayload {
             accountSigningPublicKey: Base64String;
             encAccountSigningPrivateKey: Base64String;
             accountSigningKeyNonce: Base64String;
-
-            sessionPrivateKey: Base64String;
-            sessionNonce: Base64String;
         };
     };
     drive: {

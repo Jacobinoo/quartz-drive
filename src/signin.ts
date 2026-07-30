@@ -4,19 +4,8 @@ import {getSodium} from "@/lib/crypto/sodium";
 import { createDpopProof, generateAndStoreDpopKey, getDpopPrivateKey } from "@/lib/dpop";
 import { Base64String } from './UtilTypes';
 import { setAccountKeys, setAccountPrivateKeys, setAuthState } from './lib/authStore';
-import { saveSessionKeys } from './DeviceKeyStore';
-
-async function createSessionKey(): Promise<{
-  sessionKey: Base64String,
-  nonce: Base64String
-}> {
-  const sodium = await getSodium();
-  const sessionKey = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES);
-  const nonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
-  return {
-    sessionKey: sodium.to_base64(sessionKey), nonce: sodium.to_base64(nonce)
-  }
-}
+import { saveDevicePrivateKey, saveSessionKeys } from './DeviceKeyStore';
+import { customFetch } from './lib/api';
 
 export async function signIn(email: string, password: string) {
     if (!email || !password) throw new Error("Email and password required");
@@ -79,12 +68,10 @@ export async function signIn(email: string, password: string) {
 
   console.log(dpopProof);
 
-  const sess = await createSessionKey();
+  const deviceKeyPair = await generateDeviceKeyPair();
 
     const m3 = {
       finishLoginRequest: finishLoginRequest,
-      sessionPrivateKey: sess.sessionKey,
-      sessionPrivateKeyNonce: sess.nonce,
       nonce: loginNonce,
     }
 
@@ -177,19 +164,37 @@ export async function signIn(email: string, password: string) {
         // 4. Save decrypted keys to JS memory in authStore!
         setAccountPrivateKeys(accountEncryptionPrivateKey, accountSigningPrivateKey);
         console.log("Zero-Knowledge account keys successfully decrypted into JS memory!");
-        // 5. Split-Key Session Persistence Wrap in IndexedDB!
-        const sessionKeyBytes = sodium.from_base64(sess.sessionKey);
-        const sessionNonce = sodium.from_base64(sess.nonce);
-        const combinedKeys = new Uint8Array([...accountSigningPrivateKey, ...accountEncryptionPrivateKey]);
-        const wrappedKeys = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
-            combinedKeys,
-            sodium.from_string("SessionPersistence"),
-            null,
-            sessionNonce,
-            sessionKeyBytes
-        );
-        await saveSessionKeys(wrappedKeys, sessionNonce);
-        console.log("Split-Key session persistence ciphertext written to IndexedDB.");
+        //Encrypt the Libsodium Root Keys using Web Crypto RSA-OAEP
+                const combinedKeys = new Uint8Array([...accountSigningPrivateKey, ...accountEncryptionPrivateKey]);
+
+                // Re-import the public key string back into a CryptoKey for encryption
+                const pubKeyBuffer = Uint8Array.from(atob(deviceKeyPair.devicePublicKey), c => c.charCodeAt(0));
+                const importedPubKey = await crypto.subtle.importKey(
+                    "spki",
+                    pubKeyBuffer,
+                    { name: "RSA-OAEP", hash: "SHA-256" },
+                    true,
+                    ["encrypt"]
+                );
+                const wrappedAccountKeysBuffer = await crypto.subtle.encrypt(
+                    { name: "RSA-OAEP" },
+                    importedPubKey,
+                    combinedKeys
+                );
+                const wrappedAccountKeys = bufferToBase64(wrappedAccountKeysBuffer);
+
+                // 7. Save the Non-Extractable Private Key to IndexedDB
+                await saveDevicePrivateKey(deviceKeyPair.devicePrivateKey);
+  console.log("Non-extractable Device Private Key written to IndexedDB.");
+
+  await customFetch(`https://localhost:3100/v1/devices/register`, {
+              method: "POST",
+              body: JSON.stringify({
+                  devicePublicKey: deviceKeyPair.devicePublicKey,
+                  wrappedAccountKeys: wrappedAccountKeys
+              }),
+              credentials: "include",
+          });
     }
 
 //     const kdfSalt = sodium.from_base64(loginAttestationData.masterKdfSalt);
@@ -256,3 +261,33 @@ export async function signIn(email: string, password: string) {
 //     //     deviceKeyPair
 //     // );
 // }
+
+
+// Helper to convert ArrayBuffer to Base64
+function bufferToBase64(buffer: ArrayBuffer): string {
+    return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+}
+
+async function generateDeviceKeyPair(): Promise<{
+    devicePublicKey: string,
+    devicePrivateKey: CryptoKey
+}> {
+    // Generate Non-Extractable RSA KeyPair
+    const keyPair = await crypto.subtle.generateKey(
+        {
+            name: "RSA-OAEP",
+            modulusLength: 4096,
+            publicExponent: new Uint8Array([1, 0, 1]),
+            hash: "SHA-256",
+        },
+        false, // EXTRACTABLE: FALSE !!
+        ["encrypt", "decrypt"]
+    );
+
+    // Export only the Public Key to send to the server
+    const exportedPubKey = await crypto.subtle.exportKey("spki", keyPair.publicKey);
+    return {
+        devicePublicKey: bufferToBase64(exportedPubKey),
+        devicePrivateKey: keyPair.privateKey
+    };
+}

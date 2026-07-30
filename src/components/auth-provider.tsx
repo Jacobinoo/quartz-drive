@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { signOut } from "@/signout";
 import { clearAuthState } from "@/lib/authStore";
 import { deleteDpopDatabase } from "@/lib/dpop";
-import { deleteSessionKeys } from "@/DeviceKeyStore";
+import { deleteDeviceKeys } from "@/DeviceKeyStore";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -21,7 +21,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (pathname === "/signin" || pathname === "/signup") {
       clearAuthState();
       deleteDpopDatabase().catch((e) => console.warn("Could not wipe DPoP database:", e));
-      deleteSessionKeys().catch((e) => console.warn("Could not wipe session keys DB:", e));
+      deleteDeviceKeys().catch((e) => console.warn("Could not wipe device keys DB:", e));
       setIsBooting(false);
       return;
     }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"quartz/api/devices"
 	"quartz/api/files"
 	"quartz/api/refresh"
 	"quartz/api/signin"
@@ -104,6 +105,9 @@ func initV1Mux(state *ServerState) *http.ServeMux {
 
 	filesHandler := files.NewHandler(state.DB, state.S3Service)
 	files.RegisterRoutes(mux, filesHandler)
+
+	devicesHandler := devices.NewHandler(state.DB)
+	devices.RegisterRoutes(mux, devicesHandler)
 
 	return mux
 }

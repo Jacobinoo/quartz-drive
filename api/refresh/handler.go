@@ -217,10 +217,10 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	})
 
 	var refreshResponse = RefreshResponse{
-		Status:            "ok",
-		Token:             newAccessToken,
-		CsrfToken:         newCsrfToken.Token,
-		SessionPrivateKey: storedToken.Session.SessionPrivateKey,
+		Status:             "ok",
+		Token:              newAccessToken,
+		CsrfToken:          newCsrfToken.Token,
+		WrappedAccountKeys: storedToken.Session.WrappedAccountKeys,
 	}
 
 	err = json.NewEncoder(w).Encode(refreshResponse)

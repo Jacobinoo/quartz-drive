@@ -157,11 +157,10 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) {
 	displayedDeviceName := ua.OS() + " - " + ua.Model() + " - " + name
 
 	newSessionEntry := model.Session{
-		UserID:            trustedUserInfo.ID,
-		SessionPrivateKey: m3.SessionPrivateKey,
-		UserAgent:         uaHeader,
-		DeviceName:        displayedDeviceName,
-		LastActiveAt:      time.Now(),
+		UserID:       trustedUserInfo.ID,
+		UserAgent:    uaHeader,
+		DeviceName:   displayedDeviceName,
+		LastActiveAt: time.Now(),
 	}
 
 	familyID := uuid.New()

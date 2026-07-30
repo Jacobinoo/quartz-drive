@@ -58,9 +58,11 @@ type M1Login struct {
 type M3Login struct {
 	FinishLoginRequest string `json:"finishLoginRequest"`
 	Nonce              string
+}
 
-	SessionPrivateKey      string `json:"sessionPrivateKey"`
-	SessionPrivateKeyNonce string `json:"sessionPrivateKeyNonce"`
+type RegisterDeviceRequest struct {
+	DevicePublicKey    string `json:"devicePublicKey"`
+	WrappedAccountKeys string `json:"wrappedAccountKeys"`
 }
 
 type M2Login struct {

@@ -21,12 +21,14 @@ import {
     TableRow,
 } from "@/components/ui/table";
 import { initializeDriveKeys } from "@/crypto/drive";
+import { FolderPickerModal } from "./folder-picker";
 
 export function FileList() {
     const currentFolder = useDriveStore(s => s.getCurrentFolder());
     const draggedItem = useDriveStore(s => s.draggedItem);
     const setDraggedItem = useDriveStore(s => s.setDraggedItem);
-    const [files, setFiles] = useState<any[]>([]);
+  const [files, setFiles] = useState<any[]>([]);
+  const [pickerItemToMove, setPickerItemToMove] = useState<any>(null);
 
       useEffect(() => {
           initializeDriveKeys().catch(console.error);
@@ -201,10 +203,10 @@ export function FileList() {
                     </TableHeader>
                     <TableBody>
                         {files.map(file => (
-                            <TableRow 
-                                key={file.nodeId} 
+                            <TableRow
+                                key={file.nodeId}
                                 className={`group cursor-pointer ${draggedItem?.nodeId === file.nodeId ? 'opacity-30 bg-blue-50 dark:bg-blue-900/20' : ''}`}
-                                
+
                                 // Make the row draggable
                                 draggable={true}
                                 onDragStart={(e) => {
@@ -212,7 +214,7 @@ export function FileList() {
                                     e.dataTransfer.effectAllowed = "move";
                                 }}
                                 onDragEnd={() => setDraggedItem(null)}
-                                
+
                                 // Make FOLDERS act as Drop Targets
                                 onDragOver={(e) => {
                                     if (file.type === 'FOLDER' && draggedItem && draggedItem.nodeId !== file.nodeId) {
@@ -253,7 +255,14 @@ export function FileList() {
                                                 <DropdownMenuItem onClick={() => handleRename(file)} className="cursor-pointer">
                                                     <Pencil className="w-4 h-4 mr-2" />
                                                     Rename
-                                                </DropdownMenuItem>
+                                    </DropdownMenuItem>
+
+
+
+                                    <DropdownMenuItem onClick={() => setPickerItemToMove(file)} className="cursor-pointer">
+                                        <FolderIcon className="w-4 h-4 mr-2" />
+                                        Move To...
+                                    </DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handleTrash(file)} className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950 cursor-pointer">
                                                     <Trash2 className="w-4 h-4 mr-2" />
                                                     Move to Trash
@@ -266,7 +275,13 @@ export function FileList() {
                         ))}
                     </TableBody>
                 </Table>
-            )}
+        )}
+            {pickerItemToMove && (
+                        <FolderPickerModal
+                            itemToMove={pickerItemToMove}
+                            onClose={() => setPickerItemToMove(null)}
+                        />
+                    )}
         </div>
     );
 }

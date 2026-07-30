@@ -128,7 +128,8 @@ export function NewDriveItemButton(){
             });
 
             if (res.ok) {
-                console.log("✅ Folder created successfully!");
+              console.log("✅ Folder created successfully!");
+              useDriveStore.getState().triggerRefresh();
                 // Trigger a refresh of your file list here!
             }
         } catch (err) {

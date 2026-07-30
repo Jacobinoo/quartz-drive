@@ -32,6 +32,7 @@ export function FileList() {
   const [files, setFiles] = useState<any[]>([]);
   const [pickerItemToMove, setPickerItemToMove] = useState<any>(null);
   const [detailsFile, setDetailsFile] = useState<any>(null);
+  const refreshTrigger = useDriveStore(s => s.refreshTrigger);
 
       useEffect(() => {
           initializeDriveKeys().catch(console.error);
@@ -91,7 +92,7 @@ export function FileList() {
         const handleRefresh = () => loadAndDecrypt();
         window.addEventListener('refreshFiles', handleRefresh);
         return () => window.removeEventListener('refreshFiles', handleRefresh);
-    }, [currentFolder]);
+    }, [currentFolder, refreshTrigger]);
 
     // --- NEW: Rename Handler ---
     const handleRename = async (file: any) => {

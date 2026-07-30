@@ -10,7 +10,8 @@ export interface FolderKey {
 
 interface DriveState {
     breadcrumbs: FolderKey[];
-    draggedItem: any | null;
+  draggedItem: any | null;
+  refreshTrigger: number;
 
     // Helper to get the keys for whatever folder you are currently viewing
     getCurrentFolder: () => FolderKey | null;
@@ -22,11 +23,13 @@ interface DriveState {
 
   jumpToFolder: (index: number) => void;
   setDraggedItem: (item: any | null) => void;
+  triggerRefresh: () => void;
 }
 
 export const useDriveStore = create<DriveState>((set, get) => ({
     breadcrumbs: [],
-    draggedItem: null,
+  draggedItem: null,
+    refreshTrigger: 0,
 
     getCurrentFolder: () => {
         const stack = get().breadcrumbs;
@@ -43,5 +46,6 @@ export const useDriveStore = create<DriveState>((set, get) => ({
         jumpToFolder: (index) => set((state) => ({
             breadcrumbs: state.breadcrumbs.slice(0, index + 1)
         })),
-        setDraggedItem: (item) => set({ draggedItem: item })
+  setDraggedItem: (item) => set({ draggedItem: item }),
+        triggerRefresh: () => set((state) => ({ refreshTrigger: state.refreshTrigger + 1 })),
 }));

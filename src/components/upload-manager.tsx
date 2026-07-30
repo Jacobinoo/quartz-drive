@@ -5,6 +5,7 @@ import { useEffect, useRef } from 'react';
 import { useUploadStore } from '@/hooks/use-upload-store';
 import {UploadWorkerInput, UploadWorkerOutput} from "@/types/crypto-worker-types";
 import { finishFileUpload } from '@/crypto/upload';
+import { useDriveStore } from '@/lib/driveStore';
 
 export function UploadManager() {
     const jobs = useUploadStore(s => s.jobs);
@@ -71,7 +72,8 @@ export function UploadManager() {
                                   metadataNonce: sodium.to_base64(metadataNonce)
                                 });
                                 console.log(`Successfully saved ${job.file.name} metadata to Postgres!`);
-                                updateJob(data.taskId, { status: 'SUCCESS', progress: 100 });
+                            updateJob(data.taskId, { status: 'SUCCESS', progress: 100 });
+                            useDriveStore.getState().triggerRefresh();
                             } catch (err) {
                                 console.error("Failed to save metadata to server", err);
                                 updateJob(data.taskId, { status: 'ERROR', errorMessage: "Server rejected metadata" });

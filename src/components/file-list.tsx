@@ -24,6 +24,7 @@ import { initializeDriveKeys } from "@/crypto/drive";
 import { FolderPickerModal } from "./folder-picker";
 import { FileDetailsModal } from "./file-details-modal";
 import { formatBytes } from "@/lib/utils/size";
+import { addSingleSearchItem, removeSearchItem } from "@/lib/SearchIndexStore";
 
 export function FileList() {
     const currentFolder = useDriveStore(s => s.getCurrentFolder());
@@ -122,7 +123,15 @@ export function FileList() {
 
             // 3. Instantly update UI on success
             if (res.ok) {
-                setFiles(files => files.map(f => f.nodeId === file.nodeId ? { ...f, plaintextName: newName } : f));
+              setFiles(files => files.map(f => f.nodeId === file.nodeId ? { ...f, plaintextName: newName } : f));
+
+              await addSingleSearchItem({
+                  id: file.nodeId,
+                  name: newName, // The original plaintext file name
+                  type: file.type,
+                  sizeBytes: file.sizeBytes,
+                  createdAt: file.createdAt
+              });
             }
         } catch (e) {
             console.error("Rename failed:", e);
@@ -139,7 +148,9 @@ export function FileList() {
 
             if (res.ok) {
                 // Instantly wipe it from the UI!
-                setFiles(files => files.filter(f => f.nodeId !== file.nodeId));
+              setFiles(files => files.filter(f => f.nodeId !== file.nodeId));
+
+              await removeSearchItem(file.nodeId);
             }
         } catch (e) {
             console.error("Trash failed:", e);

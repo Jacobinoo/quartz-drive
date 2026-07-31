@@ -6,6 +6,7 @@ import { useUploadStore } from '@/hooks/use-upload-store';
 import {UploadWorkerInput, UploadWorkerOutput} from "@/types/crypto-worker-types";
 import { finishFileUpload } from '@/crypto/upload';
 import { useDriveStore } from '@/lib/driveStore';
+import { addSingleSearchItem } from '@/lib/SearchIndexStore';
 
 export function UploadManager() {
     const jobs = useUploadStore(s => s.jobs);
@@ -74,6 +75,13 @@ export function UploadManager() {
                                 console.log(`Successfully saved ${job.file.name} metadata to Postgres!`);
                             updateJob(data.taskId, { status: 'SUCCESS', progress: 100 });
                             useDriveStore.getState().triggerRefresh();
+                            await addSingleSearchItem({
+                                id: job.nodeId,
+                                name: job.file.name,
+                                type: 'FILE',
+                                sizeBytes: job.file.size,
+                                createdAt: new Date().toISOString()
+                            });
                             } catch (err) {
                                 console.error("Failed to save metadata to server", err);
                                 updateJob(data.taskId, { status: 'ERROR', errorMessage: "Server rejected metadata" });

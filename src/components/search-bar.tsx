@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Loader2, File, Folder } from "lucide-react";
-import { buildE2EESearchIndex, searchFiles } from "@/lib/searchService";
+import { buildE2EESearchIndex, resolvePathAndNavigate, searchFiles } from "@/lib/searchService";
 import { DecryptedSearchItem } from "@/lib/SearchIndexStore";
 
 export function SearchBar() {
@@ -88,9 +88,19 @@ export function SearchBar() {
             <div
               key={item.id}
               className="flex items-center gap-2 p-2 hover:bg-accent hover:text-accent-foreground rounded-sm cursor-pointer text-sm"
-              onClick={() => {
-                // TODO: Wire this up to navigate to the folder, or select the file!
+              onClick={async () => {
                 console.log("Clicked:", item);
+                setIsFocused(false);
+
+                    if (item.type === "FOLDER") {
+                        await resolvePathAndNavigate(item.id);
+                    } else {
+                        // For a file, we navigate to its PARENT folder, so the user can see it!
+                        await resolvePathAndNavigate(item.id);
+
+                        // You could also open a download modal here if you want!
+                        console.log("Navigated to parent folder of:", item.name);
+                    }
               }}
             >
               {item.type === "FOLDER" ? (

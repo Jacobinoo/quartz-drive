@@ -3,7 +3,7 @@ import { saveSearchIndex, loadSearchIndex, DecryptedSearchItem } from "./SearchI
 import { customFetch } from "./api";
 import { getAccountEncryptionPrivateKey, getAccountSigningPrivateKey } from "./authStore";
 
-import { useDriveStore } from "@/lib/driveStore";
+import { FolderKey, useDriveStore } from "@/lib/driveStore";
 
 export async function buildE2EESearchIndex(): Promise<void> {
     const res = await customFetch("https://localhost:3100/v1/files/all", {
@@ -115,4 +115,69 @@ export async function searchFiles(query: string): Promise<DecryptedSearchItem[]>
 
     // Simple in-memory array filter
     return index.filter(item => item.name.toLowerCase().includes(lowerQuery));
+}
+
+export async function resolvePathAndNavigate(targetNodeId: string) {
+    const res = await customFetch(`https://localhost:3100/v1/files/path?nodeId=${targetNodeId}`, {
+        method: "GET"
+    });
+    if (!res.ok) throw new Error("Failed to fetch path");
+    const pathNodes = await res.json();
+    if (!pathNodes || pathNodes.length === 0) return;
+
+    // 1. Grab the Root folder from the Drive Store
+    const currentBreadcrumbs = useDriveStore.getState().breadcrumbs;
+    if (currentBreadcrumbs.length === 0) throw new Error("Root folder not found in memory!");
+
+    // We will build a brand new breadcrumbs array starting with the Root!
+    const newBreadcrumbs: FolderKey[] = [currentBreadcrumbs[0]];
+    const sodium = await getSodium();
+
+    // 2. Loop downwards through the path returned by PostgreSQL
+    // (We start at index 1 because the DB returns the Root at index 0, which we already have unlocked above!)
+    for (let i = 1; i < pathNodes.length; i++) {
+        const f = pathNodes[i];
+
+        // If the target was a FILE, the last item in the path array will be that FILE.
+        // We stop! We can't navigate INTO a file, we only navigate to its parent folder.
+        if (f.type === "FILE") break;
+
+        const parentKeys = newBreadcrumbs[i - 1]; // The parent we just unlocked!
+
+        try {
+            // A. Decrypt Folder Passphrase
+            const folderPassphrase = sodium.crypto_box_seal_open(
+                sodium.from_base64(f.encryptedNodePassphrase),
+                parentKeys.publicKey,
+                parentKeys.privateKey
+            );
+            // B. Decrypt Folder Private Key
+            const folderPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+                null, sodium.from_base64(f.wrappedNodeKey),
+                sodium.from_string("FolderNode"), sodium.from_base64(f.nodePrivNonce),
+                folderPassphrase
+            );
+
+            // C. Decrypt Folder Name
+            const decryptedNameBytes = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+                null, sodium.from_base64(f.encryptedName), null, sodium.from_base64(f.nameNonce), parentKeys.privateKey
+            );
+            if (folderPrivateKey && decryptedNameBytes) {
+                newBreadcrumbs.push({
+                    nodeId: f.nodeId,
+                    name: sodium.to_string(decryptedNameBytes), // Store as plaintext for the UI!
+                    publicKey: sodium.from_base64(f.nodePublicKey),
+                    privateKey: folderPrivateKey
+                });
+            } else {
+                throw new Error("Decryption failed for subfolder in path");
+            }
+        } catch (e) {
+            console.error("Path resolution failed at node", f.nodeId, e);
+            break; // Stop navigating deeper if a folder is corrupted
+        }
+    }
+
+    // 3. Inject the fully unlocked path into Zustand!
+    useDriveStore.getState().setBreadcrumbs(newBreadcrumbs);
 }

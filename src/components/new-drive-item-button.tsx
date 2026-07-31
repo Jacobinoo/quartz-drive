@@ -29,6 +29,7 @@ import { getAccessToken} from "@/lib/authStore";
 import { useDriveStore } from "@/lib/driveStore";
 import { createEncryptedFolderPayload } from "@/crypto/folder";
 import { customFetch } from "@/lib/api";
+import { addSingleSearchItem } from "@/lib/SearchIndexStore"
 
 export function NewDriveItemButton(){
   const addToQueue = useUploadStore(s => s.addToQueue);
@@ -129,8 +130,15 @@ export function NewDriveItemButton(){
 
             if (res.ok) {
               console.log("✅ Folder created successfully!");
+              const data = await res.json();
+              await addSingleSearchItem({
+                  id: data.nodeId,
+                  name: folderName,
+                  type: "FOLDER",
+                  sizeBytes: 0,
+                  createdAt: new Date().toISOString()
+              });
               useDriveStore.getState().triggerRefresh();
-                // Trigger a refresh of your file list here!
             }
         } catch (err) {
             console.error("Failed to create folder", err);

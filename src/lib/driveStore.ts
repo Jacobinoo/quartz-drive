@@ -9,7 +9,8 @@ export interface FolderKey {
 }
 
 interface DriveState {
-    breadcrumbs: FolderKey[];
+  breadcrumbs: FolderKey[];
+  setBreadcrumbs: (breadcrumbs: FolderKey[]) => void;
   draggedItem: any | null;
   refreshTrigger: number;
 
@@ -27,7 +28,8 @@ interface DriveState {
 }
 
 export const useDriveStore = create<DriveState>((set, get) => ({
-    breadcrumbs: [],
+  breadcrumbs: [],
+  setBreadcrumbs: (breadcrumbs) => set({ breadcrumbs }),
   draggedItem: null,
     refreshTrigger: 0,
 

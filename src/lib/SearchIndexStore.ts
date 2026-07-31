@@ -79,3 +79,44 @@ export async function clearSearchIndex(): Promise<void> {
     };
   });
 }
+
+// Incrementally add a single new file or folder to the index without a full rebuild!
+export async function addSingleSearchItem(item: DecryptedSearchItem): Promise<void> {
+  const db = await openSearchDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+
+    store.put(item); // .put will insert or update!
+
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
+}
+
+
+// Remove a file or folder from the local search index
+export async function removeSearchItem(nodeId: string): Promise<void> {
+  const db = await openSearchDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+
+    store.delete(nodeId); // Delete by the primary key (nodeId)
+
+    tx.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    tx.onerror = () => {
+      db.close();
+      reject(tx.error);
+    };
+  });
+}

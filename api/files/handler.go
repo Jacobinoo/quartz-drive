@@ -714,3 +714,77 @@ func (h *Handler) GetAllFiles(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
+
+func (h *Handler) GetFilePath(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	nodeID := r.URL.Query().Get("nodeId")
+	if nodeID == "" {
+		http.Error(w, "missing nodeId", http.StatusBadRequest)
+		return
+	}
+
+	// Verify the user is authenticated (ensure they own the nodes later!)
+	_, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var response []dto.FileListResponseItem
+
+	// 1. PostgreSQL Recursive CTE
+	// This traces the path from the requested Node UP to the Root Folder!
+	query := `
+		WITH RECURSIVE path_tree AS (
+			-- Base case: The requested node
+			SELECT
+				l.parent_node_id, l.child_node_id, l.encrypted_name, l.name_nonce,
+				l.encrypted_node_passphrase, l.signed_encrypted_node_passphrase, l.created_at,
+				1 as depth
+			FROM links l
+			WHERE l.child_node_id = ?
+
+			UNION ALL
+
+			-- Recursive step: Join the parent folder's link
+			SELECT
+				parent.parent_node_id, parent.child_node_id, parent.encrypted_name, parent.name_nonce,
+				parent.encrypted_node_passphrase, parent.signed_encrypted_node_passphrase, parent.created_at,
+				pt.depth + 1
+			FROM links parent
+			INNER JOIN path_tree pt ON pt.parent_node_id = parent.child_node_id
+		)
+		-- Finally, join the nodes table so we can get the Public/Wrapped Keys and Type
+		SELECT
+			pt.child_node_id as node_id,
+			COALESCE(pt.parent_node_id::text, '') as parent_node_id,
+			n.type,
+			n.size_bytes,
+			pt.encrypted_name,
+			pt.name_nonce,
+			pt.encrypted_node_passphrase,
+			pt.signed_encrypted_node_passphrase,
+			n.node_public_key,
+			n.wrapped_node_key,
+			n.node_priv_nonce,
+			pt.created_at,
+			n.encrypted_metadata,
+			n.metadata_nonce
+		FROM path_tree pt
+		JOIN nodes n ON n.id = pt.child_node_id
+		ORDER BY pt.depth DESC; -- Reverse the order so Root is first!
+	`
+
+	err := h.db.Raw(query, nodeID).Scan(&response).Error
+	if err != nil {
+		http.Error(w, "failed to resolve cryptographic path", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}

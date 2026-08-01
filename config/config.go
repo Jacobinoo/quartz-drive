@@ -57,9 +57,11 @@ type (
 	}
 
 	S3 struct {
-		Endpoint        int8  `env:"S3_ENDPOINT,required"`
-		AccessKeyID     int64 `env:"S3_ACCESS_KEY_ID,required"`
-		SecretAccessKey int8  `env:"S3_SECRET_ACCESS_KEY,required"`
+		Endpoint           string `env:"S3_ENDPOINT,required"`
+		AccessKeyID        string `env:"S3_ACCESS_KEY_ID,required"`
+		SecretAccessKey    string `env:"S3_SECRET_ACCESS_KEY,required"`
+		BucketName         string `env:"S3_BUCKET_NAME,required"`
+		InsecureSkipVerify bool   `env:"S3_INSECURE_SKIP_VERIFY,required"`
 	}
 )
 

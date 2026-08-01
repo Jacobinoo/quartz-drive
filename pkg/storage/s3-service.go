@@ -23,7 +23,7 @@ func NewS3Service() (*S3Service, error) {
 	secretAccessKey := config.Cfg.S3.SecretAccessKey //"/luBJXPD30oZz5Sjt9Uei2H/6yqg4yLVfahjHlhD"
 
 	customTransport := http.DefaultTransport.(*http.Transport).Clone()
-	customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: config.Cfg.S3.InsecureSkipVerify}
 
 	minioClient, err := minio.New(endpoint, &minio.Options{
 		Creds:     credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
@@ -34,14 +34,16 @@ func NewS3Service() (*S3Service, error) {
 		return nil, err
 	}
 
-	bucketName := "drive-chunks"
+	bucketName := config.Cfg.S3.BucketName
 
-	// Sprawdź czy bucket istnieje, jeśli nie - stwórz go
+	// Check if the bucket exists, if not - create it
 	ctx := context.Background()
 	exists, err := minioClient.BucketExists(ctx, bucketName)
-	if err == nil && !exists {
-		err = minioClient.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{})
-		if err != nil {
+	if err != nil {
+		return nil, fmt.Errorf("failed to check bucket existence: %w", err)
+	}
+	if !exists {
+		if err := minioClient.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{}); err != nil {
 			return nil, fmt.Errorf("failed to create bucket: %w", err)
 		}
 	}

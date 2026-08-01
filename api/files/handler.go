@@ -505,10 +505,8 @@ func (h *Handler) ListTrash(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// Helper to recursively find all descendant NodeIDs for a given parent Folder
-func (h *Handler) getDescendantNodeIDs(parentFolderID string) []string {
+func (h *Handler) getDescendantNodeIDs(parentFolderID string) ([]string, error) {
 	var nodeIDs []string
-	// A raw Postgres CTE that walks down the folder tree and grabs every single file/folder inside!
 	query := `
 		WITH RECURSIVE Descendants AS (
 			SELECT child_node_id FROM links WHERE parent_node_id = ?
@@ -518,8 +516,10 @@ func (h *Handler) getDescendantNodeIDs(parentFolderID string) []string {
 		)
 		SELECT child_node_id FROM Descendants;
 	`
-	h.db.Raw(query, parentFolderID).Scan(&nodeIDs)
-	return nodeIDs
+	if err := h.db.Raw(query, parentFolderID).Scan(&nodeIDs).Error; err != nil {
+		return nil, fmt.Errorf("failed to query descendants for folder %s: %w", parentFolderID, err)
+	}
+	return nodeIDs, nil
 }
 
 func (h *Handler) EmptyTrash(w http.ResponseWriter, r *http.Request) {
@@ -551,27 +551,43 @@ func (h *Handler) EmptyTrash(w http.ResponseWriter, r *http.Request) {
 
 			// 2. If it's a folder, recursively gather ALL descendants inside it!
 			if link.ChildNode.Type == model.NodeTypeFolder {
-				descendants := h.getDescendantNodeIDs(link.ChildNodeID.String())
+				descendants, err := h.getDescendantNodeIDs(link.ChildNodeID.String())
+				if err != nil {
+					log.Printf("Failed to get descendants for folder %s, skipping wipe for this link: %v", link.ChildNodeID, err)
+					continue // don't wipe/delete anything for this link if we can't be sure we found everything inside it
+				}
 				nodeIDsToWipe = append(nodeIDsToWipe, descendants...)
 			}
 
 			// 3. Find ALL FileBlocks for ALL these nodes
 			var blocks []model.FileBlock
-			h.db.Where("node_id IN ?", nodeIDsToWipe).Find(&blocks)
+			if err := h.db.Where("node_id IN ?", nodeIDsToWipe).Find(&blocks).Error; err != nil {
+				log.Printf("Failed to query file_blocks for nodes %v: %v", nodeIDsToWipe, err)
+				continue
+			}
 
 			var successfulBlocks []string
 
 			// 4. Wipe from MinIO (No more storage leaks!)
+			failedNodeIDs := map[string]bool{}
 			for _, block := range blocks {
 				if err := h.storage.DeleteChunk(ctx, block.ObjectKey); err != nil {
 					log.Printf("Failed to wipe S3 chunk %s: %v", block.ObjectKey, err)
+					failedNodeIDs[block.NodeID.String()] = true // adjust field name to your model
 					continue
 				}
 				successfulBlocks = append(successfulBlocks, block.ObjectKey)
 			}
 
-			if len(blocks) > len(successfulBlocks) {
-				log.Printf("%d chunks failed to wipe, will retry in a periodic sweep job", len(blocks)-len(successfulBlocks))
+			var cleanNodeIDs []string
+			for _, id := range nodeIDsToWipe {
+				if !failedNodeIDs[id] {
+					cleanNodeIDs = append(cleanNodeIDs, id)
+				}
+			}
+
+			if len(cleanNodeIDs) == 0 {
+				continue // nothing safe to clean up for this link, leave it all for the sweep job
 			}
 
 			err := h.db.Transaction(func(tx *gorm.DB) error {

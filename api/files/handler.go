@@ -532,9 +532,24 @@ func (h *Handler) EmptyTrash(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 1. Get the Authenticated User ID
+	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var trashedLinks []model.Link
 	// Preload ChildNode so we know if it's a FOLDER or a FILE
-	if err := h.db.Unscoped().Preload("ChildNode").Where("deleted_at IS NOT NULL").Find(&trashedLinks).Error; err != nil {
+	// 2. Scope the query to ONLY this user's files by joining the nodes table!
+	err := h.db.Unscoped().
+		Joins("JOIN nodes ON nodes.id = links.child_node_id").
+		Where("nodes.owner_id = ?", userID).
+		Where("links.deleted_at IS NOT NULL").
+		Preload("ChildNode").
+		Find(&trashedLinks).Error
+
+	if err != nil {
 		http.Error(w, "failed to query trash", http.StatusInternalServerError)
 		return
 	}

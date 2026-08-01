@@ -78,7 +78,7 @@ func (s *S3Service) GenerateUploadUrls(nodeID string, totalChunks int) ([]string
 // Funkcja generująca Download Presigned URLs
 func (s *S3Service) GenerateDownloadUrls(nodeID string, totalChunks int) ([]string, error) {
 	var urls []string
-	expiry := time.Minute * 15
+	expiry := time.Second * 5
 
 	for i := 0; i < totalChunks; i++ {
 		objectName := fmt.Sprintf("%s/chunk_%d", nodeID, i)

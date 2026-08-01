@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"quartz/config"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -17,9 +18,9 @@ type S3Service struct {
 }
 
 func NewS3Service() (*S3Service, error) {
-	endpoint := "localhost:8333" //seaweedfs-s3
-	accessKeyID := "SILKW41POES3ATP3DL99"
-	secretAccessKey := "/luBJXPD30oZz5Sjt9Uei2H/6yqg4yLVfahjHlhD"
+	endpoint := config.Cfg.S3.Endpoint               //"localhost:8333"
+	accessKeyID := config.Cfg.S3.AccessKeyID         //"SILKW41POES3ATP3DL99"
+	secretAccessKey := config.Cfg.S3.SecretAccessKey //"/luBJXPD30oZz5Sjt9Uei2H/6yqg4yLVfahjHlhD"
 
 	customTransport := http.DefaultTransport.(*http.Transport).Clone()
 	customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}

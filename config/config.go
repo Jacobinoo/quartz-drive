@@ -19,6 +19,7 @@ type (
 		GRPC
 		JWT
 		CRYPTO
+		S3
 	}
 
 	App struct {
@@ -53,6 +54,12 @@ type (
 		KdfMemLimit       int64 `env:"KDF_MEMLIMIT,required"`
 		KdfAlg            int8  `env:"KDF_ALG,required"`
 		EncryptionVersion int16 `env:"ENC_VERSION,required"`
+	}
+
+	S3 struct {
+		Endpoint        int8  `env:"S3_ENDPOINT,required"`
+		AccessKeyID     int64 `env:"S3_ACCESS_KEY_ID,required"`
+		SecretAccessKey int8  `env:"S3_SECRET_ACCESS_KEY,required"`
 	}
 )
 

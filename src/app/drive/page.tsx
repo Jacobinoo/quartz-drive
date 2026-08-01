@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label";
 import { TransferList } from "@/components/transfer-list";
 import { UploadManager } from "@/components/upload-manager";
 import { Button } from "@/components/ui/button";
-import { FormEvent } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { redirect, useRouter } from "next/navigation";
 import { signOut } from "@/signout";
 import { FileList } from "@/components/file-list";
@@ -28,9 +28,24 @@ import { useDriveStore, FolderKey } from "@/lib/driveStore";
 import { getSodium } from "@/lib/crypto/sodium";
 import { customFetch } from "@/lib/api";
 import { SearchBar } from "@/components/search-bar";
+import { getAccessToken } from "@/lib/authStore";
 
 export default function DriveHomePage() {
   const router = useRouter();
+
+  const [userEmail, setUserEmail] = useState("Loading...");
+
+  useEffect(() => {
+        const token = getAccessToken();
+        if (token) {
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                if (payload.email) setUserEmail(payload.email);
+            } catch (e) {
+                console.warn("Failed to decode token");
+            }
+        }
+    }, []);
 
   const handleBreadcrumbDrop = async (e: any, targetFolder: FolderKey) => {
       e.preventDefault();
@@ -104,10 +119,12 @@ export default function DriveHomePage() {
               window.location.href = '/signin';
             }}
           >
-            <Label className="font-normal text-xs">john.novak</Label>
-            <Label className="font-normal text-zinc-400 text-xs">
-              john_novak@example.com
-            </Label>
+            <Label className="font-normal text-xs capitalize cursor-pointer">
+                          {userEmail.split('@')[0].replace('.', ' ')}
+                        </Label>
+                        <Label className="font-normal text-zinc-400 text-xs cursor-pointer">
+                          {userEmail}
+                        </Label>
           </div>
         </header>
         <div className="flex h-10 shrink-0 items-center gap-2 border-b px-4">

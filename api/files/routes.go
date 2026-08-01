@@ -13,7 +13,7 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 
 	mux.HandleFunc("/files/download", middleware.CorsMiddleware(middleware.DpopMiddleware(h.Download)))
 
-	mux.HandleFunc("/files/root", middleware.CorsMiddleware(middleware.DpopMiddleware(h.GetRootFolder)))
+	mux.HandleFunc("/files/root", middleware.CorsMiddleware(middleware.DpopMiddleware(middleware.AccessTokenMiddleware(h.GetRootFolder))))
 
 	mux.HandleFunc("/files/folder", middleware.CorsMiddleware(middleware.DpopMiddleware(h.CreateFolder)))
 

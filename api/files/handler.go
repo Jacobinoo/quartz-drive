@@ -310,10 +310,14 @@ func (h *Handler) GetRootFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For MVP testing, we will just fetch the first ShareMember in the DB.
-	// In production, this would be: Where("user_id = ?", authenticatedUserID)
+	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var shareMember model.ShareMember
-	if err := h.db.Preload("Share").First(&shareMember).Error; err != nil {
+	if err := h.db.Preload("Share").Where("user_id = ?", userID).First(&shareMember).Error; err != nil {
 		http.Error(w, "share member not found", http.StatusNotFound)
 		return
 	}

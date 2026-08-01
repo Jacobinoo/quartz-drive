@@ -20,6 +20,7 @@ type (
 		JWT
 		CRYPTO
 		S3
+		B2
 	}
 
 	App struct {
@@ -62,6 +63,11 @@ type (
 		SecretAccessKey    string `env:"S3_SECRET_ACCESS_KEY,required"`
 		BucketName         string `env:"S3_BUCKET_NAME,required"`
 		InsecureSkipVerify bool   `env:"S3_INSECURE_SKIP_VERIFY,required"`
+	}
+
+	B2 struct {
+		ApplicationKeyID string `env:"B2_APPLICATION_KEY_ID,required"`
+		ApplicationKey   string `env:"B2_APPLICATION_KEY,required"`
 	}
 )
 

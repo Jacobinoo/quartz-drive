@@ -14,6 +14,7 @@ require (
 )
 
 require (
+	github.com/Backblaze/blazer v0.7.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect

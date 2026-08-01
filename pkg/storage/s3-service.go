@@ -17,6 +17,9 @@ type S3Service struct {
 	bucket string
 }
 
+var _ StorageService = (*S3Service)(nil)
+var _ StorageService = (*B2Service)(nil)
+
 func NewS3Service() (*S3Service, error) {
 	endpoint := config.Cfg.S3.Endpoint               //"localhost:8333"
 	accessKeyID := config.Cfg.S3.AccessKeyID         //"SILKW41POES3ATP3DL99"
@@ -55,7 +58,7 @@ func NewS3Service() (*S3Service, error) {
 }
 
 // Funkcja generująca Upload Presigned URLs dla X chunków
-func (s *S3Service) GenerateUploadUrls(nodeID string, totalChunks int) ([]string, error) {
+func (s *S3Service) GenerateUploadUrls(ctx context.Context, nodeID string, totalChunks int) ([]string, error) {
 	var urls []string
 	expiry := time.Minute * 15 // Ważność linku to 15 minut
 
@@ -64,7 +67,7 @@ func (s *S3Service) GenerateUploadUrls(nodeID string, totalChunks int) ([]string
 		objectName := fmt.Sprintf("%s/chunk_%d", nodeID, i)
 
 		// Generujemy Presigned URL dla metody PUT
-		presignedURL, err := s.client.PresignedPutObject(context.Background(), s.bucket, objectName, expiry)
+		presignedURL, err := s.client.PresignedPutObject(ctx, s.bucket, objectName, expiry)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate URL for chunk %d: %w", i, err)
 		}
@@ -76,13 +79,13 @@ func (s *S3Service) GenerateUploadUrls(nodeID string, totalChunks int) ([]string
 }
 
 // Funkcja generująca Download Presigned URLs
-func (s *S3Service) GenerateDownloadUrls(nodeID string, totalChunks int) ([]string, error) {
+func (s *S3Service) GenerateDownloadUrls(ctx context.Context, nodeID string, totalChunks int) ([]string, error) {
 	var urls []string
 	expiry := time.Second * 5
 
 	for i := 0; i < totalChunks; i++ {
 		objectName := fmt.Sprintf("%s/chunk_%d", nodeID, i)
-		presignedURL, err := s.client.PresignedGetObject(context.Background(), s.bucket, objectName, expiry, nil)
+		presignedURL, err := s.client.PresignedGetObject(ctx, s.bucket, objectName, expiry, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate GET URL for chunk %d: %w", i, err)
 		}
@@ -93,13 +96,13 @@ func (s *S3Service) GenerateDownloadUrls(nodeID string, totalChunks int) ([]stri
 }
 
 // Helper to physically delete a chunk from MinIO
-func (s *S3Service) DeleteChunk(objectKey string) error {
-	return s.client.RemoveObject(context.Background(), s.bucket, objectKey, minio.RemoveObjectOptions{})
+func (s *S3Service) DeleteChunk(ctx context.Context, objectKey string) error {
+	return s.client.RemoveObject(ctx, s.bucket, objectKey, minio.RemoveObjectOptions{})
 }
 
 // Security: Fetches the physical size of a chunk directly from S3 to prevent client spoofing
-func (s *S3Service) GetChunkSize(objectKey string) (int64, error) {
-	stat, err := s.client.StatObject(context.Background(), s.bucket, objectKey, minio.StatObjectOptions{})
+func (s *S3Service) GetChunkSize(ctx context.Context, objectKey string) (int64, error) {
+	stat, err := s.client.StatObject(ctx, s.bucket, objectKey, minio.StatObjectOptions{})
 	if err != nil {
 		return 0, err
 	}

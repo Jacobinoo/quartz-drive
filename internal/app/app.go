@@ -32,16 +32,16 @@ func Run() {
 		return
 	}
 
-	s3Service, err := storage.NewS3Service()
+	storageService, err := storage.NewB2Service()
 	if err != nil {
-		log.Fatal("storage s3 service connection failed")
+		log.Fatal("storage service: connection failed")
 	}
 
 	state := &ServerState{
-		DB:          db,
-		GRPCClient:  *grpcClient,
-		GRPCContext: context.WithoutCancel(context.Background()),
-		S3Service:   s3Service,
+		DB:             db,
+		GRPCClient:     *grpcClient,
+		GRPCContext:    context.WithoutCancel(context.Background()),
+		StorageService: storageService,
 	}
 
 	router := initRouter(state)
@@ -103,7 +103,7 @@ func initV1Mux(state *ServerState) *http.ServeMux {
 	refreshHandler := refresh.NewHandler(state.DB)
 	refresh.RegisterRoutes(mux, refreshHandler)
 
-	filesHandler := files.NewHandler(state.DB, state.S3Service)
+	filesHandler := files.NewHandler(state.DB, state.StorageService)
 	files.RegisterRoutes(mux, filesHandler)
 
 	devicesHandler := devices.NewHandler(state.DB)

@@ -1,6 +1,7 @@
 package files
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,18 +11,19 @@ import (
 	"quartz/internal/model"
 	"quartz/pkg/storage"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 type Handler struct {
-	db *gorm.DB
-	s3 *storage.S3Service
+	db      *gorm.DB
+	storage storage.StorageService
 }
 
-func NewHandler(db *gorm.DB, s3 *storage.S3Service) *Handler {
-	return &Handler{db: db, s3: s3}
+func NewHandler(db *gorm.DB, storage storage.StorageService) *Handler {
+	return &Handler{db: db, storage: storage}
 }
 
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
@@ -42,7 +44,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	// TODO
 
 	// 3. Wygeneruj presigned URLs
-	urls, err := h.s3.GenerateUploadUrls(uploadRequest.NodeID, uploadRequest.TotalChunks)
+	urls, err := h.storage.GenerateUploadUrls(r.Context(), uploadRequest.NodeID, uploadRequest.TotalChunks)
 	if err != nil {
 		log.Printf(err.Error())
 		http.Error(w, "Failed to generate upload links", 500)
@@ -145,7 +147,7 @@ func (h *Handler) FinishUpload(w http.ResponseWriter, r *http.Request) {
 			objectKey := fmt.Sprintf("%s/chunk_%d", req.NodeID, chunkIndex)
 
 			// Verify physical size directly from S3!
-			size, err := h.s3.GetChunkSize(objectKey)
+			size, err := h.storage.GetChunkSize(r.Context(), objectKey)
 			if err != nil {
 				errCh <- fmt.Errorf("chunk %d missing in S3: %v", chunkIndex, err)
 				return
@@ -290,7 +292,7 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Generate URLs
-	urls, err := h.s3.GenerateDownloadUrls(nodeID, len(blocks))
+	urls, err := h.storage.GenerateDownloadUrls(r.Context(), nodeID, len(blocks))
 	if err != nil {
 		http.Error(w, "failed to generate download links", http.StatusInternalServerError)
 		return
@@ -539,6 +541,9 @@ func (h *Handler) EmptyTrash(w http.ResponseWriter, r *http.Request) {
 	}
 
 	go func(links []model.Link) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
 		log.Printf("Starting Async S3 Wipe for %d trashed items...", len(links))
 		for _, link := range links {
 			// 1. Gather the NodeID of the trashed item
@@ -554,29 +559,43 @@ func (h *Handler) EmptyTrash(w http.ResponseWriter, r *http.Request) {
 			var blocks []model.FileBlock
 			h.db.Where("node_id IN ?", nodeIDsToWipe).Find(&blocks)
 
+			var successfulBlocks []string
+
 			// 4. Wipe from MinIO (No more storage leaks!)
 			for _, block := range blocks {
-				if err := h.s3.DeleteChunk(block.ObjectKey); err != nil {
+				if err := h.storage.DeleteChunk(ctx, block.ObjectKey); err != nil {
 					log.Printf("Failed to wipe S3 chunk %s: %v", block.ObjectKey, err)
+					continue
 				}
+				successfulBlocks = append(successfulBlocks, block.ObjectKey)
 			}
 
-			if err := h.db.Exec("DELETE FROM file_blocks WHERE node_id IN (?)", nodeIDsToWipe).Error; err != nil {
-				log.Printf("Failed to delete file_blocks: %v", err)
+			if len(blocks) > len(successfulBlocks) {
+				log.Printf("%d chunks failed to wipe, will retry in a periodic sweep job", len(blocks)-len(successfulBlocks))
 			}
 
-			if err := h.db.Exec("DELETE FROM links WHERE child_node_id IN (?) OR parent_node_id IN (?)", nodeIDsToWipe, nodeIDsToWipe).Error; err != nil {
-				log.Printf("Failed to delete links: %v", err)
-			}
+			err := h.db.Transaction(func(tx *gorm.DB) error {
+				if err := tx.Exec("DELETE FROM file_blocks WHERE node_id IN (?) AND object_key IN (?)", nodeIDsToWipe, successfulBlocks).Error; err != nil {
+					return err
+				}
 
-			if err := h.db.Exec("DELETE FROM nodes WHERE id IN (?)", nodeIDsToWipe).Error; err != nil {
-				log.Printf("Failed to delete nodes: %v", err)
+				if err := tx.Exec("DELETE FROM links WHERE child_node_id IN (?) OR parent_node_id IN (?)", nodeIDsToWipe, nodeIDsToWipe).Error; err != nil {
+					return err
+				}
+
+				if err := tx.Exec("DELETE FROM nodes WHERE id IN (?)", nodeIDsToWipe).Error; err != nil {
+					return err
+				}
+				return nil
+			})
+			if err != nil {
+				log.Printf("Failed to complete DB wipe transaction: %v", err)
 			}
 		}
 		log.Println("Async S3 Wipe Complete!")
 	}(trashedLinks)
 
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusAccepted)
 }
 
 func (h *Handler) GetQuota(w http.ResponseWriter, r *http.Request) {

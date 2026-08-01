@@ -1,6 +1,6 @@
 module quartz
 
-go 1.26
+go 1.26.5
 
 require (
 	github.com/Backblaze/blazer v0.7.2

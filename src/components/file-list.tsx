@@ -25,6 +25,7 @@ import { FolderPickerModal } from "./folder-picker";
 import { FileDetailsModal } from "./file-details-modal";
 import { formatBytes } from "@/lib/utils/size";
 import { addSingleSearchItem, removeSearchItem } from "@/lib/SearchIndexStore";
+import { FilePreviewModal } from "./file-preview-modal";
 
 export function FileList() {
     const currentFolder = useDriveStore(s => s.getCurrentFolder());
@@ -33,11 +34,24 @@ export function FileList() {
   const [files, setFiles] = useState<any[]>([]);
   const [pickerItemToMove, setPickerItemToMove] = useState<any>(null);
   const [detailsFile, setDetailsFile] = useState<any>(null);
+  const [previewFile, setPreviewFile] = useState<{
+    file: any,
+    url: string
+  } | null>(null);
   const refreshTrigger = useDriveStore(s => s.refreshTrigger);
 
       useEffect(() => {
           initializeDriveKeys().catch(console.error);
       }, []);
+
+      useEffect(() => {
+        return () => {
+          if (previewFile?.url) {
+            console.log('Revoking url', previewFile.url);
+            URL.revokeObjectURL(previewFile.url);
+          }
+        };
+      }, [previewFile?.url]);
 
     useEffect(() => {
         if (!currentFolder) return;
@@ -217,6 +231,16 @@ export function FileList() {
         }
     };
 
+    const handlePreview = async (file: any) => {
+      console.log('Previewing file ', file.plaintextName)
+        try {
+          const url = await handleDownload(file, true) as string;
+          setPreviewFile({ file, url });
+        } catch (err) {
+          console.error('Failed to preview file:', err);
+        }
+    }
+
     return (
         <div className="mt-8 bg-white dark:bg-black rounded-lg shadow-sm border dark:border-gray-800">
             <div className="p-4 border-b dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/20">
@@ -241,7 +265,13 @@ export function FileList() {
                         {files.map(file => (
                             <TableRow
                                 key={file.nodeId}
-                                className={`group cursor-pointer ${draggedItem?.nodeId === file.nodeId ? 'opacity-30 bg-blue-50 dark:bg-blue-900/20' : ''}`}
+                            className={`group cursor-pointer ${draggedItem?.nodeId === file.nodeId ? 'opacity-30 bg-blue-50 dark:bg-blue-900/20' : ''}`}
+
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (file.type !== 'FILE') return;
+                              handlePreview(file);
+                            }}
 
                                 // Make the row draggable
                                 draggable={true}
@@ -266,7 +296,10 @@ export function FileList() {
                                 }}
                             >
                                 <TableCell className="font-medium py-3">
-                                    <div className="flex items-center" onClick={() => file.type === 'FOLDER' ? handleFolderClick(file) : null}>
+                              <div className="flex items-center" onClick={(e) => {
+                                e.stopPropagation();
+                                if (file.type === 'FOLDER') handleFolderClick(file);
+                              }}>
                                         {file.type === 'FOLDER' ? <FolderIcon className="mr-3 w-5 h-5 text-blue-500 fill-blue-500/20" /> : <FileIcon className="mr-3 w-5 h-5 text-gray-400" />}
                                         <span className={file.type === 'FOLDER' ? "hover:underline hover:text-blue-600 transition-colors" : ""}>{file.plaintextName}</span>
                                     </div>
@@ -277,10 +310,10 @@ export function FileList() {
                                       : (file.sizeBytes ? formatBytes(file.sizeBytes) : '--')
                                   }
                                 </TableCell>
-                                <TableCell className="text-right py-3">
+                                <TableCell className="text-right py-3" onClick={(e) => e.stopPropagation()}>
                                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                         {file.type === 'FILE' && (
-                                            <button onClick={() => handleDownload(file)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium mr-2 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
+                                  <button onClick={() => handleDownload(file)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium mr-2 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
                                                 Download
                                             </button>
                                         )}
@@ -326,18 +359,26 @@ export function FileList() {
                         />
                     )}
 
-            {detailsFile && (
-                <FileDetailsModal
-                    file={detailsFile}
-                    breadcrumbs={useDriveStore.getState().breadcrumbs}
-                    onClose={() => setDetailsFile(null)}
+        {detailsFile && (
+          <FileDetailsModal
+            file={detailsFile}
+            breadcrumbs={useDriveStore.getState().breadcrumbs}
+            onClose={() => setDetailsFile(null)}
+                />
+        )}
+
+            {previewFile && (
+                <FilePreviewModal
+                    file={previewFile.file}
+                    url={previewFile.url}
+                    onClose={() => setPreviewFile(null)}
                 />
             )}
       </div>
     );
 }
 
-const handleDownload = async (file: any) => {
+const handleDownload = async (file: any, withResult = false): Promise<string | void> => {
     try {
         console.log("Unwrapping file key...");
         const sodium = await getSodium();
@@ -357,7 +398,10 @@ const handleDownload = async (file: any) => {
         const urls = await getDownloadUrls(file.nodeId);
 
         console.log("Starting Decryption Worker...");
-        const worker = new Worker(new URL('@/workers/decrypt.worker.ts', import.meta.url));
+      const worker = new Worker(new URL('@/workers/decrypt.worker.ts', import.meta.url));
+
+
+      return await new Promise<string | void>((resolve, reject) => {
         worker.postMessage({ urls, fileKey, nodeId: file.nodeId });
 
         worker.onmessage = async (e) => {
@@ -366,7 +410,7 @@ const handleDownload = async (file: any) => {
                 // You could update some React state here for a progress bar!
             }
             else if (e.data.type === 'SUCCESS') {
-                console.log("Decryption complete! Triggering browser download...");
+                console.log("Decryption complete!");
 
                 // 1. Get the decrypted blob from the worker
                 const blob = e.data.blob;
@@ -374,6 +418,14 @@ const handleDownload = async (file: any) => {
                 // 2. Create a temporary invisible Object URL
                 const downloadUrl = URL.createObjectURL(blob);
 
+                if (withResult) {
+                  console.log("Returning image url");
+                  worker.terminate();
+                  resolve(downloadUrl);
+                  return;
+                }
+
+                console.log("Triggering browser download...");
                 // 3. Create a temporary anchor tag to trigger the download
                 const a = document.createElement("a");
                 a.href = downloadUrl;
@@ -384,15 +436,24 @@ const handleDownload = async (file: any) => {
                 // 4. Clean up
                 a.remove();
                 URL.revokeObjectURL(downloadUrl);
-                worker.terminate();
+              worker.terminate();
+              resolve();
             }
             else if (e.data.type === 'ERROR') {
                 console.error("Worker error:", e.data.message);
-                worker.terminate();
+              worker.terminate();
+              reject(new Error(e.data.message))
             }
         };
+
+      worker.onerror = (err) => {
+        worker.terminate();
+        reject(err);
+      };
+  });
     } catch (err) {
-        console.error("Download aborted or failed:", err);
+      console.error("Download aborted or failed:", err);
+      throw err;
     }
 };
 

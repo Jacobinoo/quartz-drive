@@ -296,8 +296,9 @@ export function FileList() {
                             >
                                 <TableCell className="font-medium py-3">
                               <div className="flex items-center" onClick={(e) => {
+                                if (file.type !== 'FOLDER') return;
                                 e.stopPropagation();
-                                if (file.type === 'FOLDER') handleFolderClick(file);
+                                handleFolderClick(file);
                               }}>
                                         {file.type === 'FOLDER' ? <FolderIcon className="mr-3 w-5 h-5 text-blue-500 fill-blue-500/20" /> : <FileIcon className="mr-3 w-5 h-5 text-gray-400" />}
                                         <span className={file.type === 'FOLDER' ? "hover:underline hover:text-blue-600 transition-colors" : ""}>{file.plaintextName}</span>

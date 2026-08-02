@@ -267,8 +267,7 @@ export function FileList() {
                                 key={file.nodeId}
                             className={`group cursor-pointer ${draggedItem?.nodeId === file.nodeId ? 'opacity-30 bg-blue-50 dark:bg-blue-900/20' : ''}`}
 
-                            onClick={(e) => {
-                              e.stopPropagation();
+                            onClick={() => {
                               if (file.type !== 'FILE') return;
                               handlePreview(file);
                             }}

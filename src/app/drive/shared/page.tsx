@@ -80,7 +80,8 @@ export default function SharedWithMePage() {
                             nodeId: vol.nodeId,
                             name: sodium.to_string(decryptedNameBytes),
                             privateKey: rootNodePrivKey,
-                            publicKey: sodium.from_base64(vol.nodePublicKey)
+                            publicKey: sodium.from_base64(vol.nodePublicKey),
+                            isShared: true
                         });
                     } catch (e) {
                         console.error("Failed to decrypt a shared volume", e);

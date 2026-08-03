@@ -5,7 +5,8 @@ export interface FolderKey {
     name: string; // Plaintext name
     privateKey: Uint8Array;
     publicKey: Uint8Array;
-    hasChildren?: boolean;
+  hasChildren?: boolean;
+  isShared?: boolean;
 }
 
 interface DriveState {

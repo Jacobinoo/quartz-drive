@@ -29,6 +29,7 @@ import { getSodium } from "@/lib/crypto/sodium";
 import { customFetch } from "@/lib/api";
 import { SearchBar } from "@/components/search-bar";
 import { getAccessToken } from "@/lib/authStore";
+import { Users } from "lucide-react";
 
 export default function DriveHomePage() {
   const router = useRouter();
@@ -135,6 +136,18 @@ export default function DriveHomePage() {
           />
           <Breadcrumb>
             <BreadcrumbList>
+
+              {useDriveStore(s => s.breadcrumbs)[0]?.isShared && (
+                  <>
+                      <BreadcrumbItem className="hidden md:block cursor-pointer" onClick={() => router.push('/drive/shared')}>
+                          <BreadcrumbPage className="text-gray-500 flex items-center">
+                              <Users className="w-4 h-4 mr-2" /> Shared with Me
+                          </BreadcrumbPage>
+                      </BreadcrumbItem>
+                      <BreadcrumbSeparator className="hidden md:block" />
+                  </>
+              )}
+
               {useDriveStore(s => s.breadcrumbs).map((folder, index, array) => {
                 const isLast = index === array.length - 1;
 

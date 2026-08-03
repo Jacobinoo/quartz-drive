@@ -18,7 +18,6 @@ type S3Service struct {
 }
 
 var _ StorageService = (*S3Service)(nil)
-var _ StorageService = (*B2Service)(nil)
 
 func NewS3Service() (*S3Service, error) {
 	endpoint := config.Cfg.S3.Endpoint               //"localhost:8333"

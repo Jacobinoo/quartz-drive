@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"quartz/api/devices"
 	"quartz/api/files"
+	"quartz/api/keys"
 	"quartz/api/refresh"
 	"quartz/api/signin"
 	"quartz/api/signout"
@@ -108,6 +109,9 @@ func initV1Mux(state *ServerState) *http.ServeMux {
 
 	devicesHandler := devices.NewHandler(state.DB)
 	devices.RegisterRoutes(mux, devicesHandler)
+
+	keysHandler := keys.NewHandler(state.DB)
+	keys.RegisterRoutes(mux, keysHandler)
 
 	return mux
 }

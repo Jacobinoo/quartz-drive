@@ -317,7 +317,11 @@ func (h *Handler) GetRootFolder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var shareMember model.ShareMember
-	if err := h.db.Preload("Share").Where("user_id = ?", userID).First(&shareMember).Error; err != nil {
+	err := h.db.Preload("Share").
+		Joins("JOIN shares ON shares.id = share_members.share_id").
+		Where("share_members.user_id = ? AND shares.type = ?", userID, model.ShareTypeDefault).
+		First(&shareMember).Error
+	if err != nil {
 		http.Error(w, "share member not found", http.StatusNotFound)
 		return
 	}
@@ -837,6 +841,152 @@ func (h *Handler) GetFilePath(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "failed to resolve cryptographic path", http.StatusInternalServerError)
 		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func (h *Handler) ShareFolder(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	authorID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		TargetNodeID    string `json:"targetNodeId"`
+		RecipientUserID string `json:"recipientUserId"`
+
+		// Share Keys
+		SharePublicKey         string `json:"sharePublicKey"`
+		WrappedSharePrivateKey string `json:"wrappedSharePrivateKey"`
+		SharePrivNonce         string `json:"sharePrivNonce"`
+
+		// Sealed Passphrase for Recipient
+		EncryptedSharePassphraseForOwner string `json:"encryptedSharePassphraseForOwner"`
+		SignedEncryptedSharePassphrase   string `json:"signedEncryptedSharePassphrase"`
+
+		// New Root Link Data
+		EncryptedTargetNodePassphrase string `json:"encryptedTargetNodePassphrase"`
+		EncryptedName                 string `json:"encryptedName"`
+		NameNonce                     string `json:"nameNonce"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	targetNodeUUID := uuid.MustParse(req.TargetNodeID)
+	recipientUUID := uuid.MustParse(req.RecipientUserID)
+
+	err := h.db.Transaction(func(tx *gorm.DB) error {
+		// 1. Create a NEW Link that acts as a "Root" (ParentNodeID = null) for the recipient
+		newLink := model.Link{
+			ID:                      uuid.New(),
+			ParentNodeID:            nil, // IT IS A ROOT NOW!
+			ChildNodeID:             &targetNodeUUID,
+			EncryptedName:           req.EncryptedName,
+			NameNonce:               req.NameNonce,
+			EncryptedNodePassphrase: req.EncryptedTargetNodePassphrase,
+			AuthorID:                authorID, // John created the link
+		}
+		if err := tx.Create(&newLink).Error; err != nil {
+			return err
+		}
+
+		// 2. Create the Share object holding the new Share Keys
+		newShare := model.Share{
+			ID:                     uuid.New(),
+			TargetLinkID:           newLink.ID,
+			Type:                   model.ShareTypeShared,
+			OwnerID:                recipientUUID, // Jane is the owner of this share perspective
+			SharePublicKey:         req.SharePublicKey,
+			WrappedSharePrivateKey: req.WrappedSharePrivateKey,
+			SharePrivNonce:         req.SharePrivNonce,
+		}
+		if err := tx.Create(&newShare).Error; err != nil {
+			return err
+		}
+
+		// 3. Bind Jane to the Share and give her the sealed passphrase!
+		shareMember := model.ShareMember{
+			ShareID:                        newShare.ID,
+			UserID:                         recipientUUID,
+			Permissions:                    3, // Read/Write
+			EncryptedSharePassphrase:       req.EncryptedSharePassphraseForOwner,
+			SignedEncryptedSharePassphrase: req.SignedEncryptedSharePassphrase,
+		}
+		if err := tx.Create(&shareMember).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		http.Error(w, "failed to execute share transaction", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (h *Handler) GetSharedFolders(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// 1. Fetch all SHARED ShareMembers for this user
+	var shareMembers []model.ShareMember
+	err := h.db.Preload("Share").
+		Joins("JOIN shares ON shares.id = share_members.share_id").
+		Where("share_members.user_id = ? AND shares.type = ?", userID, model.ShareTypeShared).
+		Find(&shareMembers).Error
+
+	if err != nil {
+		http.Error(w, "failed to query shares", http.StatusInternalServerError)
+		return
+	}
+
+	var response []map[string]string
+
+	// 2. Loop through them and grab the TargetLink for each one
+	for _, member := range shareMembers {
+		var rootLink model.Link
+		if err := h.db.Preload("ChildNode").Where("id = ?", member.Share.TargetLinkID).First(&rootLink).Error; err != nil {
+			continue // Skip if corrupted
+		}
+
+		response = append(response, map[string]string{
+			"sharePublicKey":                   member.Share.SharePublicKey,
+			"wrappedSharePrivateKey":           member.Share.WrappedSharePrivateKey,
+			"sharePrivNonce":                   member.Share.SharePrivNonce,
+			"encryptedSharePassphraseForOwner": member.EncryptedSharePassphrase,
+
+			"nodeId":                      rootLink.ChildNode.ID.String(),
+			"nodePublicKey":               rootLink.ChildNode.NodePublicKey,
+			"wrappedNodePrivateKey":       rootLink.ChildNode.WrappedNodeKey,
+			"nodePrivNonce":               rootLink.ChildNode.NodePrivNonce,
+			"encryptedRootNodePassphrase": rootLink.EncryptedNodePassphrase,
+
+			// We also need the encrypted name so we can render it in the UI!
+			"encryptedName": rootLink.EncryptedName,
+			"nameNonce":     rootLink.NameNonce,
+		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")

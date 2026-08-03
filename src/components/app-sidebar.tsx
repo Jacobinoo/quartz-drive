@@ -100,8 +100,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupLabel>My Files</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {/* Kick off the recursive tree starting at the Root Folder! */}
               {rootFolder && <DynamicFolderTree pathStack={[rootFolder]} />}
+            </SidebarMenu>
+            <SidebarMenu>
+              <a href="/drive/shared" className="flex items-center">
+                  <Users className="mr-2 h-4 w-4" />
+                          <span>Shared with me</span>
+              </a>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

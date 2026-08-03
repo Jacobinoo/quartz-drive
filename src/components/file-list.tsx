@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { fetchFiles, getDownloadUrls } from "@/crypto/files";
 import { getSodium } from "@/lib/crypto/sodium";
 import { useDriveStore } from "@/lib/driveStore";
-import { FileIcon, FolderIcon, Info, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { FileIcon, FolderIcon, Info, MoreVertical, Pencil, Share2, Trash2 } from "lucide-react";
 import { customFetch } from "@/lib/api"; // Added for our direct API calls
 import {
     DropdownMenu,
@@ -26,6 +26,7 @@ import { FileDetailsModal } from "./file-details-modal";
 import { formatBytes } from "@/lib/utils/size";
 import { addSingleSearchItem, removeSearchItem } from "@/lib/SearchIndexStore";
 import { FilePreviewModal } from "./file-preview-modal";
+import { ShareModal } from "./share-modal";
 
 export function FileList() {
     const currentFolder = useDriveStore(s => s.getCurrentFolder());
@@ -38,7 +39,9 @@ export function FileList() {
     file: any,
     url: string
   } | null>(null);
+    const [folderToShare, setFolderToShare] = useState<any>(null);
   const refreshTrigger = useDriveStore(s => s.refreshTrigger);
+
 
       useEffect(() => {
           initializeDriveKeys().catch(console.error);
@@ -323,7 +326,14 @@ export function FileList() {
                                                     <MoreVertical className="w-4 h-4" />
                                                 </button>
                                             </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
+                                  <DropdownMenuContent align="end">
+                                    {file.type === 'FOLDER' && (
+                                        <DropdownMenuItem onClick={() => setFolderToShare(file)} className="cursor-pointer">
+                                            <Share2 className="w-4 h-4 mr-2" />
+                                            Share Folder
+                                        </DropdownMenuItem>
+                                    )}
+
                                                 <DropdownMenuItem onClick={() => handleRename(file)} className="cursor-pointer">
                                                     <Pencil className="w-4 h-4 mr-2" />
                                                     Rename
@@ -373,7 +383,13 @@ export function FileList() {
                     url={previewFile.url}
                     onClose={() => setPreviewFile(null)}
                 />
-            )}
+        )}
+
+            <ShareModal
+                folder={folderToShare}
+                isOpen={!!folderToShare}
+                onClose={() => setFolderToShare(null)}
+            />
       </div>
     );
 }

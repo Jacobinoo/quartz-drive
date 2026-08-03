@@ -72,8 +72,13 @@ export async function initializeDriveKeys() {
             privateKey: rootNodePrivKey,
             publicKey: rootNodePubKey
         };
-        useDriveStore.getState().setRootFolder(rootFolderNode);
-        useDriveStore.getState().setMyDriveRoot(rootFolderNode);
+        const store = useDriveStore.getState();
+        store.setMyDriveRoot(rootFolderNode);
+        
+        // Only set the active breadcrumb route to My Drive if the user hasn't already navigated somewhere else!
+        if (store.breadcrumbs.length === 0) {
+            store.setRootFolder(rootFolderNode);
+        }
         console.log("✅ Drive Keys Successfully Initialized!");
 
     } catch (err) {

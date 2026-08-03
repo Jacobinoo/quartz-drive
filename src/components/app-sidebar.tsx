@@ -191,6 +191,12 @@ function DynamicFolderTree({ pathStack }: { pathStack: FolderKey[] }) {
         setHasFetched(true);
       }
       loadFolders();
+      
+      const handleRefresh = () => {
+          setHasFetched(false); // Force a re-fetch of the tree node
+      };
+      window.addEventListener('refreshFiles', handleRefresh);
+      return () => window.removeEventListener('refreshFiles', handleRefresh);
     }
   }, [isOpen, hasFetched, folder]);
 

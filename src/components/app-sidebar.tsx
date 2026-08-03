@@ -79,8 +79,8 @@ function StorageQuota() {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const router = useRouter();
 
-  // Grab the Root Folder from the store (it's always the first item in the breadcrumbs)
-  const rootFolder = useDriveStore(s => s.breadcrumbs.length > 0 ? s.breadcrumbs[0] : null);
+  // Grab the Root Folder from the store (it's persistent even if we navigate to shared folders)
+  const rootFolder = useDriveStore(s => s.myDriveRoot);
 
   return (
     <Sidebar {...props}>

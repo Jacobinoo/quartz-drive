@@ -43,9 +43,7 @@ export function FileList() {
   const refreshTrigger = useDriveStore(s => s.refreshTrigger);
 
 
-      useEffect(() => {
-          initializeDriveKeys().catch(console.error);
-      }, []);
+
 
       useEffect(() => {
         return () => {

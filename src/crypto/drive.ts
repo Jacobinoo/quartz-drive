@@ -66,12 +66,14 @@ export async function initializeDriveKeys() {
         const rootNodePubKey = sodium.from_base64(rootData.nodePublicKey);
 
         // 7. Store the Drive Key in JS memory!
-        useDriveStore.getState().setRootFolder({
+        const rootFolderNode = {
             nodeId: rootData.nodeId,
             name: "My Drive", // The root folder doesn't have an encrypted name, so we just call it "My Drive"
             privateKey: rootNodePrivKey,
             publicKey: rootNodePubKey
-        });
+        };
+        useDriveStore.getState().setRootFolder(rootFolderNode);
+        useDriveStore.getState().setMyDriveRoot(rootFolderNode);
         console.log("✅ Drive Keys Successfully Initialized!");
 
     } catch (err) {

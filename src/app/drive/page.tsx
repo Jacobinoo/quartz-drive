@@ -103,8 +103,6 @@ export default function DriveHomePage() {
   };
 
   return (
-    <SidebarProvider>
-      <AppSidebar />
       <SidebarInset>
         <header className="flex h-16 shrink-0 items-center gap-2 justify-between border-b px-4">
           <SearchBar />
@@ -202,6 +200,5 @@ export default function DriveHomePage() {
           <TransferList />
         </div>
       </SidebarInset>
-    </SidebarProvider>
   );
 }

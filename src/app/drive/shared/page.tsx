@@ -106,8 +106,6 @@ export default function SharedWithMePage() {
     };
 
     return (
-        <SidebarProvider>
-            <AppSidebar />
             <SidebarInset>
                 <header className="flex h-16 items-center border-b px-4">
                     <SidebarTrigger />
@@ -137,6 +135,5 @@ export default function SharedWithMePage() {
                     )}
                 </div>
             </SidebarInset>
-        </SidebarProvider>
     );
 }

@@ -12,6 +12,8 @@ export interface FolderKey {
 interface DriveState {
   breadcrumbs: FolderKey[];
   setBreadcrumbs: (breadcrumbs: FolderKey[]) => void;
+  myDriveRoot: FolderKey | null;
+  setMyDriveRoot: (folder: FolderKey) => void;
   draggedItem: any | null;
   refreshTrigger: number;
 
@@ -31,6 +33,8 @@ interface DriveState {
 export const useDriveStore = create<DriveState>((set, get) => ({
   breadcrumbs: [],
   setBreadcrumbs: (breadcrumbs) => set({ breadcrumbs }),
+  myDriveRoot: null,
+  setMyDriveRoot: (folder) => set({ myDriveRoot: folder }),
   draggedItem: null,
     refreshTrigger: 0,
 

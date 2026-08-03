@@ -42,7 +42,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     boot();
-  }, [pathname, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 3. Show a sleek loading screen while we verify cookies and unwrap keys
   if (isBooting) {

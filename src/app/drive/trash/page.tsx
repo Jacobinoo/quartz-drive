@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getSodium } from "@/lib/crypto/sodium";
 import { useDriveStore } from "@/lib/driveStore";
+import { SidebarInset } from "@/components/ui/sidebar";
 import { FileIcon, FolderIcon, RefreshCw, Trash } from "lucide-react";
 import { customFetch } from "@/lib/api";
 
@@ -71,7 +72,8 @@ export default function TrashPage() {
     };
 
     return (
-        <div className="p-8 max-w-4xl mx-auto mt-8">
+        <SidebarInset>
+            <div className="p-8 max-w-4xl mx-auto mt-8">
             <div className="flex justify-between items-center mb-8 border-b pb-4">
                 <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                     <Trash className="w-7 h-7 text-red-500" />
@@ -111,5 +113,6 @@ export default function TrashPage() {
                 </div>
             )}
         </div>
+        </SidebarInset>
     );
 }

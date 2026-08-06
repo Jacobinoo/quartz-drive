@@ -367,6 +367,13 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 
 	if subtle.ConstantTimeCompare([]byte(sha256), []byte(uploadRequest.ChunkHash)) == 0 {
 		log.Printf("integrity check failed", err)
+		go func(objectKey string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if delErr := h.storage.DeleteChunk(ctx, objectKey); delErr != nil {
+				log.Printf("failed to delete (integrity check failed) chunk %s: %v", objectKey, delErr)
+			}
+		}(chunkRow.ObjectKey)
 		http.Error(w, "integrity check failed", http.StatusForbidden)
 		return
 	}

@@ -12,6 +12,7 @@ import (
 	"quartz/config"
 	"quartz/internal/model"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -269,6 +270,17 @@ func (h *Handler) wipeTrashedLinks(ctx context.Context, links []model.Link) {
 			continue
 		}
 
+		var nodes []model.Node
+		if err := h.db.Where("id IN ?", nodeIDsToWipe).Find(&nodes).Error; err != nil {
+			sweepLog.Printf("Failed to query nodes %v: %v", nodeIDsToWipe, err)
+			continue
+		}
+		nodeOwners := make(map[string]uuid.UUID)
+		for _, n := range nodes {
+			nodeOwners[n.ID.String()] = n.OwnerID
+		}
+
+		freedPerOwner := make(map[uuid.UUID]int64)
 		var successfulBlocks []string
 		failedNodeIDs := map[string]bool{}
 		for _, block := range blocks {
@@ -276,6 +288,9 @@ func (h *Handler) wipeTrashedLinks(ctx context.Context, links []model.Link) {
 				if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "NoSuchKey") {
 					// If it's already gone from S3, consider it a successful wipe
 					successfulBlocks = append(successfulBlocks, block.ObjectKey)
+					if owner, ok := nodeOwners[block.NodeID.String()]; ok {
+						freedPerOwner[owner] += int64(block.Size)
+					}
 					continue
 				}
 				sweepLog.Printf("Failed to wipe S3 chunk %s: %v", block.ObjectKey, err)
@@ -283,6 +298,9 @@ func (h *Handler) wipeTrashedLinks(ctx context.Context, links []model.Link) {
 				continue
 			}
 			successfulBlocks = append(successfulBlocks, block.ObjectKey)
+			if owner, ok := nodeOwners[block.NodeID.String()]; ok {
+				freedPerOwner[owner] += int64(block.Size)
+			}
 		}
 
 		var cleanNodeIDs []string
@@ -301,6 +319,15 @@ func (h *Handler) wipeTrashedLinks(ctx context.Context, links []model.Link) {
 				// We can safely delete individual file blocks that succeeded, even if other blocks for the node failed.
 				if err := tx.Exec("DELETE FROM file_blocks WHERE object_key IN (?)", successfulBlocks).Error; err != nil {
 					return err
+				}
+
+				// Decrement storage quota safely (atomic)
+				for ownerID, sizeFreed := range freedPerOwner {
+					if sizeFreed > 0 {
+						if err := tx.Model(&model.User{}).Where("id = ?", ownerID).UpdateColumn("storage_used", gorm.Expr("storage_used - ?", sizeFreed)).Error; err != nil {
+							return err
+						}
+					}
 				}
 			}
 

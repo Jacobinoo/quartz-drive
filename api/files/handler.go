@@ -544,6 +544,13 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 			return err
 		}
 
+		// Increment the user's storage quota safely (atomic)
+		if trueTotalSize > 0 {
+			if err := tx.Model(&model.User{}).Where("id = ?", ownerID).UpdateColumn("storage_used", gorm.Expr("storage_used + ?", trueTotalSize)).Error; err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 

@@ -42,18 +42,20 @@ func (h *Handler) StartSweepScheduler(ctx context.Context) {
 
 	hourlyDuration, err := time.ParseDuration(config.Cfg.Sweeper.HourlyInterval)
 	if err != nil {
-		sweepLog.Printf("Invalid SWEEP_HOURLY_INTERVAL '%s', defaulting to 1h", config.Cfg.Sweeper.HourlyInterval)
-		hourlyDuration = time.Hour
+		hourlyDuration = 1 * time.Hour
 	}
-
 	dailyDuration, err := time.ParseDuration(config.Cfg.Sweeper.DailyInterval)
 	if err != nil {
-		sweepLog.Printf("Invalid SWEEP_DAILY_INTERVAL '%s', defaulting to 24h", config.Cfg.Sweeper.DailyInterval)
 		dailyDuration = 24 * time.Hour
+	}
+	completedDuration, err := time.ParseDuration(config.Cfg.Sweeper.CompletedInterval)
+	if err != nil {
+		completedDuration = 1 * time.Hour
 	}
 
 	hourly := time.NewTicker(hourlyDuration)
 	daily := time.NewTicker(dailyDuration)
+	completedTicker := time.NewTicker(completedDuration)
 
 	go func() {
 		for {
@@ -62,6 +64,8 @@ func (h *Handler) StartSweepScheduler(ctx context.Context) {
 				sweepLog.Println("Hourly sweep triggered")
 				h.SweepExpiredUploads(ctx)
 				h.SweepOversizedChunks(ctx)
+			case <-completedTicker.C:
+				sweepLog.Println("Completed sessions sweep triggered")
 				h.SweepCompletedUploads(ctx)
 			case <-daily.C:
 				sweepLog.Println("Running daily sweeps...")
@@ -69,9 +73,10 @@ func (h *Handler) StartSweepScheduler(ctx context.Context) {
 				h.SweepReconciliation(ctx)
 				h.SweepTrashRetention(ctx)
 			case <-ctx.Done():
-				sweepLog.Println("Stopping Sweep Scheduler...")
+				sweepLog.Println("Sweep scheduler stopped")
 				hourly.Stop()
 				daily.Stop()
+				completedTicker.Stop()
 				return
 			}
 		}

@@ -12,14 +12,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
+
 import { initializeDriveKeys } from "@/crypto/drive";
 import { FolderPickerModal } from "./folder-picker";
 import { FileDetailsModal } from "./file-details-modal";
@@ -256,137 +249,141 @@ export function FileList() {
     }
 
     return (
-        <div className="mt-8 bg-white dark:bg-black rounded-lg shadow-sm border dark:border-gray-800">
-            <div className="p-4 border-b dark:border-gray-800 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/20">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{currentFolder?.name || "My Files"}</h2>
+        <div className="flex flex-col w-full">
+            {/* Column header — same visual weight as the breadcrumb bar */}
+            <div className="grid grid-cols-[minmax(0,1fr)_120px_40px] items-center px-3 py-2 border-b border-border/60">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</span>
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Size</span>
+                <span />
             </div>
 
             {files.length === 0 ? (
-                <div className="p-16 text-center text-gray-500">
-                    <FolderIcon className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                    This folder is empty.
+                <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
+                    <FolderIcon className="w-10 h-10 opacity-20" />
+                    <span className="text-sm">This folder is empty</span>
                 </div>
             ) : (
-                <Table>
-                    <TableHeader className="bg-gray-50/50 dark:bg-gray-900/50">
-                        <TableRow>
-                            <TableHead className="w-[60%]">Name</TableHead>
-                            <TableHead className="w-[20%]">Size</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {files.map(file => (
-                            <TableRow
-                                key={file.nodeId}
-                            className={`group cursor-pointer ${draggedItem?.nodeId === file.nodeId ? 'opacity-30 bg-blue-50 dark:bg-blue-900/20' : ''}`}
-
+                <div className="flex flex-col">
+                    {files.map(file => (
+                        <div
+                            key={file.nodeId}
+                            className={`group grid grid-cols-[minmax(0,1fr)_120px_40px] items-center px-3 py-1.5 rounded-md transition-colors cursor-pointer
+                                ${draggedItem?.nodeId === file.nodeId
+                                    ? 'opacity-40 bg-accent'
+                                    : 'hover:bg-accent/60'
+                                }`}
                             onClick={() => {
-                              if (file.type !== 'FILE') return;
-                              handlePreview(file);
+                                if (file.type !== 'FILE') return;
+                                handlePreview(file);
                             }}
-
-                                // Make the row draggable
-                                draggable={true}
-                                onDragStart={(e) => {
-                                    setDraggedItem(file);
-                                    e.dataTransfer.effectAllowed = "move";
-                                }}
-                                onDragEnd={() => setDraggedItem(null)}
-
-                                // Make FOLDERS act as Drop Targets
-                                onDragOver={(e) => {
-                                    if (file.type === 'FOLDER' && draggedItem && draggedItem.nodeId !== file.nodeId) {
-                                        e.preventDefault();
-                                        e.dataTransfer.dropEffect = "move";
-                                    }
-                                }}
-                                onDrop={(e) => {
+                            draggable={true}
+                            onDragStart={(e) => {
+                                setDraggedItem(file);
+                                e.dataTransfer.effectAllowed = "move";
+                            }}
+                            onDragEnd={() => setDraggedItem(null)}
+                            onDragOver={(e) => {
+                                if (file.type === 'FOLDER' && draggedItem && draggedItem.nodeId !== file.nodeId) {
                                     e.preventDefault();
-                                    if (file.type === 'FOLDER' && draggedItem && draggedItem.nodeId !== file.nodeId) {
-                                        handleMoveItem(draggedItem, file);
-                                    }
+                                    e.dataTransfer.dropEffect = "move";
+                                }
+                            }}
+                            onDrop={(e) => {
+                                e.preventDefault();
+                                if (file.type === 'FOLDER' && draggedItem && draggedItem.nodeId !== file.nodeId) {
+                                    handleMoveItem(draggedItem, file);
+                                }
+                            }}
+                        >
+                            {/* Name cell */}
+                            <div
+                                className="flex items-center gap-2 min-w-0"
+                                onClick={(e) => {
+                                    if (file.type !== 'FOLDER') return;
+                                    e.stopPropagation();
+                                    handleFolderClick(file);
                                 }}
                             >
-                                <TableCell className="font-medium py-3">
-                              <div className="flex items-center" onClick={(e) => {
-                                if (file.type !== 'FOLDER') return;
-                                e.stopPropagation();
-                                handleFolderClick(file);
-                              }}>
-                                        {file.type === 'FOLDER' ? <FolderIcon className="mr-3 w-5 h-5 text-blue-500 fill-blue-500/20" /> : <FileIcon className="mr-3 w-5 h-5 text-gray-400" />}
-                                        <span className={file.type === 'FOLDER' ? "hover:underline hover:text-blue-600 transition-colors" : ""}>{file.plaintextName}</span>
-                                    </div>
-                                </TableCell>
-                                <TableCell className="text-gray-500 py-3">
-                                  {file.metadata?.originalSizeBytes
-                                      ? formatBytes(file.metadata.originalSizeBytes)
-                                      : (file.sizeBytes ? formatBytes(file.sizeBytes) : '--')
-                                  }
-                                </TableCell>
-                                <TableCell className="text-right py-3" onClick={(e) => e.stopPropagation()}>
-                                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {file.type === 'FOLDER'
+                                    ? <FolderIcon className="w-4 h-4 shrink-0 text-blue-500 fill-blue-500/20" />
+                                    : <FileIcon className="w-4 h-4 shrink-0 text-muted-foreground/60" />
+                                }
+                                <span className={`text-sm truncate ${file.type === 'FOLDER' ? 'font-medium' : ''}`}>
+                                    {file.plaintextName}
+                                </span>
+                            </div>
+
+                            {/* Size cell */}
+                            <span className="text-xs text-muted-foreground tabular-nums">
+                                {file.type === 'FOLDER'
+                                    ? '—'
+                                    : file.metadata?.originalSizeBytes
+                                        ? formatBytes(file.metadata.originalSizeBytes)
+                                        : (file.sizeBytes ? formatBytes(file.sizeBytes) : '—')
+                                }
+                            </span>
+
+                            {/* Actions cell */}
+                            <div
+                                className="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <button className="p-1 hover:bg-accent rounded-md transition-colors text-muted-foreground">
+                                            <MoreVertical className="w-3.5 h-3.5" />
+                                        </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
                                         {file.type === 'FILE' && (
-                                  <button onClick={() => handleDownload(file)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium mr-2 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
+                                            <DropdownMenuItem onClick={() => handleDownload(file)} className="cursor-pointer">
                                                 Download
-                                            </button>
+                                            </DropdownMenuItem>
                                         )}
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <button className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors text-gray-500">
-                                                    <MoreVertical className="w-4 h-4" />
-                                                </button>
-                                            </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    {file.type === 'FOLDER' && (
-                                        <DropdownMenuItem onClick={() => setFolderToShare(file)} className="cursor-pointer">
-                                            <Share2 className="w-4 h-4 mr-2" />
-                                            Share Folder
+                                        {file.type === 'FOLDER' && (
+                                            <DropdownMenuItem onClick={() => setFolderToShare(file)} className="cursor-pointer">
+                                                <Share2 className="w-4 h-4 mr-2" />
+                                                Share Folder
+                                            </DropdownMenuItem>
+                                        )}
+                                        <DropdownMenuItem onClick={() => handleRename(file)} className="cursor-pointer">
+                                            <Pencil className="w-4 h-4 mr-2" />
+                                            Rename
                                         </DropdownMenuItem>
-                                    )}
+                                        <DropdownMenuItem onClick={() => setPickerItemToMove(file)} className="cursor-pointer">
+                                            <FolderIcon className="w-4 h-4 mr-2" />
+                                            Move To...
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleTrash(file)} className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer">
+                                            <Trash2 className="w-4 h-4 mr-2" />
+                                            Move to Trash
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setDetailsFile(file)} className="cursor-pointer">
+                                            <Info className="w-4 h-4 mr-2" />
+                                            Details
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
 
-                                                <DropdownMenuItem onClick={() => handleRename(file)} className="cursor-pointer">
-                                                    <Pencil className="w-4 h-4 mr-2" />
-                                                    Rename
-                                    </DropdownMenuItem>
-
-
-
-                                    <DropdownMenuItem onClick={() => setPickerItemToMove(file)} className="cursor-pointer">
-                                        <FolderIcon className="w-4 h-4 mr-2" />
-                                        Move To...
-                                    </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => handleTrash(file)} className="text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950 cursor-pointer">
-                                                    <Trash2 className="w-4 h-4 mr-2" />
-                                                    Move to Trash
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => setDetailsFile(file)} className="cursor-pointer">
-                                        <Info className="w-4 h-4 mr-2" />
-                                        File Details
-                                    </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </div>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-        )}
             {pickerItemToMove && (
-                        <FolderPickerModal
-                            itemToMove={pickerItemToMove}
-                            onClose={() => setPickerItemToMove(null)}
-                        />
-                    )}
+                <FolderPickerModal
+                    itemToMove={pickerItemToMove}
+                    onClose={() => setPickerItemToMove(null)}
+                />
+            )}
 
-        {detailsFile && (
-          <FileDetailsModal
-            file={detailsFile}
-            breadcrumbs={useDriveStore.getState().breadcrumbs}
-            onClose={() => setDetailsFile(null)}
-          />
-        )}
+            {detailsFile && (
+                <FileDetailsModal
+                    file={detailsFile}
+                    breadcrumbs={useDriveStore.getState().breadcrumbs}
+                    onClose={() => setDetailsFile(null)}
+                />
+            )}
 
             {previewFile && (
                 <FilePreviewModal
@@ -398,14 +395,14 @@ export function FileList() {
                     onClose={() => setPreviewFile(null)}
                     onDownload={() => handleDownload(previewFile.file)}
                 />
-        )}
+            )}
 
             <ShareModal
                 folder={folderToShare}
                 isOpen={!!folderToShare}
                 onClose={() => setFolderToShare(null)}
             />
-      </div>
+        </div>
     );
 }
 

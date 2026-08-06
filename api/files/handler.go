@@ -224,6 +224,12 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if uploadSession.Status != model.UploadStatusPending {
+		log.Printf("upload session is not pending (status: %s)", uploadSession.Status)
+		http.Error(w, "upload session is no longer active", http.StatusForbidden)
+		return
+	}
+
 	if user.ID != uploadSession.UserID {
 		log.Printf("user is not the owner of the upload session")
 		http.Error(w, "upload session not found", http.StatusForbidden)

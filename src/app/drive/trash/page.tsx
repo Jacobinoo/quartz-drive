@@ -287,75 +287,85 @@ export default function TrashPage() {
 
   return (
     <SidebarInset>
-      <div className="p-8 max-w-4xl mx-auto mt-8">
-        <div className="flex justify-between items-center mb-8 border-b pb-4">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
-            <Trash className="w-7 h-7 text-red-500" />
-            Trash
-          </h1>
-          <button
-            onClick={handleEmptyTrash}
-            disabled={trashedFiles.length === 0}
-            className="bg-red-500 hover:bg-red-600 text-white px-5 py-2.5 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-          >
-            Empty Trash
-          </button>
+      <header className="flex h-16 shrink-0 items-center justify-between border-b px-4">
+        <div className="flex items-center gap-2">
+          <Trash className="w-4 h-4 text-muted-foreground" />
+          <h1 className="font-semibold">Trash</h1>
         </div>
+        <button
+          onClick={handleEmptyTrash}
+          disabled={trashedFiles.length === 0}
+          className="text-xs font-medium text-destructive hover:text-destructive/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          Empty Trash
+        </button>
+      </header>
 
+      <div className="flex flex-col w-full p-4">
         {loading ? (
-          <div className="p-16 text-center text-gray-400">
-            <Loader2 className="w-8 h-8 mx-auto mb-4 animate-spin" />
-            <p>Loading trash...</p>
+          <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
+            <Loader2 className="w-6 h-6 animate-spin opacity-40" />
+            <span className="text-sm">Loading trash...</span>
           </div>
         ) : trashedFiles.length === 0 ? (
-          <div className="p-16 text-center text-gray-400 border-2 border-dashed rounded-xl dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
-            <Trash className="w-12 h-12 mx-auto mb-4 opacity-20" />
-            <p className="text-lg">Trash is empty.</p>
+          <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
+            <Trash className="w-10 h-10 opacity-20" />
+            <span className="text-sm">Trash is empty.</span>
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
-            {trashedFiles.map((f) => (
-              <div
-                key={f.nodeId}
-                className="p-4 bg-white dark:bg-gray-900 border dark:border-gray-800 rounded-xl shadow-sm flex justify-between items-center hover:shadow-md transition-shadow group"
-              >
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="text-gray-500 opacity-75 flex-shrink-0">
-                    {f.type === "FOLDER" ? (
-                      <FolderIcon className="text-red-400" />
-                    ) : (
-                      <FileIcon className="text-red-400" />
-                    )}
+          <>
+            {/* Column header */}
+            <div className="grid grid-cols-[minmax(0,1fr)_80px] items-center px-3 py-2 border-b border-border/60">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</span>
+              <span />
+            </div>
+
+            <div className="flex flex-col">
+              {trashedFiles.map((f) => (
+                <div
+                  key={f.nodeId}
+                  className="group grid grid-cols-[minmax(0,1fr)_80px] items-center px-3 py-1.5 rounded-md transition-colors hover:bg-accent/60"
+                >
+                  {/* Name + location */}
+                  <div className="flex items-center gap-2 min-w-0">
+                    {f.type === "FOLDER"
+                      ? <FolderIcon className="w-4 h-4 shrink-0 text-muted-foreground/50" />
+                      : <FileIcon className="w-4 h-4 shrink-0 text-muted-foreground/50" />
+                    }
+                    <div className="min-w-0">
+                      {f.decrypted ? (
+                        <>
+                          <span className="text-sm line-through text-muted-foreground block truncate">
+                            {f.plaintextName}
+                          </span>
+                          <span className="text-xs text-muted-foreground/60 block truncate">
+                            {f.locationPath}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Decrypting...
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    {f.decrypted ? (
-                      <>
-                        <span className="line-through font-medium block truncate">
-                          {f.plaintextName}
-                        </span>
-                        <span className="text-xs text-muted-foreground block truncate">
-                          {f.locationPath}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="flex items-center gap-2 text-muted-foreground">
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        Decrypting...
-                      </span>
-                    )}
+
+                  {/* Restore button — visible on hover */}
+                  <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => handleRestore(f)}
+                      disabled={!f.decrypted}
+                      className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Restore
+                    </button>
                   </div>
                 </div>
-                <button
-                  onClick={() => handleRestore(f)}
-                  disabled={!f.decrypted}
-                  className="flex items-center gap-2 text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 flex-shrink-0"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  Restore
-                </button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </SidebarInset>

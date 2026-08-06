@@ -106,34 +106,46 @@ export default function SharedWithMePage() {
     };
 
     return (
-            <SidebarInset>
-                <header className="flex h-16 items-center border-b px-4">
-                    <SidebarTrigger />
-                    <h1 className="ml-4 font-semibold">Shared with Me</h1>
-                </header>
-                <div className="p-8">
-                    {loading ? (
-                        <p className="text-gray-500">Decrypting shared volumes...</p>
-                    ) : volumes.length === 0 ? (
-                        <div className="text-center text-gray-500 mt-20">
-                            <FolderIcon className="w-16 h-16 mx-auto mb-4 opacity-20" />
-                            No folders have been shared with you yet.
+        <SidebarInset>
+            <header className="flex h-16 items-center border-b px-4">
+                <SidebarTrigger />
+                <h1 className="ml-4 font-semibold">Shared with Me</h1>
+            </header>
+
+            <div className="flex flex-col w-full p-4">
+                {loading ? (
+                    <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
+                        <p className="text-sm">Decrypting shared volumes...</p>
+                    </div>
+                ) : volumes.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-24 text-muted-foreground gap-3">
+                        <FolderIcon className="w-10 h-10 opacity-20" />
+                        <span className="text-sm">No folders have been shared with you yet.</span>
+                    </div>
+                ) : (
+                    <>
+                        {/* Column header */}
+                        <div className="grid grid-cols-[minmax(0,1fr)] items-center px-3 py-2 border-b border-border/60">
+                            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</span>
                         </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+
+                        <div className="flex flex-col">
                             {volumes.map((vol) => (
                                 <div
                                     key={vol.nodeId}
                                     onClick={() => openVolume(vol)}
-                                    className="p-4 border rounded-xl flex items-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors shadow-sm"
+                                    className="group grid grid-cols-[minmax(0,1fr)] items-center px-3 py-1.5 rounded-md transition-colors cursor-pointer hover:bg-accent/60"
                                 >
-                                    <FolderIcon className="w-10 h-10 text-blue-500 fill-blue-500/20 mr-4" />
-                                    <span className="font-medium truncate">{vol.name}</span>
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <FolderIcon className="w-4 h-4 shrink-0 text-blue-500 fill-blue-500/20" />
+                                        <span className="text-sm font-medium truncate">{vol.name}</span>
+                                    </div>
                                 </div>
                             ))}
                         </div>
-                    )}
-                </div>
-            </SidebarInset>
+                    </>
+                )}
+            </div>
+        </SidebarInset>
     );
 }

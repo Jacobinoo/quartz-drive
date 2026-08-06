@@ -75,6 +75,7 @@ type (
 		Disabled                 bool   `env:"DISABLE_SWEEPS" envDefault:"false"`
 		HourlyInterval           string `env:"SWEEP_HOURLY_INTERVAL" envDefault:"1h"`
 		DailyInterval            string `env:"SWEEP_DAILY_INTERVAL" envDefault:"24h"`
+		CompletedInterval        string `env:"SWEEP_COMPLETED_INTERVAL" envDefault:"1h"`
 		UploadSessionExpiresHours int    `env:"UPLOAD_SESSION_EXPIRES_HOURS" envDefault:"24"`
 		TrashRetentionDays       int    `env:"TRASH_RETENTION_DAYS" envDefault:"30"`
 	}

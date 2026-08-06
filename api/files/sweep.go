@@ -59,9 +59,10 @@ func (h *Handler) StartSweepScheduler(ctx context.Context) {
 		for {
 			select {
 			case <-hourly.C:
-				sweepLog.Println("Running hourly sweeps...")
+				sweepLog.Println("Hourly sweep triggered")
 				h.SweepExpiredUploads(ctx)
 				h.SweepOversizedChunks(ctx)
+				h.SweepCompletedUploads(ctx)
 			case <-daily.C:
 				sweepLog.Println("Running daily sweeps...")
 				h.ReportFlaggedSessions()
@@ -85,6 +86,9 @@ func (h *Handler) StartSweepScheduler(ctx context.Context) {
 			case "sweep:expired":
 				sweepLog.Println("Manual trigger: sweep:expired")
 				h.SweepExpiredUploads(ctx)
+			case "sweep:completed":
+				sweepLog.Println("Manual trigger: sweep:completed")
+				h.SweepCompletedUploads(ctx)
 			case "sweep:oversized":
 				sweepLog.Println("Manual trigger: sweep:oversized")
 				h.SweepOversizedChunks(ctx)
@@ -100,6 +104,7 @@ func (h *Handler) StartSweepScheduler(ctx context.Context) {
 			case "sweep:all":
 				sweepLog.Println("Manual trigger: sweep:all")
 				h.SweepExpiredUploads(ctx)
+				h.SweepCompletedUploads(ctx)
 				h.SweepOversizedChunks(ctx)
 				h.ReportFlaggedSessions()
 				h.SweepReconciliation(ctx)
@@ -150,6 +155,30 @@ func (h *Handler) SweepExpiredUploads(ctx context.Context) {
 		h.db.Unscoped().Delete(&upload)
 	}
 	sweepLog.Printf("SweepExpiredUploads finished: cleaned up %d expired upload sessions", len(expiredUploads))
+}
+
+func (h *Handler) SweepCompletedUploads(ctx context.Context) {
+	sweepLog.Println("SweepCompletedUploads started")
+	var completedUploads []model.Upload
+	if err := h.db.Where("status = ?", model.UploadStatusComplete).
+		Find(&completedUploads).Error; err != nil {
+		sweepLog.Printf("SweepCompletedUploads error: failed to query completed uploads: %v", err)
+		return
+	}
+
+	if len(completedUploads) == 0 {
+		sweepLog.Println("SweepCompletedUploads finished (0 sessions)")
+		return
+	}
+
+	// For completed uploads, the S3 objects are actively used as FileBlocks!
+	// We ONLY want to clean up the DB rows, DO NOT delete from S3 here.
+	for _, upload := range completedUploads {
+		h.db.Unscoped().Where("upload_id = ?", upload.ID).Delete(&model.UploadChunk{})
+		h.db.Unscoped().Delete(&upload)
+	}
+
+	sweepLog.Printf("SweepCompletedUploads finished: cleaned up %d legacy completed upload sessions from DB", len(completedUploads))
 }
 
 func (h *Handler) SweepOversizedChunks(ctx context.Context) {

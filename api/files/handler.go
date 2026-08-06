@@ -529,6 +529,15 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 				return err
 			}
 		}
+
+		// Clean up the upload session and chunks since it's now completed successfully
+		if err := tx.Unscoped().Where("upload_id = ?", uploadSession.ID).Delete(&model.UploadChunk{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Unscoped().Delete(&uploadSession).Error; err != nil {
+			return err
+		}
+
 		return nil
 	})
 

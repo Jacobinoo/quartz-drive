@@ -32,10 +32,10 @@ export function UploadManager() {
 
                 switch(data.type) {
                     case "PROGRESS":
-                        updateJob(data.taskId, { 
-                            progress: Math.min(100, Math.round((data.completedChunks / data.totalChunks) * 100)), 
+                        updateJob(data.taskId, {
+                            progress: Math.min(100, Math.round((data.completedChunks / data.totalChunks) * 100)),
                             status: 'UPLOADING',
-                            activity: data.activity 
+                            activity: data.activity
                         });
                         break;
                   case "SUCCESS":
@@ -44,41 +44,6 @@ export function UploadManager() {
 
                         if (job) {
                           try {
-                            const sodium = await getSodium();
-
-                            const metadata = {
-                                            mimeType: job.file.type || "application/octet-stream",
-                                            lastModified: job.file.lastModified,
-                                            originalSizeBytes: job.file.size,
-                                            fileExtension: job.file.name.split('.').pop() || ""
-                                        };
-                            const metadataJson = JSON.stringify(metadata);
-
-                            const metadataNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
-                                        const encryptedMetadata = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
-                                            sodium.from_string(metadataJson),
-                                            null,
-                                            null,
-                                            metadataNonce,
-                                            job.fileKey // The exact key that protects the file contents!
-                                        );
-                                // 2. Call our new backend endpoint!
-                                await finishFileUpload({
-                                    nodeId: job.nodeId,
-                                    parentNodeId: job.parentNodeId,
-                                    sizeBytes: job.file.size,
-                                    totalChunks: job.totalChunks,
-                                    encryptedName: job.encryptedName,
-                                    nameNonce: job.nameNonce,
-                                    encryptedNodePassphrase: job.encryptedNodePassphrase,
-                                    signedEncryptedNodePassphrase: "", // Signature implementation later
-                                    chunkNonces: [], // If worker doesn't report nonces, keep empty for now
-                                  chunkSizes: [],
-
-                                  encryptedMetadata: sodium.to_base64(encryptedMetadata),
-                                  metadataNonce: sodium.to_base64(metadataNonce)
-                                });
-                                console.log(`Successfully saved ${job.file.name} metadata to Postgres!`);
                             updateJob(data.taskId, { status: 'SUCCESS', progress: 100 });
                             useDriveStore.getState().triggerRefresh();
                             await addSingleSearchItem({

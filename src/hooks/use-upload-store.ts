@@ -7,10 +7,12 @@ export interface UploadJob {
     file: File;
     progress: number;
     status: UploadStatus;
-    nodeId: string;
-    fileKey: Uint8Array;
-    presignedUrls: string[];
+  uploadId: string;
+  nodeId: string;
+  totalChunks: number;
+  fileKey: Uint8Array;
   errorMessage?: string;
+  activity?: string;
 
 
   parentNodeId: string;

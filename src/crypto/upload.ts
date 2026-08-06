@@ -1,23 +1,57 @@
 import { customFetch } from "@/lib/api";
+import { UUID } from "crypto";
 
-export async function initFileUpload(
-    nodeId: string,
-    totalChunks: number
-): Promise<Array<string>> {
-    const res = await customFetch(`https://localhost:3100/v1/files/upload`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({nodeId: nodeId, totalChunks: totalChunks}),
-        credentials: "include",
-    });
+export async function initFileUpload(payload: {
+  totalChunks: number;
+  totalFileSize: number
 
-    const uploadRes = await res.json();
-    if(uploadRes.presignedUrls && uploadRes.presignedUrls instanceof Array) {
-        return uploadRes.presignedUrls;
+  parentNodeId: string;
+  encryptedName: string;
+  nameNonce: string;
+  encryptedNodePassphrase: string;
+  signedEncryptedNodePassphrase: string;
+  nodePublicKey?: string;
+  wrappedNodeKey?: string;
+  nodePrivNonce?: string;
+
+  encryptedMetadata: string;
+  metadataNonce: string;
+}): Promise<{
+  uploadId: UUID,
+  nodeId: UUID,
+  expiresAt: number
+} | null> {
+  const res = await customFetch("https://localhost:3100/v1/files/upload/init", {
+    method: "POST",
+    headers: {
+        "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      totalFileSize: payload.totalFileSize,
+      totalChunks: payload.totalChunks,
+      parentNodeId: payload.parentNodeId,
+      encryptedName: payload.encryptedName,
+      nameNonce: payload.nameNonce,
+      encryptedNodePassphrase: payload.encryptedNodePassphrase,
+      signedEncryptedNodePassphrase: payload.signedEncryptedNodePassphrase,
+      nodePublicKey: payload.nodePublicKey,
+      wrappedNodeKey: payload.wrappedNodeKey,
+      nodePrivNonce: payload.nodePrivNonce,
+
+      encryptedMetadata: payload.encryptedMetadata,
+       metadataNonce: payload.metadataNonce,
+    }),
+  })
+
+  const uploadRes = await res.json();
+  if (uploadRes.uploadId && uploadRes.nodeId && uploadRes.expiresAt) {
+    return {
+      uploadId: uploadRes.uploadId,
+      nodeId: uploadRes.nodeId,
+      expiresAt: uploadRes.expiresAt
     }
-    return [];
+  }
+  return null
 }
 
 export async function finishFileUpload(payload: {

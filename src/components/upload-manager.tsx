@@ -7,6 +7,7 @@ import {UploadWorkerInput, UploadWorkerOutput} from "@/types/crypto-worker-types
 import { finishFileUpload } from '@/crypto/upload';
 import { useDriveStore } from '@/lib/driveStore';
 import { addSingleSearchItem } from '@/lib/SearchIndexStore';
+import { getAccessToken, getCsrfToken } from '@/lib/authStore';
 
 export function UploadManager() {
     const jobs = useUploadStore(s => s.jobs);
@@ -19,7 +20,8 @@ export function UploadManager() {
     useEffect(() => {
         const pending = jobs.filter(j => j.status === 'IDLE');
 
-        pending.forEach(job => {
+      pending.forEach(job => {
+          console.log("worker starting new job", job)
             if (workerInstances.current.has(job.id)) return;
 
             const worker = new Worker(new URL('@/workers/crypto.worker.ts', import.meta.url), { type: 'module' });
@@ -30,7 +32,11 @@ export function UploadManager() {
 
                 switch(data.type) {
                     case "PROGRESS":
-                        updateJob(data.taskId, { progress: Math.round((data.completedChunks / data.totalChunks) * 100), status: 'UPLOADING' });
+                        updateJob(data.taskId, { 
+                            progress: Math.min(100, Math.round((data.completedChunks / data.totalChunks) * 100)), 
+                            status: 'UPLOADING',
+                            activity: data.activity 
+                        });
                         break;
                   case "SUCCESS":
                     // 1. Find the job in the store
@@ -61,7 +67,7 @@ export function UploadManager() {
                                     nodeId: job.nodeId,
                                     parentNodeId: job.parentNodeId,
                                     sizeBytes: job.file.size,
-                                    totalChunks: job.presignedUrls.length,
+                                    totalChunks: job.totalChunks,
                                     encryptedName: job.encryptedName,
                                     nameNonce: job.nameNonce,
                                     encryptedNodePassphrase: job.encryptedNodePassphrase,
@@ -103,7 +109,10 @@ export function UploadManager() {
                 file: job.file,
                 nodeId: job.nodeId,
                 fileKey: job.fileKey,
-                presignedUrls: job.presignedUrls
+              totalChunks: job.totalChunks,
+                uploadId: job.uploadId,
+                accessToken: getAccessToken() || undefined,
+                csrfToken: getCsrfToken() || undefined
             });
         });
 

@@ -31,7 +31,12 @@ export function TransferList() {
                                 style={{ width: `${job.progress}%` }}
                             />
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">{job.status === 'SUCCESS' ? "Upload successful" : job.status === 'UPLOADING' ? "Uploading..." : job.status === 'IDLE' ? "Waiting for upload..." : job.status === 'ERROR' ? "Upload error" : "Status: Unknown" }</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            {job.status === 'SUCCESS' ? "Upload successful" : 
+                             job.status === 'UPLOADING' ? (job.activity || "Uploading...") : 
+                             job.status === 'IDLE' ? "Waiting for upload..." : 
+                             job.status === 'ERROR' ? "Upload error" : "Status: Unknown"}
+                        </p>
                     </div>
                 ))}
             </div>

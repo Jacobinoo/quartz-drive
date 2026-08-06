@@ -25,11 +25,12 @@ import { useUploadStore } from "@/hooks/use-upload-store";
 import { openFilePicker } from "@/lib/utils/file-picker";
 import {getSodium} from "@/lib/crypto/sodium";
 import {initFileUpload} from "@/crypto/upload";
-import { getAccessToken} from "@/lib/authStore";
+import { getAccessToken, getAccountSigningPrivateKey} from "@/lib/authStore";
 import { useDriveStore } from "@/lib/driveStore";
 import { createEncryptedFolderPayload } from "@/crypto/folder";
 import { customFetch } from "@/lib/api";
 import { addSingleSearchItem } from "@/lib/SearchIndexStore"
+import { UUID } from "crypto"
 
 export function NewDriveItemButton(){
   const addToQueue = useUploadStore(s => s.addToQueue);
@@ -47,18 +48,16 @@ export function NewDriveItemButton(){
       const currentFolder = useDriveStore.getState().getCurrentFolder();
       if (!currentFolder) throw new Error("Drive keys not initialized");
 
+      const ENCRYPTION_OVERHEAD_BYTES = 40
 
         for (const file of files) {
           console.log(file.name, file.size)
 
-          const nodeId = crypto.randomUUID();
+          const declaredFileSize = file.size + ENCRYPTION_OVERHEAD_BYTES
+
           const parentNodeId = currentFolder.nodeId;
-          const chunks = Math.ceil(file.size / (4*1024*1024)) || 1;
-          const urls = await initFileUpload(nodeId, chunks);
+          const chunks = Math.ceil(file.size / (4 * 1024 * 1024)) || 1;
 
-          console.log(`file "${file.name}" (size: ${file.size}) will be split by ${chunks} chunks, got ${urls.length} presigned urls`);
-
-          // 2. Przygotowanie klucza
           const sodium = await getSodium();
           const fileKey = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES);
           console.log(`file key: ${sodium.to_base64(fileKey)}`);
@@ -70,22 +69,92 @@ export function NewDriveItemButton(){
               null, // No AD needed for name right now
               null,
               nameNonce,
-              currentFolder.privateKey // Using account key as temporary symmetric folder key
+              currentFolder.privateKey
           );
 
           // 4. Wrap the fileKey (Asymmetric Box Seal)
           // Only someone with the accountPrivKey can open this box to retrieve the fileKey!
           const encryptedNodePassphrase = sodium.crypto_box_seal(fileKey, currentFolder.publicKey);
 
+          const metadata = {
+                          mimeType: file.type || "application/octet-stream",
+                          lastModified: file.lastModified,
+                          originalSizeBytes: file.size,
+                          fileExtension: file.name.split('.').pop() || ""
+                      };
+          const metadataJson = JSON.stringify(metadata);
+
+          const metadataNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+                      const encryptedMetadata = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+                          sodium.from_string(metadataJson),
+                          null,
+                          null,
+                          metadataNonce,
+                          fileKey
+                      );
+
+          const nodeKeyPair = sodium.crypto_box_keypair();
+          const nodePublicKey = sodium.to_base64(nodeKeyPair.publicKey);
+
+          const rawNodePrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+          const nodePrivNonce = sodium.to_base64(rawNodePrivNonce);
+          const wrappedNodePrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+              nodeKeyPair.privateKey,
+              sodium.from_string("FileNode"),
+              null,
+              rawNodePrivNonce,
+              fileKey
+          );
+          const wrappedNodeKey = sodium.to_base64(wrappedNodePrivateKey);
+
+          const accountSigningPrivKey = getAccountSigningPrivateKey();
+          if (accountSigningPrivKey == null) {
+            throw new Error("account signing priv key null")
+          }
+          const signature = sodium.crypto_sign_detached(
+              encryptedNodePassphrase,
+              accountSigningPrivKey
+          );
+          const signedEncryptedNodePassphrase = sodium.to_base64(signature);
+
+          const res: {
+            uploadId: UUID,
+            nodeId: UUID,
+            expiresAt: number
+          } | null = await initFileUpload({
+            totalFileSize: declaredFileSize,
+            totalChunks: chunks,
+
+            parentNodeId: parentNodeId,
+            encryptedName: sodium.to_base64(encryptedName),
+            nameNonce: sodium.to_base64(nameNonce),
+            encryptedNodePassphrase: sodium.to_base64(encryptedNodePassphrase),
+            signedEncryptedNodePassphrase: signedEncryptedNodePassphrase,
+            nodePublicKey: nodePublicKey,
+            wrappedNodeKey: wrappedNodeKey,
+            nodePrivNonce: nodePrivNonce,
+
+            encryptedMetadata: sodium.to_base64(encryptedMetadata),
+            metadataNonce: sodium.to_base64(metadataNonce),
+            })
+
+          if (res == null) {
+            throw new Error("init file upload failed")
+          }
+
+          console.log(`file "${file.name}" (size: ${file.size}) will be split by ${chunks} chunks, will request presigned urls for upload ${res.uploadId} with nodeID ${res.nodeId}, session will expire on ${res.expiresAt}`);
+
+
             // 3. Dodanie do reaktywnego Store'a
             console.log("will be adding to queue")
           addToQueue({
             file,
-            nodeId,
+            uploadId: res.uploadId,
+            nodeId: res.nodeId,
             fileKey,
-            presignedUrls: urls,
             parentNodeId,
             encryptedName: sodium.to_base64(encryptedName),
+            totalChunks: chunks,
             nameNonce: sodium.to_base64(nameNonce),
             encryptedNodePassphrase: sodium.to_base64(encryptedNodePassphrase)
           });

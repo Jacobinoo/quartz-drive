@@ -37,7 +37,10 @@ export function FileList() {
   const [detailsFile, setDetailsFile] = useState<any>(null);
   const [previewFile, setPreviewFile] = useState<{
     file: any,
-    url: string
+    url: string | null,
+    loading?: boolean,
+    progress?: number,
+    tooLarge?: boolean
   } | null>(null);
     const [folderToShare, setFolderToShare] = useState<any>(null);
   const refreshTrigger = useDriveStore(s => s.refreshTrigger);
@@ -233,12 +236,22 @@ export function FileList() {
     };
 
     const handlePreview = async (file: any) => {
+        const size = file.metadata?.originalSizeBytes || file.sizeBytes || 0;
+        if (size > 25 * 1024 * 1024) {
+            setPreviewFile({ file, url: null, loading: false, progress: 0, tooLarge: true });
+            return;
+        }
+
       console.log('Previewing file ', file.plaintextName)
         try {
-          const url = await handleDownload(file, true) as string;
-          setPreviewFile({ file, url });
+          setPreviewFile({ file, url: null, loading: true, progress: 0 });
+          const url = await handleDownload(file, true, (progress) => {
+              setPreviewFile(prev => prev ? { ...prev, progress } : prev);
+          }) as string;
+          setPreviewFile({ file, url, loading: false });
         } catch (err) {
           console.error('Failed to preview file:', err);
+          setPreviewFile(null);
         }
     }
 
@@ -372,14 +385,18 @@ export function FileList() {
             file={detailsFile}
             breadcrumbs={useDriveStore.getState().breadcrumbs}
             onClose={() => setDetailsFile(null)}
-                />
+          />
         )}
 
             {previewFile && (
                 <FilePreviewModal
                     file={previewFile.file}
                     url={previewFile.url}
+                    loading={previewFile.loading}
+                    progress={previewFile.progress}
+                    tooLarge={previewFile.tooLarge}
                     onClose={() => setPreviewFile(null)}
+                    onDownload={() => handleDownload(previewFile.file)}
                 />
         )}
 
@@ -392,7 +409,7 @@ export function FileList() {
     );
 }
 
-const handleDownload = async (file: any, withResult = false): Promise<string | void> => {
+const handleDownload = async (file: any, withResult = false, onProgress?: (percent: number) => void): Promise<string | void> => {
     try {
         console.log("Unwrapping file key...");
         const sodium = await getSodium();
@@ -421,7 +438,7 @@ const handleDownload = async (file: any, withResult = false): Promise<string | v
         worker.onmessage = async (e) => {
             if (e.data.type === 'PROGRESS') {
                 console.log(`Decrypting: ${e.data.percent}%`);
-                // You could update some React state here for a progress bar!
+                if (onProgress) onProgress(e.data.percent);
             }
             else if (e.data.type === 'SUCCESS') {
                 console.log("Decryption complete!");

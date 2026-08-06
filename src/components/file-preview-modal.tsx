@@ -6,14 +6,19 @@ import { Download, X, ZoomIn, ZoomOut, RotateCw } from "lucide-react";
 
 interface FilePreviewModalProps {
   file: any;
-  url: string;
+  url: string | null;
+  loading?: boolean;
+  progress?: number;
+  tooLarge?: boolean;
   onClose: () => void;
+  onDownload?: () => void;
 }
 
-export function FilePreviewModal({ file, url, onClose }: FilePreviewModalProps) {
+export function FilePreviewModal({ file, url, loading, progress, tooLarge, onClose, onDownload }: FilePreviewModalProps) {
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const [showLoader, setShowLoader] = useState(false);
 
   // Reset transient view state whenever a new file is opened
   useEffect(() => {
@@ -21,6 +26,17 @@ export function FilePreviewModal({ file, url, onClose }: FilePreviewModalProps) 
     setRotation(0);
     setLoaded(false);
   }, [url]);
+
+  // Delay the loading spinner to prevent flickering on fast files
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (loading) {
+      timer = setTimeout(() => setShowLoader(true), 1000);
+    } else {
+      setShowLoader(false);
+    }
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   // Keyboard shortcuts: Esc to close, +/- to zoom, r to rotate
   useEffect(() => {
@@ -34,11 +50,17 @@ export function FilePreviewModal({ file, url, onClose }: FilePreviewModalProps) 
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  if (!file || !url) return null;
+  if (!file || (!url && !loading && !tooLarge)) return null;
 
   const isImage = /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(file.plaintextName ?? "");
 
   const handleDownloadClick = () => {
+    if (onDownload) {
+      onDownload();
+      onClose(); // Auto-close modal after starting download
+      return;
+    }
+    if (!url) return;
     const a = document.createElement("a");
     a.href = url;
     a.download = file.plaintextName;
@@ -116,7 +138,32 @@ export function FilePreviewModal({ file, url, onClose }: FilePreviewModalProps) 
             if (e.target === e.currentTarget) onClose();
           }}
         >
-          {isImage ? (
+          {loading ? (
+            showLoader ? (
+              <div className="flex flex-col items-center gap-4 text-white/90 w-64 select-none">
+                <div className="h-8 w-8 rounded-full border-2 border-white/15 border-t-white/60 animate-spin mb-2" />
+                <p className="text-sm">Decrypting and Preparing Preview</p>
+                <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden shadow-inner">
+                  <div
+                    className="bg-white/80 h-full transition-all duration-300 ease-out"
+                    style={{ width: `${progress || 0}%` }}
+                  />
+                </div>
+                <p className="text-xs text-white/50">{progress || 0}%</p>
+              </div>
+            ) : null
+          ) : tooLarge ? (
+            <div className="flex flex-col items-center gap-4 text-white/60">
+              <p className="text-sm">This file is too large to preview securely in the browser</p>
+              <button
+                onClick={handleDownloadClick}
+                className="flex items-center gap-2 px-4 py-2 rounded-md bg-white/10 hover:bg-white/15 text-white text-sm transition-colors"
+              >
+                <Download className="h-4 w-4" />
+                Download {file.plaintextName}
+              </button>
+            </div>
+          ) : isImage ? (
             <>
               {!loaded && (
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -124,7 +171,7 @@ export function FilePreviewModal({ file, url, onClose }: FilePreviewModalProps) 
                 </div>
               )}
               <img
-                src={url}
+                src={url!}
                 alt={file.plaintextName}
                 draggable={false}
                 onLoad={() => setLoaded(true)}

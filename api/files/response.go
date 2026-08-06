@@ -1,5 +1,13 @@
 package files
 
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
 type InitFileUploadResponse struct {
-	PresignedUrls []string `json:"presignedUrls"`
+	UploadID  uuid.UUID `json:"uploadId"`
+	NodeID    uuid.UUID `json:"nodeId"`
+	ExpiresAt time.Time `json:"expiresAt"`
 }

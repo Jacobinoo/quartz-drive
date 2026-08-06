@@ -18,7 +18,6 @@ type FileBlock struct {
 
 	ObjectKey string `gorm:"size:255;not null;uniqueIndex"`
 
-	Nonce string `gorm:"type:text;not null"`
 	//Header string // secretstream header
 	Size int `gorm:"not null"`
 }

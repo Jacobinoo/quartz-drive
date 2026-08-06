@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"log"
 	"net/http"
 	"quartz/config"
+	"strconv"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -56,35 +58,38 @@ func NewS3Service() (*S3Service, error) {
 	}, nil
 }
 
-// Funkcja generująca Upload Presigned URLs dla X chunków
-func (s *S3Service) GenerateUploadUrls(ctx context.Context, nodeID string, totalChunks int) ([]string, error) {
-	var urls []string
-	expiry := time.Minute * 15 // Ważność linku to 15 minut
+// Funkcja generująca Upload Presigned URL
+func (s *S3Service) GenerateUploadUrl(ctx context.Context, objectKey string, expiry time.Duration, expectedSize int64, chunkHash string) (string, error) {
 
-	for i := 0; i < totalChunks; i++ {
-		// Budujemy ścieżkę pliku w SeaweedFS, np.: drive-chunks/uuid-wezla/chunk_0
-		objectName := fmt.Sprintf("%s/chunk_%d", nodeID, i)
+	extraHeaders := http.Header{}
+	extraHeaders.Set("Content-Length", strconv.FormatInt(expectedSize, 10))
+	extraHeaders.Set("x-amz-checksum-sha256", chunkHash)
 
-		// Generujemy Presigned URL dla metody PUT
-		presignedURL, err := s.client.PresignedPutObject(ctx, s.bucket, objectName, expiry)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate URL for chunk %d: %w", i, err)
-		}
+	log.Printf("Generating presigned url for object %s signed with Content-Length %d and checksum sha256 %s", objectKey, expectedSize, chunkHash)
 
-		urls = append(urls, presignedURL.String())
+	presignedURL, err := s.client.PresignHeader(
+		ctx,
+		http.MethodPut,
+		s.bucket,
+		objectKey,
+		expiry,
+		nil,
+		extraHeaders,
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate presigned upload URL for object %s: %w", objectKey, err)
 	}
 
-	return urls, nil
+	return presignedURL.String(), nil
 }
 
 // Funkcja generująca Download Presigned URLs
-func (s *S3Service) GenerateDownloadUrls(ctx context.Context, nodeID string, totalChunks int) ([]string, error) {
+func (s *S3Service) GenerateDownloadUrls(ctx context.Context, objectKeys []string) ([]string, error) {
 	var urls []string
-	expiry := time.Second * 5
+	expiry := time.Minute * 10 // Safe expiry for downloads
 
-	for i := 0; i < totalChunks; i++ {
-		objectName := fmt.Sprintf("%s/chunk_%d", nodeID, i)
-		presignedURL, err := s.client.PresignedGetObject(ctx, s.bucket, objectName, expiry, nil)
+	for i, objectKey := range objectKeys {
+		presignedURL, err := s.client.PresignedGetObject(ctx, s.bucket, objectKey, expiry, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate GET URL for chunk %d: %w", i, err)
 		}
@@ -100,10 +105,13 @@ func (s *S3Service) DeleteChunk(ctx context.Context, objectKey string) error {
 }
 
 // Security: Fetches the physical size of a chunk directly from S3 to prevent client spoofing
-func (s *S3Service) GetChunkSize(ctx context.Context, objectKey string) (int64, error) {
-	stat, err := s.client.StatObject(ctx, s.bucket, objectKey, minio.StatObjectOptions{})
+func (s *S3Service) GetChunkSize(ctx context.Context, objectKey string) (int64, string, string, error) {
+	opts := minio.StatObjectOptions{}
+	opts.Set("x-amz-checksum-mode", "ENABLED")
+
+	stat, err := s.client.StatObject(ctx, s.bucket, objectKey, opts)
 	if err != nil {
-		return 0, err
+		return 0, "", "", err
 	}
-	return stat.Size, nil
+	return stat.Size, stat.ETag, stat.ChecksumSHA256, nil
 }

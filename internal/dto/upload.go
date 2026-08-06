@@ -7,8 +7,39 @@ import (
 )
 
 type InitFileUploadRequest struct {
-	NodeID      string `json:"nodeId"`
-	TotalChunks int    `json:"totalChunks"`
+	TotalFileSize int64 `json:"totalFileSize"`
+	TotalChunks   int64 `json:"totalChunks"`
+
+	ParentNodeID                  string `json:"parentNodeId"`  // The UUID of the folder where this file is placed
+	EncryptedName                 string `json:"encryptedName"` // Ciphertext of filename (e.g. "vacation.jpg")
+	NameNonce                     string `json:"nameNonce"`
+	EncryptedNodePassphrase       string `json:"encryptedNodePassphrase"` // The fileKey sealed/wrapped for the parent folder!
+	SignedEncryptedNodePassphrase string `json:"signedEncryptedNodePassphrase"`
+	NodePublicKey                 string `json:"nodePublicKey"`
+	WrappedNodeKey                string `json:"wrappedNodeKey"`
+	NodePrivNonce                 string `json:"nodePrivNonce"`
+	HasChildren                   bool   `json:"hasChildren"`
+
+	EncryptedMetadata string `json:"encryptedMetadata"`
+	MetadataNonce     string `json:"metadataNonce"`
+}
+
+type RequestChunkUploadRequest struct {
+	UploadID     uuid.UUID `json:"uploadId"`
+	ChunkIndex   int       `json:"chunkIndex"`
+	DeclaredSize int64     `json:"declaredSize"` //post-encryption chunk size
+	ChunkHash    string    `json:"chunkHash"`    // SHA-256 of ciphertext for integrity check
+}
+
+type RequestChunkUploadResponse struct {
+	URL string `json:"url"`
+}
+
+type FinishChunkUploadRequest struct {
+	UploadID   uuid.UUID `json:"uploadId"`
+	ChunkIndex int       `json:"chunkIndex"`
+	Etag       string    `json:"etag"`
+	ChunkHash  string    `json:"chunkHash"`
 }
 
 type FinishFileUploadRequest struct {

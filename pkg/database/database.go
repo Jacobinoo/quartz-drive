@@ -33,6 +33,8 @@ func New() (db *gorm.DB, err error) {
 					&model.Share{},
 					&model.ShareMember{},
 					&model.Session{},
+					&model.Upload{},
+					&model.UploadChunk{},
 				)
 			}
 			return db, err

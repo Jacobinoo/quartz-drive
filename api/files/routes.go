@@ -8,8 +8,10 @@ import (
 func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 	mux.HandleFunc("/files", middleware.CorsMiddleware(middleware.DpopMiddleware(h.Files)))
 
-	mux.HandleFunc("/files/upload", middleware.CorsMiddleware(middleware.DpopMiddleware(h.Upload)))
-	mux.HandleFunc("/files/finish", middleware.CorsMiddleware(middleware.DpopMiddleware(h.FinishUpload)))
+	mux.HandleFunc("/files/upload/init", middleware.CorsMiddleware(middleware.DpopMiddleware(middleware.AccessTokenMiddleware(h.InitUpload))))
+	mux.HandleFunc("/files/upload", middleware.CorsMiddleware(middleware.DpopMiddleware(middleware.AccessTokenMiddleware(h.Upload))))
+	mux.HandleFunc("/files/upload/chunk_finish", middleware.CorsMiddleware(middleware.DpopMiddleware(middleware.AccessTokenMiddleware(h.ReportChunkUploadDone))))
+	// mux.HandleFunc("/files/finish", middleware.CorsMiddleware(middleware.DpopMiddleware(h.FinishUpload)))
 
 	mux.HandleFunc("/files/download", middleware.CorsMiddleware(middleware.DpopMiddleware(h.Download)))
 

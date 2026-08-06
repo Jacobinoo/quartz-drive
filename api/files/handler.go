@@ -2,15 +2,16 @@ package files
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"quartz/internal/dto"
 	"quartz/internal/middleware"
 	"quartz/internal/model"
 	"quartz/pkg/storage"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,7 +27,8 @@ func NewHandler(db *gorm.DB, storage storage.StorageService) *Handler {
 	return &Handler{db: db, storage: storage}
 }
 
-func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
+// inits upload session and sends back upload & node id
+func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -36,26 +38,131 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	var uploadRequest dto.InitFileUploadRequest
 	if err := json.NewDecoder(r.Body).Decode(&uploadRequest); err != nil {
-		http.Error(w, err.Error(), http.StatusAccepted)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// 2. SPRAWDŹ UPRAWNIENIA (Czy user ma prawo pisać do tego NodeID?)
-	// TODO
+	userID := r.Context().Value(middleware.UserIDKey)
+	if userID == nil {
+		http.Error(w, "access token invalid", http.StatusUnauthorized)
+		return
+	}
 
-	// 3. Wygeneruj presigned URLs
-	urls, err := h.storage.GenerateUploadUrls(r.Context(), uploadRequest.NodeID, uploadRequest.TotalChunks)
+	if uploadRequest.TotalChunks <= 0 || uploadRequest.TotalFileSize <= 0 {
+		http.Error(w, "total chunks or total file size invalid", http.StatusUnprocessableEntity)
+		return
+	}
+
+	const maxChunkSize = 4 * 1024 * 1024 //4MB
+
+	parentUUID, err := uuid.Parse(uploadRequest.ParentNodeID)
 	if err != nil {
-		log.Printf(err.Error())
-		http.Error(w, "Failed to generate upload links", 500)
+		http.Error(w, "invalid parentNodeId uuid", http.StatusBadRequest)
+		return
+	}
+
+	var parentNode model.Node
+	if err := h.db.First(&parentNode, "id = ? AND owner_id = ?", parentUUID, userID).Error; err != nil {
+		http.Error(w, "parent folder not found", http.StatusNotFound)
+		return
+	}
+
+	var user model.User
+	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
+		http.Error(w, "user not found", http.StatusUnauthorized)
+		return
+	}
+
+	if user.StorageUsed+uploadRequest.TotalFileSize > user.StorageQuota {
+		http.Error(w, "quota exceeded", http.StatusForbidden)
+		return
+	}
+
+	minPlausibleChunks := int(math.Ceil(float64(uploadRequest.TotalFileSize) / float64(maxChunkSize)))
+	if uploadRequest.TotalChunks < int64(minPlausibleChunks) {
+		http.Error(w, "totalChunks too low for declared file size", http.StatusUnprocessableEntity)
+		return
+	}
+
+	const chunkCountSlack = 1.05 // 5% slack for per-chunk overhead
+	maxPlausibleChunks := int(math.Ceil(float64(minPlausibleChunks)*chunkCountSlack)) + 1
+	if uploadRequest.TotalChunks > int64(maxPlausibleChunks) {
+		http.Error(w, "totalChunks too high for declared file size", http.StatusUnprocessableEntity)
+		return
+	}
+
+	nodeID, nErr := uuid.NewV7()
+	uploadID, uErr := uuid.NewV7()
+	if nErr != nil || uErr != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	expiresAt := time.Now().UTC().Add(24 * time.Hour)
+
+	chunkRows := []model.UploadChunk{}
+
+	for i := int64(0); i < uploadRequest.TotalChunks; i++ {
+		id, err := uuid.NewV7()
+		if err != nil {
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		chunkRows = append(chunkRows, model.UploadChunk{
+			ID:         id,
+			UploadID:   uploadID,
+			ChunkIndex: i,
+			ObjectKey:  fmt.Sprintf("authors/%s/uploads/%s/nodes/%s/chunk_%d", user.ID.String(), uploadID.String(), nodeID.String(), i),
+			Status:     model.ChunkUploadStatusPending,
+		})
+	}
+
+	err = h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&model.Upload{
+			ID:                uploadID,
+			UserID:            user.ID,
+			NodeID:            nodeID,
+			TotalChunks:       uploadRequest.TotalChunks,
+			ReportedTotalSize: uploadRequest.TotalFileSize,
+			Status:            model.UploadStatusPending,
+			ExpiresAt:         expiresAt,
+
+			ParentNodeID:                  &parentUUID,
+			EncryptedName:                 uploadRequest.EncryptedName,
+			NameNonce:                     uploadRequest.NameNonce,
+			EncryptedNodePassphrase:       uploadRequest.EncryptedNodePassphrase,
+			SignedEncryptedNodePassphrase: uploadRequest.SignedEncryptedNodePassphrase,
+			NodePublicKey:                 uploadRequest.NodePublicKey,
+			WrappedNodeKey:                uploadRequest.WrappedNodeKey,
+			NodePrivNonce:                 uploadRequest.NodePrivNonce,
+			HasChildren:                   uploadRequest.HasChildren,
+
+			EncryptedMetadata: uploadRequest.EncryptedMetadata,
+			MetadataNonce:     uploadRequest.MetadataNonce,
+		}).Error; err != nil {
+			return err
+		}
+
+		log.Printf("chunkRows: %d", len(chunkRows))
+
+		if err := tx.CreateInBatches(chunkRows, len(chunkRows)).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		http.Error(w, "could not init an upload session", http.StatusInternalServerError)
 		return
 	}
 
 	uploadResponse := InitFileUploadResponse{
-		PresignedUrls: urls,
+		UploadID:  uploadID,
+		NodeID:    nodeID,
+		ExpiresAt: expiresAt,
 	}
 
-	// 4. Zwróć je do frontendu (do web workera)
 	err = json.NewEncoder(w).Encode(uploadResponse)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -63,7 +170,8 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) FinishUpload(w http.ResponseWriter, r *http.Request) {
+// validates chunk upload request and presigns an url for that chunk
+func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -71,110 +179,330 @@ func (h *Handler) FinishUpload(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 
-	var req dto.FinishFileUploadRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var uploadRequest dto.RequestChunkUploadRequest
+	if err := json.NewDecoder(r.Body).Decode(&uploadRequest); err != nil {
+		log.Printf("failed to decode RequestChunkUploadRequest")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	nodeUUID, err := uuid.Parse(req.NodeID)
-	if err != nil {
-		http.Error(w, "invalid nodeId uuid", http.StatusBadRequest)
+	userID := r.Context().Value(middleware.UserIDKey)
+	if userID == nil {
+		log.Printf("access token invalid")
+		http.Error(w, "access token invalid", http.StatusUnauthorized)
 		return
 	}
 
-	parentUUID, err := uuid.Parse(req.ParentNodeID)
-	if err != nil {
-		http.Error(w, "invalid parentNodeId uuid", http.StatusBadRequest)
+	const maxChunkSize = 4*1024*1024 + 64 // 4MiB + small margin for AEAD overhead/headers
+	const expiry = 2 * time.Minute
+
+	// check if the user exists
+	// check if the upload session exists
+	// check if the userID from access token is the owner of upload session
+	// check if the upload_chunks chunk of the requested index is pending (if not, abort)
+	// validate the chunk size
+	// generate a presigned put url signed with Content-Length=req.DeclaredSize using PresignHeader
+
+	var user model.User
+	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
+		log.Printf("user not found")
+		http.Error(w, "user not found", http.StatusUnauthorized)
 		return
 	}
+
+	var uploadSession model.Upload
+	if err := h.db.First(&uploadSession, "id = ?", uploadRequest.UploadID).Error; err != nil {
+		log.Printf("upload session not found")
+		http.Error(w, "upload session not found", http.StatusForbidden)
+		return
+	}
+
+	if !time.Now().Before(uploadSession.ExpiresAt) {
+		log.Printf("upload session expired")
+		http.Error(w, "upload session not found", http.StatusForbidden)
+		return
+	}
+
+	if user.ID != uploadSession.UserID {
+		log.Printf("user is not the owner of the upload session")
+		http.Error(w, "upload session not found", http.StatusForbidden)
+		return
+	}
+
+	if uploadRequest.DeclaredSize <= 0 || uploadRequest.DeclaredSize > maxChunkSize {
+		log.Printf("declared chunk size out of allowed range")
+		http.Error(w, "declared chunk size out of allowed range", http.StatusUnprocessableEntity)
+		return
+	}
+
+	if int64(uploadRequest.ChunkIndex) >= uploadSession.TotalChunks || uploadRequest.ChunkIndex < 0 {
+		log.Printf("requested chunk index out of allowed range")
+		http.Error(w, "requested chunk index out of allowed range", http.StatusForbidden)
+		return
+	}
+
+	if user.StorageUsed+uploadRequest.DeclaredSize > user.StorageQuota {
+		http.Error(w, "quota exceeded", http.StatusForbidden)
+		return
+	}
+
+	var chunkRow model.UploadChunk
+	if err := h.db.First(&chunkRow, "upload_id = ? AND chunk_index = ?", uploadRequest.UploadID, uploadRequest.ChunkIndex).Error; err != nil {
+		log.Printf("failed to find chunk row %s", err)
+		http.Error(w, "requested chunk not found", http.StatusForbidden)
+		return
+	}
+
+	if chunkRow.Status != model.ChunkUploadStatusPending {
+		log.Printf("error: requested chunk %d status is %s", chunkRow.ChunkIndex, chunkRow.Status)
+		http.Error(w, "requested chunk not found", http.StatusForbidden)
+		return
+	}
+
+	url, err := h.storage.GenerateUploadUrl(r.Context(), chunkRow.ObjectKey, expiry, uploadRequest.DeclaredSize, uploadRequest.ChunkHash)
+	if err != nil {
+		log.Printf("%w", err)
+		http.Error(w, "failed to generate presigned url", http.StatusInternalServerError)
+		return
+	}
+
+	chunkRow.GeneratedUrls++
+	chunkRow.DeclaredSize = uploadRequest.DeclaredSize
+
+	result := h.db.Save(&chunkRow)
+	if result.Error != nil {
+		log.Printf("chunk row generated urls amount and declared size could not be saved", err)
+		http.Error(w, "failed to generate presigned url", http.StatusInternalServerError)
+		return
+	}
+
+	uploadResponse := dto.RequestChunkUploadResponse{
+		URL: url,
+	}
+
+	err = json.NewEncoder(w).Encode(uploadResponse)
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	var uploadRequest dto.FinishChunkUploadRequest
+	if err := json.NewDecoder(r.Body).Decode(&uploadRequest); err != nil {
+		log.Printf("failed to decode FinishChunkUploadRequest")
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	userID := r.Context().Value(middleware.UserIDKey)
+	if userID == nil {
+		log.Printf("access token invalid")
+		http.Error(w, "access token invalid", http.StatusUnauthorized)
+		return
+	}
+
+	const maxChunkSize = 4*1024*1024 + 64 // 4MiB + small margin for AEAD overhead/headers
+
+	var user model.User
+	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
+		log.Printf("user not found")
+		http.Error(w, "user not found", http.StatusUnauthorized)
+		return
+	}
+
+	var uploadSession model.Upload
+	if err := h.db.First(&uploadSession, "id = ?", uploadRequest.UploadID).Error; err != nil {
+		log.Printf("upload session not found")
+		http.Error(w, "upload session not found", http.StatusForbidden)
+		return
+	}
+
+	if !time.Now().Before(uploadSession.ExpiresAt) {
+		log.Printf("upload session expired")
+		http.Error(w, "upload session not found", http.StatusForbidden)
+		return
+	}
+
+	if user.ID != uploadSession.UserID {
+		log.Printf("user is not the owner of the upload session")
+		http.Error(w, "upload session not found", http.StatusForbidden)
+		return
+	}
+
+	if int64(uploadRequest.ChunkIndex) >= uploadSession.TotalChunks || uploadRequest.ChunkIndex < 0 {
+		log.Printf("requested chunk index out of allowed range")
+		http.Error(w, "requested chunk index out of allowed range", http.StatusForbidden)
+		return
+	}
+
+	var chunkRow model.UploadChunk
+	if err := h.db.First(&chunkRow, "upload_id = ? AND chunk_index = ?", uploadRequest.UploadID, uploadRequest.ChunkIndex).Error; err != nil {
+		log.Printf("failed to find chunk row %s", err)
+		http.Error(w, "requested chunk not found", http.StatusForbidden)
+		return
+	}
+
+	if chunkRow.Status != model.ChunkUploadStatusPending {
+		log.Printf("error: requested chunk %d status is %s", chunkRow.ChunkIndex, chunkRow.Status)
+		http.Error(w, "requested chunk not found", http.StatusNotFound)
+		return
+	}
+
+	size, etag, sha256, err := h.storage.GetChunkSize(r.Context(), chunkRow.ObjectKey)
+	if err != nil {
+		log.Printf("failed to get chunk size, etag and checksum: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("checksum is %s", sha256)
+
+	if subtle.ConstantTimeCompare([]byte(sha256), []byte(uploadRequest.ChunkHash)) == 0 {
+		log.Printf("integrity check failed", err)
+		http.Error(w, "integrity check failed", http.StatusForbidden)
+		return
+	}
+
+	if size > maxChunkSize {
+		log.Printf("CHUNK %s OVERSIZED: %d > %d", chunkRow.ObjectKey, size, maxChunkSize)
+		go func(objectKey string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if delErr := h.storage.DeleteChunk(ctx, objectKey); delErr != nil {
+				log.Printf("failed to delete oversized chunk %s: %v", objectKey, delErr)
+			}
+		}(chunkRow.ObjectKey)
+
+		chunkRow.Status = model.ChunkUploadStatusFlagged
+		h.db.Save(&chunkRow)
+		uploadSession.Status = model.UploadStatusFlaggedMalicious
+		h.db.Save(&uploadSession)
+
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if etag != uploadRequest.Etag {
+		log.Printf("CHUNK %s etags dont match: %s != %s", chunkRow.ObjectKey, etag, uploadRequest.Etag)
+
+		go func(objectKey string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if delErr := h.storage.DeleteChunk(ctx, objectKey); delErr != nil {
+				log.Printf("failed to delete (mismatch etag) chunk %s: %v", objectKey, delErr)
+			}
+		}(chunkRow.ObjectKey)
+
+		chunkRow.Status = model.ChunkUploadStatusFlagged
+		h.db.Save(&chunkRow)
+		uploadSession.Status = model.UploadStatusFlaggedMalicious
+		h.db.Save(&uploadSession)
+
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if size != chunkRow.DeclaredSize {
+		//log it and save verified size later
+		log.Printf("log: size of chunk %s declared by client does not match with verified size: declared %d vs verified %d", chunkRow.ObjectKey, chunkRow.DeclaredSize, size)
+	}
+
+	chunkRow.Etag = etag
+	chunkRow.VerifiedSize = size
+	chunkRow.VerifiedAt = time.Now()
+	chunkRow.Status = model.ChunkUploadStatusVerified
+
+	result := h.db.Save(&chunkRow)
+	if result.Error != nil {
+		log.Printf("chunk etag, size, timestamp, status could not be saved: %v", result.Error)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	var verifiedCount int64
+	h.db.Model(&model.UploadChunk{}).
+		Where("upload_id = ? AND status = ?", uploadRequest.UploadID, model.ChunkUploadStatusVerified).
+		Count(&verifiedCount)
+
+	if verifiedCount != uploadSession.TotalChunks {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	log.Print("upload session complete, all chunks verified, will mark upload as complete")
+	uploadSession.Status = model.UploadStatusComplete
+	if err := h.db.Save(&uploadSession).Error; err != nil {
+		log.Printf("failed to mark upload session complete: %v", err)
+		// don't fail the whole request over this — the chunk itself verified successfully;
+		// completion can be caught by a reconciliation sweep if this save fails
+	}
+	log.Print("creating cryptographic hierarchy (link,node,file_block)")
+	log.Printf("will clean upload_chunks and upload session")
 
 	linkUUID := uuid.New()
 
 	// TODO: Extract actual OwnerID from your DPoP/JWT auth claims or session
 	// For testing/MVP if not extracted yet, fetch the parent node's owner:
 	var parentNode model.Node
-	if err := h.db.First(&parentNode, "id = ?", parentUUID).Error; err != nil {
+	if err := h.db.First(&parentNode, "id = ? AND owner_id = ?", uploadSession.ParentNodeID, uploadSession.UserID).Error; err != nil {
 		http.Error(w, "parent folder not found", http.StatusNotFound)
 		return
 	}
-	ownerID := parentNode.OwnerID
+	ownerID := uploadSession.UserID
 
 	// 1. Create the File Node
 	fileNode := model.Node{
-		ID:                nodeUUID,
+		ID:                uploadSession.NodeID,
 		Type:              model.NodeTypeFile,
-		SizeBytes:         req.SizeBytes,
-		EncryptedMetadata: req.EncryptedMetadata,
-		MetadataNonce:     req.MetadataNonce,
+		EncryptedMetadata: uploadSession.EncryptedMetadata,
+		MetadataNonce:     uploadSession.MetadataNonce,
 		OwnerID:           ownerID,
-		NodePublicKey:     req.NodePublicKey,
-		WrappedNodeKey:    req.WrappedNodeKey,
-		NodePrivNonce:     req.NodePrivNonce,
-		Signature:         req.SignedEncryptedNodePassphrase,
+		NodePublicKey:     uploadSession.NodePublicKey,
+		WrappedNodeKey:    uploadSession.WrappedNodeKey,
+		NodePrivNonce:     uploadSession.NodePrivNonce,
+		Signature:         uploadSession.SignedEncryptedNodePassphrase,
 	}
 
 	// 2. Create the Link inside the parent folder
 	fileLink := model.Link{
 		ID:                            linkUUID,
-		ParentNodeID:                  &parentUUID,
-		ChildNodeID:                   &nodeUUID,
-		EncryptedName:                 req.EncryptedName,
-		NameNonce:                     req.NameNonce,
-		EncryptedNodePassphrase:       req.EncryptedNodePassphrase,
-		SignedEncryptedNodePassphrase: req.SignedEncryptedNodePassphrase,
+		ParentNodeID:                  &parentNode.ID,
+		ChildNodeID:                   &uploadSession.NodeID,
+		EncryptedName:                 uploadSession.EncryptedName,
+		NameNonce:                     uploadSession.NameNonce,
+		EncryptedNodePassphrase:       uploadSession.EncryptedNodePassphrase,
+		SignedEncryptedNodePassphrase: uploadSession.SignedEncryptedNodePassphrase,
 		AuthorID:                      ownerID,
 	}
 
-	// 3. Security Check: Concurrently fetch TRUE chunk sizes directly from S3
-	var blocks []model.FileBlock
-	var trueTotalSize int64
-	var mu sync.Mutex
-
-	var wg sync.WaitGroup
-	errCh := make(chan error, req.TotalChunks)
-
-	for i := 0; i < req.TotalChunks; i++ {
-		wg.Add(1)
-		go func(chunkIndex int) {
-			defer wg.Done()
-
-			nonce := ""
-			if chunkIndex < len(req.ChunkNonces) {
-				nonce = req.ChunkNonces[chunkIndex]
-			}
-
-			objectKey := fmt.Sprintf("%s/chunk_%d", req.NodeID, chunkIndex)
-
-			// Verify physical size directly from S3!
-			size, err := h.storage.GetChunkSize(r.Context(), objectKey)
-			if err != nil {
-				errCh <- fmt.Errorf("chunk %d missing in S3: %v", chunkIndex, err)
-				return
-			}
-
-			mu.Lock()
-			trueTotalSize += size
-			blocks = append(blocks, model.FileBlock{
-				ID:        uuid.New(),
-				NodeID:    nodeUUID,
-				Index:     chunkIndex,
-				Bucket:    "default",
-				ObjectKey: objectKey,
-				Nonce:     nonce,
-				Size:      int(size),
-			})
-			mu.Unlock()
-		}(i)
+	var verifiedChunks []model.UploadChunk
+	if err := h.db.Where("upload_id = ? AND status = ?", uploadSession.ID, model.ChunkUploadStatusVerified).
+		Order("chunk_index asc").Find(&verifiedChunks).Error; err != nil {
+		log.Printf("failed to fetch verified chunks: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
 
-	wg.Wait()
-	close(errCh)
-
-	if len(errCh) > 0 {
-		err := <-errCh
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	var trueTotalSize int64
+	var blocks []model.FileBlock
+	for _, chunk := range verifiedChunks {
+		trueTotalSize += chunk.VerifiedSize
+		blocks = append(blocks, model.FileBlock{
+			ID:        uuid.New(),
+			NodeID:    uploadSession.NodeID,
+			Index:     int(chunk.ChunkIndex),
+			Bucket:    "default",
+			ObjectKey: chunk.ObjectKey,
+			Size:      int(chunk.VerifiedSize),
+		})
 	}
 
 	// Overwrite the Node's size with the VERIFIED physical size!
@@ -203,8 +531,150 @@ func (h *Handler) FinishUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"status": "created", "nodeId": req.NodeID})
+	json.NewEncoder(w).Encode(map[string]string{"status": "created", "nodeId": uploadSession.NodeID.String()})
 }
+
+// func (h *Handler) FinishUpload(w http.ResponseWriter, r *http.Request) {
+// 	if r.Method != http.MethodPost {
+// 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+// 		return
+// 	}
+
+// 	w.Header().Set("Content-Type", "application/json")
+
+// 	var req dto.FinishFileUploadRequest
+// 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+// 		http.Error(w, err.Error(), http.StatusBadRequest)
+// 		return
+// 	}
+
+// 	nodeUUID, err := uuid.Parse(req.NodeID)
+// 	if err != nil {
+// 		http.Error(w, "invalid nodeId uuid", http.StatusBadRequest)
+// 		return
+// 	}
+
+// 	parentUUID, err := uuid.Parse(req.ParentNodeID)
+// 	if err != nil {
+// 		http.Error(w, "invalid parentNodeId uuid", http.StatusBadRequest)
+// 		return
+// 	}
+
+// 	linkUUID := uuid.New()
+
+// 	// TODO: Extract actual OwnerID from your DPoP/JWT auth claims or session
+// 	// For testing/MVP if not extracted yet, fetch the parent node's owner:
+// 	var parentNode model.Node
+// 	if err := h.db.First(&parentNode, "id = ?", parentUUID).Error; err != nil {
+// 		http.Error(w, "parent folder not found", http.StatusNotFound)
+// 		return
+// 	}
+// 	ownerID := parentNode.OwnerID
+
+// 	// 1. Create the File Node
+// 	fileNode := model.Node{
+// 		ID:                nodeUUID,
+// 		Type:              model.NodeTypeFile,
+// 		SizeBytes:         req.SizeBytes,
+// 		EncryptedMetadata: req.EncryptedMetadata,
+// 		MetadataNonce:     req.MetadataNonce,
+// 		OwnerID:           ownerID,
+// 		NodePublicKey:     req.NodePublicKey,
+// 		WrappedNodeKey:    req.WrappedNodeKey,
+// 		NodePrivNonce:     req.NodePrivNonce,
+// 		Signature:         req.SignedEncryptedNodePassphrase,
+// 	}
+
+// 	// 2. Create the Link inside the parent folder
+// 	fileLink := model.Link{
+// 		ID:                            linkUUID,
+// 		ParentNodeID:                  &parentUUID,
+// 		ChildNodeID:                   &nodeUUID,
+// 		EncryptedName:                 req.EncryptedName,
+// 		NameNonce:                     req.NameNonce,
+// 		EncryptedNodePassphrase:       req.EncryptedNodePassphrase,
+// 		SignedEncryptedNodePassphrase: req.SignedEncryptedNodePassphrase,
+// 		AuthorID:                      ownerID,
+// 	}
+
+// 	// 3. Security Check: Concurrently fetch TRUE chunk sizes directly from S3
+// 	var blocks []model.FileBlock
+// 	var trueTotalSize int64
+// 	var mu sync.Mutex
+
+// 	var wg sync.WaitGroup
+// 	errCh := make(chan error, req.TotalChunks)
+
+// 	for i := 0; i < req.TotalChunks; i++ {
+// 		wg.Add(1)
+// 		go func(chunkIndex int) {
+// 			defer wg.Done()
+
+// 			nonce := ""
+// 			if chunkIndex < len(req.ChunkNonces) {
+// 				nonce = req.ChunkNonces[chunkIndex]
+// 			}
+
+// 			objectKey := fmt.Sprintf("%s/chunk_%d", req.NodeID, chunkIndex)
+
+// 			// Verify physical size directly from S3!
+// 			size, _, _, err := h.storage.GetChunkSize(r.Context(), objectKey)
+// 			if err != nil {
+// 				errCh <- fmt.Errorf("chunk %d missing in S3: %v", chunkIndex, err)
+// 				return
+// 			}
+
+// 			mu.Lock()
+// 			trueTotalSize += size
+// 			blocks = append(blocks, model.FileBlock{
+// 				ID:        uuid.New(),
+// 				NodeID:    nodeUUID,
+// 				Index:     chunkIndex,
+// 				Bucket:    "default",
+// 				ObjectKey: objectKey,
+// 				Size:      int(size),
+// 			})
+// 			mu.Unlock()
+// 		}(i)
+// 	}
+
+// 	wg.Wait()
+// 	close(errCh)
+
+// 	if len(errCh) > 0 {
+// 		err := <-errCh
+// 		http.Error(w, err.Error(), http.StatusBadRequest)
+// 		return
+// 	}
+
+// 	// Overwrite the Node's size with the VERIFIED physical size!
+// 	fileNode.SizeBytes = trueTotalSize
+
+// 	// 4. Save everything in an atomic Postgres transaction!
+// 	err = h.db.Transaction(func(tx *gorm.DB) error {
+// 		if err := tx.Create(&fileNode).Error; err != nil {
+// 			return err
+// 		}
+// 		if err := tx.Create(&fileLink).Error; err != nil {
+// 			return err
+// 		}
+// 		if len(blocks) > 0 {
+// 			if err := tx.Create(&blocks).Error; err != nil {
+// 				return err
+// 			}
+// 		}
+// 		return nil
+// 	})
+
+// 	if err != nil {
+// 		log.Printf("Failed to finish file upload in DB: %v", err)
+// 		http.Error(w, "database error while saving file metadata", http.StatusInternalServerError)
+// 		return
+// 	}
+
+// 	w.WriteHeader(http.StatusCreated)
+// 	json.NewEncoder(w).Encode(map[string]string{"status": "created", "nodeId": req.NodeID})
+// }
 
 func (h *Handler) Files(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -291,8 +761,13 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Generate URLs
-	urls, err := h.storage.GenerateDownloadUrls(r.Context(), nodeID, len(blocks))
+	// 2. Extract Object Keys and Generate URLs
+	var objectKeys []string
+	for _, block := range blocks {
+		objectKeys = append(objectKeys, block.ObjectKey)
+	}
+
+	urls, err := h.storage.GenerateDownloadUrls(r.Context(), objectKeys)
 	if err != nil {
 		http.Error(w, "failed to generate download links", http.StatusInternalServerError)
 		return

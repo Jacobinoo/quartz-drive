@@ -21,6 +21,7 @@ type (
 		CRYPTO
 		S3
 		B2
+		Sweeper
 	}
 
 	App struct {
@@ -68,6 +69,14 @@ type (
 	B2 struct {
 		ApplicationKeyID string `env:"B2_APPLICATION_KEY_ID,required"`
 		ApplicationKey   string `env:"B2_APPLICATION_KEY,required"`
+	}
+
+	Sweeper struct {
+		Disabled                 bool   `env:"DISABLE_SWEEPS" envDefault:"false"`
+		HourlyInterval           string `env:"SWEEP_HOURLY_INTERVAL" envDefault:"1h"`
+		DailyInterval            string `env:"SWEEP_DAILY_INTERVAL" envDefault:"24h"`
+		UploadSessionExpiresHours int    `env:"UPLOAD_SESSION_EXPIRES_HOURS" envDefault:"24"`
+		TrashRetentionDays       int    `env:"TRASH_RETENTION_DAYS" envDefault:"30"`
 	}
 )
 

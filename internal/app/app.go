@@ -105,6 +105,7 @@ func initV1Mux(state *ServerState) *http.ServeMux {
 	refresh.RegisterRoutes(mux, refreshHandler)
 
 	filesHandler := files.NewHandler(state.DB, state.StorageService)
+	go filesHandler.StartSweepScheduler(context.Background())
 	files.RegisterRoutes(mux, filesHandler)
 
 	devicesHandler := devices.NewHandler(state.DB)

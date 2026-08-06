@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"quartz/config"
 	"quartz/internal/dto"
 	"quartz/internal/middleware"
 	"quartz/internal/model"
@@ -97,7 +98,7 @@ func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	expiresAt := time.Now().UTC().Add(24 * time.Hour)
+	expiresAt := time.Now().UTC().Add(time.Duration(config.Cfg.Sweeper.UploadSessionExpiresHours) * time.Hour)
 
 	chunkRows := []model.UploadChunk{}
 
@@ -1045,76 +1046,7 @@ func (h *Handler) EmptyTrash(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go func(links []model.Link) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-
-		log.Printf("Starting Async S3 Wipe for %d trashed items...", len(links))
-		for _, link := range links {
-			// 1. Gather the NodeID of the trashed item
-			nodeIDsToWipe := []string{link.ChildNodeID.String()}
-
-			// 2. If it's a folder, recursively gather ALL descendants inside it!
-			if link.ChildNode.Type == model.NodeTypeFolder {
-				descendants, err := h.getDescendantNodeIDs(link.ChildNodeID.String())
-				if err != nil {
-					log.Printf("Failed to get descendants for folder %s, skipping wipe for this link: %v", link.ChildNodeID, err)
-					continue // don't wipe/delete anything for this link if we can't be sure we found everything inside it
-				}
-				nodeIDsToWipe = append(nodeIDsToWipe, descendants...)
-			}
-
-			// 3. Find ALL FileBlocks for ALL these nodes
-			var blocks []model.FileBlock
-			if err := h.db.Where("node_id IN ?", nodeIDsToWipe).Find(&blocks).Error; err != nil {
-				log.Printf("Failed to query file_blocks for nodes %v: %v", nodeIDsToWipe, err)
-				continue
-			}
-
-			var successfulBlocks []string
-
-			// 4. Wipe from MinIO (No more storage leaks!)
-			failedNodeIDs := map[string]bool{}
-			for _, block := range blocks {
-				if err := h.storage.DeleteChunk(ctx, block.ObjectKey); err != nil {
-					log.Printf("Failed to wipe S3 chunk %s: %v", block.ObjectKey, err)
-					failedNodeIDs[block.NodeID.String()] = true // adjust field name to your model
-					continue
-				}
-				successfulBlocks = append(successfulBlocks, block.ObjectKey)
-			}
-
-			var cleanNodeIDs []string
-			for _, id := range nodeIDsToWipe {
-				if !failedNodeIDs[id] {
-					cleanNodeIDs = append(cleanNodeIDs, id)
-				}
-			}
-
-			if len(cleanNodeIDs) == 0 {
-				continue // nothing safe to clean up for this link, leave it all for the sweep job
-			}
-
-			err := h.db.Transaction(func(tx *gorm.DB) error {
-				if err := tx.Exec("DELETE FROM file_blocks WHERE node_id IN (?) AND object_key IN (?)", nodeIDsToWipe, successfulBlocks).Error; err != nil {
-					return err
-				}
-
-				if err := tx.Exec("DELETE FROM links WHERE child_node_id IN (?) OR parent_node_id IN (?)", nodeIDsToWipe, nodeIDsToWipe).Error; err != nil {
-					return err
-				}
-
-				if err := tx.Exec("DELETE FROM nodes WHERE id IN (?)", nodeIDsToWipe).Error; err != nil {
-					return err
-				}
-				return nil
-			})
-			if err != nil {
-				log.Printf("Failed to complete DB wipe transaction: %v", err)
-			}
-		}
-		log.Println("Async S3 Wipe Complete!")
-	}(trashedLinks)
+	go h.wipeTrashedLinks(context.Background(), trashedLinks)
 
 	w.WriteHeader(http.StatusAccepted)
 }

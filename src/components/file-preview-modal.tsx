@@ -10,11 +10,12 @@ interface FilePreviewModalProps {
   loading?: boolean;
   progress?: number;
   tooLarge?: boolean;
+  unsupported?: boolean;
   onClose: () => void;
   onDownload?: () => void;
 }
 
-export function FilePreviewModal({ file, url, loading, progress, tooLarge, onClose, onDownload }: FilePreviewModalProps) {
+export function FilePreviewModal({ file, url, loading, progress, tooLarge, unsupported, onClose, onDownload }: FilePreviewModalProps) {
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -50,7 +51,7 @@ export function FilePreviewModal({ file, url, loading, progress, tooLarge, onClo
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  if (!file || (!url && !loading && !tooLarge)) return null;
+  if (!file || (!url && !loading && !tooLarge && !unsupported)) return null;
 
   const isImage = /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(file.plaintextName ?? "");
 
@@ -155,6 +156,17 @@ export function FilePreviewModal({ file, url, loading, progress, tooLarge, onClo
           ) : tooLarge ? (
             <div className="flex flex-col items-center gap-4 text-white/60">
               <p className="text-sm">This file is too large to preview securely in the browser</p>
+              <button
+                onClick={handleDownloadClick}
+                className="flex items-center gap-2 px-4 py-2 rounded-md bg-white/10 hover:bg-white/15 text-white text-sm transition-colors"
+              >
+                <Download className="h-4 w-4" />
+                Download {file.plaintextName}
+              </button>
+            </div>
+          ) : unsupported ? (
+            <div className="flex flex-col items-center gap-4 text-white/60">
+              <p className="text-sm">No preview available for this file type.</p>
               <button
                 onClick={handleDownloadClick}
                 className="flex items-center gap-2 px-4 py-2 rounded-md bg-white/10 hover:bg-white/15 text-white text-sm transition-colors"

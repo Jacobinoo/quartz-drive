@@ -34,7 +34,8 @@ export function FileList() {
     url: string | null,
     loading?: boolean,
     progress?: number,
-    tooLarge?: boolean
+    tooLarge?: boolean,
+    unsupported?: boolean
   } | null>(null);
     const [folderToShare, setFolderToShare] = useState<any>(null);
   const refreshTrigger = useDriveStore(s => s.refreshTrigger);
@@ -252,6 +253,12 @@ export function FileList() {
     };
 
     const handlePreview = async (file: any) => {
+        const isImage = /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(file.plaintextName ?? "");
+        if (!isImage) {
+            setPreviewFile({ file, url: null, loading: false, progress: 0, unsupported: true });
+            return;
+        }
+
         const size = file.metadata?.originalSizeBytes || file.sizeBytes || 0;
         if (size > 25 * 1024 * 1024) {
             setPreviewFile({ file, url: null, loading: false, progress: 0, tooLarge: true });
@@ -415,6 +422,7 @@ export function FileList() {
                     loading={previewFile.loading}
                     progress={previewFile.progress}
                     tooLarge={previewFile.tooLarge}
+                    unsupported={previewFile.unsupported}
                     onClose={() => setPreviewFile(null)}
                     onDownload={() => handleDownload(previewFile.file)}
                 />

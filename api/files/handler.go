@@ -725,7 +725,12 @@ func (h *Handler) Files(w http.ResponseWriter, r *http.Request) {
 
 	var links []model.Link
 	// Preload the ChildNode so we get SizeBytes and Type
-	err := h.db.Preload("ChildNode").Where("parent_node_id = ?", parentFolderID).Find(&links).Error
+	// Preload Author and Author.KeyStore for signature verification
+	err := h.db.Preload("ChildNode").
+		Preload("Author").
+		Preload("Author.KeyStore").
+		Where("parent_node_id = ?", parentFolderID).
+		Find(&links).Error
 	if err != nil {
 		http.Error(w, "failed to fetch files", http.StatusInternalServerError)
 		return
@@ -760,6 +765,9 @@ func (h *Handler) Files(w http.ResponseWriter, r *http.Request) {
 
 			EncryptedMetadata: link.ChildNode.EncryptedMetadata,
 			MetadataNonce:     link.ChildNode.MetadataNonce,
+
+			AuthorEmail:            link.Author.Email,
+			AuthorSigningPublicKey: link.Author.KeyStore.AccountSigningPublicKey,
 		})
 	}
 
@@ -1192,6 +1200,8 @@ func (h *Handler) GetAllFiles(w http.ResponseWriter, r *http.Request) {
 	err := h.db.Joins("JOIN nodes ON nodes.id = links.child_node_id").
 		Where("nodes.owner_id = ?", userID).
 		Preload("ChildNode").
+		Preload("Author").
+		Preload("Author.KeyStore").
 		Find(&links).Error
 
 	if err != nil {
@@ -1229,6 +1239,9 @@ func (h *Handler) GetAllFiles(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:         link.CreatedAt,
 			EncryptedMetadata: link.ChildNode.EncryptedMetadata,
 			MetadataNonce:     link.ChildNode.MetadataNonce,
+			
+			AuthorEmail:            link.Author.Email,
+			AuthorSigningPublicKey: link.Author.KeyStore.AccountSigningPublicKey,
 		})
 	}
 	w.Header().Set("Content-Type", "application/json")

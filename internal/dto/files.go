@@ -22,4 +22,7 @@ type FileListResponseItem struct {
 
 	EncryptedMetadata string `json:"encryptedMetadata"`
 	MetadataNonce     string `json:"metadataNonce"`
+
+	AuthorEmail            string `json:"authorEmail"`
+	AuthorSigningPublicKey string `json:"authorSigningPublicKey"`
 }

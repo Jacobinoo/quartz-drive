@@ -1,7 +1,8 @@
 "use client";
 
-import { useUploadStore} from "@/hooks/use-upload-store";
-import {Button} from "@/components/ui/button";
+import { useUploadStore } from "@/hooks/use-upload-store";
+import { Button } from "@/components/ui/button";
+import { X } from "lucide-react";
 
 export function TransferList() {
     const jobs = useUploadStore(s=>s.jobs);
@@ -15,10 +16,21 @@ export function TransferList() {
 
             <div className="flex flex-col gap-3 max-h-64 overflow-y-auto">
                 {jobs.map((job) => (
-                    <div key={job.id} className="text-sm cursor-pointer" onClick={() => {cancelJob(job.id)}}>
-                        <div className="flex justify-between truncate mb-1">
-                            <span className="truncate pr-2">{job.file.name}</span>
-                            <span>{Math.round(job.progress)}%</span>
+                    <div key={job.id} className="text-sm">
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="truncate pr-2 font-medium">{job.file.name}</span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">{Math.round(job.progress)}%</span>
+                                <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-5 w-5 rounded-full hover:bg-red-500/10 hover:text-red-500" 
+                                    onClick={() => cancelJob(job.id)}
+                                    title="Cancel upload"
+                                >
+                                    <X className="h-3 w-3" />
+                                </Button>
+                            </div>
                         </div>
 
                         <div className="w-full bg-muted rounded-full h-2">

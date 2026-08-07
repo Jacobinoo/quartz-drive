@@ -99,7 +99,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>My Files</SidebarGroupLabel>
+          <SidebarGroupLabel>Cloud</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenu>
@@ -115,7 +115,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupContent>
             <SidebarMenu>
               <StaticTree item={"Devices"} icon={<LucideMonitorSmartphone />} />
-              <StaticTree item={"Shared With Me"} icon={<Users />} />
               <StaticTree item={"Trash"} icon={<Trash2 />} />
             </SidebarMenu>
           </SidebarGroupContent>
@@ -191,7 +190,7 @@ function DynamicFolderTree({ pathStack }: { pathStack: FolderKey[] }) {
         setHasFetched(true);
       }
       loadFolders();
-      
+
       const handleRefresh = () => {
           setHasFetched(false); // Force a re-fetch of the tree node
       };
@@ -380,7 +379,7 @@ function StaticTree({ item, icon }: { item: string, icon?: JSX.Element }) {
     const router = useRouter();
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton onClick={() => {
+      <SidebarMenuButton className="cursor-pointer"  onClick={() => {
         if(item == "Trash") router.push('/drive/trash')
       }}>
         {icon == undefined ? <File /> : icon}

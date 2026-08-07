@@ -10,11 +10,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TransferList } from "@/components/transfer-list";
@@ -22,7 +18,6 @@ import { UploadManager } from "@/components/upload-manager";
 import { Button } from "@/components/ui/button";
 import { FormEvent, useEffect, useState } from "react";
 import { redirect, useRouter } from "next/navigation";
-import { signOut } from "@/signout";
 import { FileList } from "@/components/file-list";
 import { NewDriveItemButton } from "@/components/new-drive-item-button";
 import { FolderKey, useDriveStore } from "@/lib/driveStore";
@@ -110,34 +105,12 @@ export default function DriveHomePage() {
   };
 
   return (
-      <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 justify-between border-b px-4">
-          <SearchBar />
+      <>
+        <div className="flex h-10 shrink-0 items-center gap-2 border-b px-4 bg-background">
+          <SidebarTrigger className="hidden max-md:block -ml-1" />
           <Separator
             orientation="vertical"
-            className="mr- data-[orientation=vertical]:h-4 mx-5"
-          />
-          <div
-            className="flex flex-col justify-center items-end cursor-pointer"
-            onClick={async () => {
-              await signOut();
-              console.log('signing out')
-              window.location.href = '/signin';
-            }}
-          >
-            <Label className="font-normal text-xs capitalize cursor-pointer">
-                          {userEmail.split('@')[0].replace('.', ' ')}
-                        </Label>
-                        <Label className="font-normal text-zinc-400 text-xs cursor-pointer">
-                          {userEmail}
-                        </Label>
-          </div>
-        </header>
-        <div className="flex h-10 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator
-            orientation="vertical"
-            className="mr-2 data-[orientation=vertical]:h-4"
+            className="mr-2 data-[orientation=vertical]:h-4 hidden max-md:block"
           />
           <Breadcrumb>
             <BreadcrumbList>
@@ -206,6 +179,6 @@ export default function DriveHomePage() {
           <UploadManager />
           <TransferList />
         </div>
-      </SidebarInset>
+      </>
   );
 }

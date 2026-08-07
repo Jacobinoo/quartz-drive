@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { getSodium } from "@/lib/crypto/sodium";
 import { useDriveStore, type FolderKey } from "@/lib/driveStore";
-import { SidebarInset } from "@/components/ui/sidebar";
+
 import { FileIcon, FolderIcon, RefreshCw, Trash, Loader2 } from "lucide-react";
 import { customFetch } from "@/lib/api";
 import { getAccountEncryptionPrivateKey } from "@/lib/authStore";
@@ -286,7 +286,7 @@ export default function TrashPage() {
   };
 
   return (
-    <SidebarInset>
+    <div className="flex flex-col h-full">
       <header className="flex h-16 shrink-0 items-center justify-between border-b px-4">
         <div className="flex items-center gap-2">
           <Trash className="w-4 h-4 text-muted-foreground" />
@@ -368,6 +368,6 @@ export default function TrashPage() {
           </>
         )}
       </div>
-    </SidebarInset>
+    </div>
   );
 }

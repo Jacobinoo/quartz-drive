@@ -1,9 +1,10 @@
 "use client";
 
 import AppSidebar from "@/components/app-sidebar";
-import { SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { useEffect } from "react";
 import { initializeDriveKeys } from "@/crypto/drive";
+import { AppHeader } from "@/components/app-header";
 
 export default function DriveLayout({ children }: { children: React.ReactNode }) {
     useEffect(() => {
@@ -13,7 +14,10 @@ export default function DriveLayout({ children }: { children: React.ReactNode })
     return (
         <SidebarProvider>
             <AppSidebar />
-            {children}
+            <SidebarInset>
+                <AppHeader />
+                {children}
+            </SidebarInset>
         </SidebarProvider>
     );
 }

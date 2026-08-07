@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { customFetch } from "@/lib/api";
 import { getSodium } from "@/lib/crypto/sodium";
 import { getAccessToken, getAccountEncryptionPrivateKey } from "@/lib/authStore";
@@ -106,7 +106,7 @@ export default function SharedWithMePage() {
     };
 
     return (
-        <SidebarInset>
+        <div className="flex flex-col h-full">
             <header className="flex h-16 items-center border-b px-4">
                 <SidebarTrigger />
                 <h1 className="ml-4 font-semibold">Shared with Me</h1>
@@ -146,6 +146,6 @@ export default function SharedWithMePage() {
                     </>
                 )}
             </div>
-        </SidebarInset>
+        </div>
     );
 }

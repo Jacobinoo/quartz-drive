@@ -252,6 +252,13 @@ func (h *Handler) SweepReconciliation(ctx context.Context) {
 
 func (h *Handler) wipeTrashedLinks(ctx context.Context, links []model.Link) {
 	sweepLog.Printf("Starting Async S3 Wipe for %d trashed items...", len(links))
+
+	// Track which S3 object keys have already been deleted and accounted for in
+	// the storage decrement. This prevents double-counting when multiple links in
+	// the same batch share descendants (e.g. File1 is a child of both Folder A and
+	// Folder B which are both being wiped).
+	accountedBlocks := map[string]bool{}
+
 	for _, link := range links {
 		nodeIDsToWipe := []string{link.ChildNodeID.String()}
 
@@ -288,8 +295,11 @@ func (h *Handler) wipeTrashedLinks(ctx context.Context, links []model.Link) {
 				if strings.Contains(err.Error(), "404") || strings.Contains(err.Error(), "NoSuchKey") {
 					// If it's already gone from S3, consider it a successful wipe
 					successfulBlocks = append(successfulBlocks, block.ObjectKey)
-					if owner, ok := nodeOwners[block.NodeID.String()]; ok {
-						freedPerOwner[owner] += int64(block.Size)
+					if !accountedBlocks[block.ObjectKey] {
+						if owner, ok := nodeOwners[block.NodeID.String()]; ok {
+							freedPerOwner[owner] += int64(block.Size)
+						}
+						accountedBlocks[block.ObjectKey] = true
 					}
 					continue
 				}
@@ -298,8 +308,11 @@ func (h *Handler) wipeTrashedLinks(ctx context.Context, links []model.Link) {
 				continue
 			}
 			successfulBlocks = append(successfulBlocks, block.ObjectKey)
-			if owner, ok := nodeOwners[block.NodeID.String()]; ok {
-				freedPerOwner[owner] += int64(block.Size)
+			if !accountedBlocks[block.ObjectKey] {
+				if owner, ok := nodeOwners[block.NodeID.String()]; ok {
+					freedPerOwner[owner] += int64(block.Size)
+				}
+				accountedBlocks[block.ObjectKey] = true
 			}
 		}
 

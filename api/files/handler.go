@@ -936,12 +936,35 @@ func (h *Handler) RestoreFile(w http.ResponseWriter, r *http.Request) {
 	nodeID := r.URL.Query().Get("nodeId")
 	parentFolderID := r.URL.Query().Get("parentFolderId")
 
-	// Unscoped allows us to find the Trashed item, and setting deleted_at to NULL restores it!
-	err := h.db.Unscoped().Model(&model.Link{}).
-		Where("child_node_id = ? AND parent_node_id = ?", nodeID, parentFolderID).
-		Update("deleted_at", nil).Error
+	// Restore the item itself AND all its trashed ancestor folders using a recursive CTE.
+	// This prevents the item from being stranded inside a still-trashed parent folder.
+	//
+	// The CTE walks UP from the item's parent to the root, collecting every link
+	// whose child_node_id appears in the ancestor chain. It then restores any of
+	// those links that are soft-deleted (deleted_at IS NOT NULL).
+	query := `
+		WITH RECURSIVE ancestors AS (
+			-- Base: the direct parent link of the item being restored
+			SELECT l.child_node_id, l.parent_node_id
+			FROM links l
+			WHERE l.child_node_id = ? AND l.deleted_at IS NOT NULL
 
+			UNION ALL
+
+			-- Recursively walk up: find the parent's own link (if it too is trashed)
+			SELECT l.child_node_id, l.parent_node_id
+			FROM links l
+			INNER JOIN ancestors a ON l.child_node_id = a.parent_node_id
+			WHERE l.deleted_at IS NOT NULL
+		)
+		UPDATE links SET deleted_at = NULL
+		WHERE child_node_id IN (SELECT child_node_id FROM ancestors)
+		   OR (child_node_id = ? AND parent_node_id = ?)
+	`
+
+	err := h.db.Exec(query, parentFolderID, nodeID, parentFolderID).Error
 	if err != nil {
+		log.Printf("failed to restore file %s: %v", nodeID, err)
 		http.Error(w, "failed to restore file", http.StatusInternalServerError)
 		return
 	}
@@ -985,15 +1008,18 @@ func (h *Handler) ListTrash(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parentFolderID := r.URL.Query().Get("folderId")
-	if parentFolderID == "" {
-		http.Error(w, "missing folderId", http.StatusBadRequest)
+	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 
 	var links []model.Link
-	err := h.db.Unscoped().Preload("ChildNode").
-		Where("parent_node_id = ? AND deleted_at IS NOT NULL", parentFolderID).
+	err := h.db.Unscoped().
+		Joins("JOIN nodes ON nodes.id = links.child_node_id").
+		Where("nodes.owner_id = ?", userID).
+		Where("links.deleted_at IS NOT NULL").
+		Preload("ChildNode").
 		Find(&links).Error
 
 	if err != nil {
@@ -1003,8 +1029,13 @@ func (h *Handler) ListTrash(w http.ResponseWriter, r *http.Request) {
 
 	var response []dto.FileListResponseItem
 	for _, link := range links {
+		parentNodeID := ""
+		if link.ParentNodeID != nil {
+			parentNodeID = link.ParentNodeID.String()
+		}
 		response = append(response, dto.FileListResponseItem{
 			NodeID:                        link.ChildNodeID.String(),
+			ParentNodeID:                  parentNodeID,
 			Type:                          string(link.ChildNode.Type),
 			EncryptedName:                 link.EncryptedName,
 			NameNonce:                     link.NameNonce,
@@ -1079,27 +1110,22 @@ func (h *Handler) GetQuota(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For MVP, we fetch the first ShareMember (mimicking an authenticated user)
-	var shareMember model.ShareMember
-	if err := h.db.First(&shareMember).Error; err != nil {
+	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var user model.User
+	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
 		http.Error(w, "user not found", http.StatusNotFound)
 		return
 	}
 
-	var usedBytes int64
-	// Because trashed items are NOT soft-deleted in the nodes table, this correctly includes trash!
-	h.db.Model(&model.Node{}).
-		Where("owner_id = ?", shareMember.UserID).
-		Select("COALESCE(SUM(size_bytes), 0)").
-		Scan(&usedBytes)
-
-	// 100 MB default quota
-	var maxBytes int64 = 100 * 1024 * 1024
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"usedBytes": usedBytes,
-		"maxBytes":  maxBytes,
+		"usedBytes": user.StorageUsed,
+		"maxBytes":  user.StorageQuota,
 	})
 }
 

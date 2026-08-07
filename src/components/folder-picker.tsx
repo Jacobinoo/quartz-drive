@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ChevronRight, ChevronDown, FolderIcon } from "lucide-react";
-import { fetchFiles } from "@/crypto/files";
 import { getSodium } from "@/lib/crypto/sodium";
 import { FolderKey, useDriveStore } from "@/lib/driveStore";
+import { useAuthStore } from "@/lib/authStore";
 import { customFetch } from "@/lib/api";
 
 // 1. Recursive Folder Node (Decrypts children on the fly!)
@@ -93,8 +93,12 @@ export function FolderPickerModal({ itemToMove, onClose }: { itemToMove: any, on
                 currentFolder.publicKey, currentFolder.privateKey
             );
 
-            // 2. Re-wrap & Re-encrypt for SELECTED target folder!
             const newEncryptedNodePassphrase = sodium.crypto_box_seal(fileKey, selectedFolder.publicKey);
+
+            const accountSigningPrivKey = useAuthStore.getState().accountSigningPrivKey;
+            if (!accountSigningPrivKey) throw new Error("Missing signing key");
+            const signature = sodium.crypto_sign_detached(newEncryptedNodePassphrase, accountSigningPrivKey);
+            const newSignedEncryptedNodePassphrase = sodium.to_base64(signature);
 
             const nameNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
             const newEncryptedName = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
@@ -111,7 +115,7 @@ export function FolderPickerModal({ itemToMove, onClose }: { itemToMove: any, on
                     newEncryptedName: sodium.to_base64(newEncryptedName),
                     newNameNonce: sodium.to_base64(nameNonce),
                     newEncryptedNodePassphrase: sodium.to_base64(newEncryptedNodePassphrase),
-                    newSignedEncryptedNodePassphrase: "TODO"
+                    newSignedEncryptedNodePassphrase: newSignedEncryptedNodePassphrase
                 })
             });
 

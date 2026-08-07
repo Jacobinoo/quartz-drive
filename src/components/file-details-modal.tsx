@@ -3,7 +3,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatBytes } from "@/lib/utils/size";
-import { Info, FileIcon, FolderIcon } from "lucide-react";
+import { Info, FileIcon, FolderIcon, ShieldCheck, ShieldAlert } from "lucide-react";
 
 export function FileDetailsModal({ file, breadcrumbs, onClose }: { file: any, breadcrumbs: any[], onClose: () => void }) {
     if (!file) return null;
@@ -160,12 +160,29 @@ export function FileDetailsModal({ file, breadcrumbs, onClose }: { file: any, br
                     </DialogTitle>
                 </DialogHeader>
 
+                {file.signatureVerified && (
+                    <div className="bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 p-3 rounded-xl flex items-center gap-2 text-sm mt-4 mb-2">
+                        <ShieldCheck className="w-5 h-5 shrink-0" />
+                        <span>
+                            Digital signature has been verified. This {file.type === 'FOLDER' ? 'folder was securely created' : 'file was securely sent'} by <strong>{file.authorEmail}</strong>.
+                        </span>
+                    </div>
+                )}
+                {file.signatureVerified === false && file.signedEncryptedNodePassphrase && (
+                    <div className="bg-red-50 text-red-800 dark:bg-red-900/30 dark:text-red-400 p-3 rounded-xl flex items-center gap-2 text-sm mt-4 mb-2">
+                        <ShieldAlert className="w-5 h-5 shrink-0" />
+                        <span>
+                            Digital signature could not be verified. This {file.type === 'FOLDER' ? 'folder' : 'file'} may have been tampered with or impersonated.
+                        </span>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-3 gap-y-4 gap-x-4 text-sm mt-4">
                     <div className="text-gray-500 font-medium col-span-1">Location</div>
                     <div className="col-span-2 text-gray-900 dark:text-gray-200">{locationString}</div>
 
                     <div className="text-gray-500 font-medium col-span-1">Created By</div>
-                    <div className="col-span-2 text-gray-900 dark:text-gray-200">Me</div>
+                    <div className="col-span-2 text-gray-900 dark:text-gray-200">{file.authorEmail || "Unknown"}</div>
 
                     <div className="text-gray-500 font-medium col-span-1">Uploaded At</div>
                     <div className="col-span-2 text-gray-900 dark:text-gray-200">{uploadedAt}</div>

@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { fetchFiles, getDownloadUrls } from "@/crypto/files";
 import { getSodium } from "@/lib/crypto/sodium";
 import { useDriveStore } from "@/lib/driveStore";
-import { FileIcon, FolderIcon, Info, MoreVertical, Pencil, Share2, Trash2 } from "lucide-react";
+import { useAuthStore } from "@/lib/authStore";
+import { FileIcon, FolderIcon, Info, MoreVertical, Pencil, Share2, Trash2, ShieldCheck, ShieldAlert } from "lucide-react";
 import { customFetch } from "@/lib/api"; // Added for our direct API calls
 import {
     DropdownMenu,
@@ -87,11 +88,28 @@ export function FileList() {
                                   );
                                   metadata = JSON.parse(sodium.to_string(decryptedMetaBytes));
                               }
+                              
+                              let signatureVerified = false;
+                              try {
+                                  if (file.signedEncryptedNodePassphrase && file.authorSigningPublicKey) {
+                                      signatureVerified = sodium.crypto_sign_verify_detached(
+                                          sodium.from_base64(file.signedEncryptedNodePassphrase),
+                                          sodium.from_base64(file.encryptedNodePassphrase),
+                                          sodium.from_base64(file.authorSigningPublicKey)
+                                      );
+                                  }
+                              } catch (sigErr) {
+                                  console.error("Signature verification error for", file.nodeId, sigErr);
+                              }
+
+                              if (!signatureVerified && file.signedEncryptedNodePassphrase) {
+                                  alert(`WARNING: Digital signature verification failed for file ${file.nodeId}! The file may have been tampered with.`);
+                              }
 
 
-                        return { ...file, plaintextName: sodium.to_string(decryptedBytes), metadata };
+                        return { ...file, plaintextName: sodium.to_string(decryptedBytes), metadata, signatureVerified };
                     } catch (e) {
-                        return { ...file, plaintextName: "Decryption Failed" };
+                        return { ...file, plaintextName: "Decryption Failed", signatureVerified: false };
                     }
                 });
                 setFiles(decryptedFiles);
@@ -198,6 +216,11 @@ export function FileList() {
 
             // 3. Re-wrap the moving item's Passphrase for the TARGET folder!
             const newEncryptedNodePassphrase = sodium.crypto_box_seal(fileKey, targetPublicKey);
+            
+            const accountSigningPrivKey = useAuthStore.getState().accountSigningPrivKey;
+            if (!accountSigningPrivKey) throw new Error("Missing signing key");
+            const signature = sodium.crypto_sign_detached(newEncryptedNodePassphrase, accountSigningPrivKey);
+            const newSignedEncryptedNodePassphrase = sodium.to_base64(signature);
 
             // 4. Re-encrypt the moving item's name using the TARGET folder's Private Key!
             const nameNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
@@ -215,7 +238,7 @@ export function FileList() {
                     newEncryptedName: sodium.to_base64(newEncryptedName),
                     newNameNonce: sodium.to_base64(nameNonce),
                     newEncryptedNodePassphrase: sodium.to_base64(newEncryptedNodePassphrase),
-                    newSignedEncryptedNodePassphrase: "TODO" // MVP Bypass
+                    newSignedEncryptedNodePassphrase: newSignedEncryptedNodePassphrase
                 })
             });
 

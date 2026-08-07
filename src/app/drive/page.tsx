@@ -24,7 +24,9 @@ import { FormEvent, useEffect, useState } from "react";
 import { redirect, useRouter } from "next/navigation";
 import { signOut } from "@/signout";
 import { FileList } from "@/components/file-list";
-import { useDriveStore, FolderKey } from "@/lib/driveStore";
+import { NewDriveItemButton } from "@/components/new-drive-item-button";
+import { FolderKey, useDriveStore } from "@/lib/driveStore";
+import { useAuthStore } from "@/lib/authStore";
 import { getSodium } from "@/lib/crypto/sodium";
 import { customFetch } from "@/lib/api";
 import { SearchBar } from "@/components/search-bar";
@@ -71,6 +73,11 @@ export default function DriveHomePage() {
           // 3. Re-wrap
           const newEncryptedNodePassphrase = sodium.crypto_box_seal(fileKey, targetPublicKey);
 
+          const accountSigningPrivKey = useAuthStore.getState().accountSigningPrivKey;
+          if (!accountSigningPrivKey) throw new Error("Missing signing key");
+          const signature = sodium.crypto_sign_detached(newEncryptedNodePassphrase, accountSigningPrivKey);
+          const newSignedEncryptedNodePassphrase = sodium.to_base64(signature);
+
           // 4. Re-encrypt name
           const nameNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
           const newEncryptedName = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
@@ -87,7 +94,7 @@ export default function DriveHomePage() {
                   newEncryptedName: sodium.to_base64(newEncryptedName),
                   newNameNonce: sodium.to_base64(nameNonce),
                   newEncryptedNodePassphrase: sodium.to_base64(newEncryptedNodePassphrase),
-                  newSignedEncryptedNodePassphrase: "TODO"
+                  newSignedEncryptedNodePassphrase: newSignedEncryptedNodePassphrase
               })
           });
 

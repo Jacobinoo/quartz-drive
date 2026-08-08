@@ -76,7 +76,7 @@ export function LoginForm({
                         router.push("/drive");
                       })
                       .catch((err: Error) => {
-                        console.error(`Error occured on sign in: ${err.message}}`);
+                        console.error(`Error occured on sign in: ${err.message}`);
                       })
                 }}>Login</Button>
                 <FieldDescription className="text-center">

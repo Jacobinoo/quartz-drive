@@ -5,9 +5,9 @@ import { signOut } from "@/signout";
 
 // --- CONCURRENCY LOCK STATE ---
 let isRefreshing = false;
-let refreshQueue: Array<(token: string) => void> = [];
+let refreshQueue: Array<(token: string | Error) => void> = [];
 
-const processQueue = (newToken: string) => {
+const processQueue = (newToken: string | Error) => {
   refreshQueue.forEach((callback) => callback(newToken));
   refreshQueue = [];
 };
@@ -88,8 +88,12 @@ export async function customFetch(
   if (isRefreshing) {
     console.log("401 encountered, but refresh is already in progress. Waiting in queue...");
     // Return a promise that pauses until the ongoing refresh finishes
-    return new Promise<Response>((resolve) => {
-      refreshQueue.push(async (newToken: string) => {
+    return new Promise<Response>((resolve, reject) => {
+      refreshQueue.push(async (newToken: string | Error) => {
+        if (newToken instanceof Error) {
+            reject(newToken);
+            return;
+        }
         // When woken up, retry the original request with the new token!
           const freshConfig = await getFreshConfig(init, newToken, method, url);
           resolve(await fetch(input, freshConfig));
@@ -113,7 +117,17 @@ export async function customFetch(
     config = await getFreshConfig(init, newToken, method, url);
     return await fetch(input, config);
 
-  } catch (err) {
+  } catch (err: any) {
+    if (err.message === "NETWORK_ERROR") {
+      console.warn("Backend is offline. Pausing requests.");
+      isRefreshing = false;
+      const queued = refreshQueue;
+      refreshQueue = [];
+      // Pass the error to all queued fetch calls so they fail gracefully rather than hanging forever
+      queued.forEach((callback) => callback(err));
+      throw err;
+    }
+
     // Refresh completely failed (token expired or reuse detection triggered!)
     console.error("Silent refresh failed. Logging out.", err);
     isRefreshing = false;

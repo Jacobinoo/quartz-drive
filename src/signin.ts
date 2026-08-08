@@ -3,8 +3,8 @@ import { LoginAttestationConfirmed } from "@/LoginAttestationTypes";
 import {getSodium} from "@/lib/crypto/sodium";
 import { createDpopProof, generateAndStoreDpopKey, getDpopPrivateKey } from "@/lib/dpop";
 import { Base64String } from './UtilTypes';
-import { setAccountKeys, setAccountPrivateKeys, setAuthState } from './lib/authStore';
-import { saveDevicePrivateKey, saveSessionKeys } from './DeviceKeyStore';
+import { setAccountPrivateKeys, setAuthState } from './lib/authStore';
+import { saveDevicePrivateKey } from './DeviceKeyStore';
 import { customFetch } from './lib/api';
 
 export async function signIn(email: string, password: string) {
@@ -124,8 +124,7 @@ export async function signIn(email: string, password: string) {
 
     setAuthState(
         loginAttestationData.token,
-        loginAttestationData.csrfToken,
-        loginAttestationData.sessionPrivateKey
+        loginAttestationData.csrfToken
     );
   console.log("session priv key:", loginAttestationData.sessionPrivateKey)
     const kdfSalt = sodium.from_base64(loginAttestationData.masterKdfSalt);

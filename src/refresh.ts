@@ -14,15 +14,25 @@ export async function refreshSession(): Promise<RefreshSessionResponse> {
     console.warn("Could not generate DPoP proof (user might not be logged in yet):", e);
   }
 
-    const refreshRes = await fetch("https://localhost:3100/v1/refresh", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "DPoP": dpopProof || "",
-          "X-CSRF-Token": getCsrfToken() || "",
-        },
-        credentials: "include"
-    });
+    let refreshRes: Response;
+    try {
+        refreshRes = await fetch("https://localhost:3100/v1/refresh", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "DPoP": dpopProof || "",
+              "X-CSRF-Token": getCsrfToken() || "",
+            },
+            credentials: "include"
+        });
+    } catch (e) {
+        throw new Error("NETWORK_ERROR");
+    }
+
+    if (refreshRes.status >= 500) {
+        throw new Error("NETWORK_ERROR");
+    }
+
     const resData: RefreshSessionResponse = await refreshRes.json();
 
   if (resData.status === "ok") {

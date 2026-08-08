@@ -3,7 +3,7 @@ export interface UploadWorkerInput {
     file: File;
   nodeId: string;
   uploadId: string;
-  fileKey: string;
+  fileKey: Uint8Array;
   totalChunks: number;
   accessToken?: string;
   csrfToken?: string;

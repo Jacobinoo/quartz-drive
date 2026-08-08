@@ -223,7 +223,7 @@ ctx.onmessage = async (event: MessageEvent<UploadWorkerInput>) => {
                 };
                 
                 xhr.onerror = () => reject(new Error("Network Error"));
-                xhr.send(payload);
+                xhr.send(payload as any);
             });
             const t3 = performance.now();
 

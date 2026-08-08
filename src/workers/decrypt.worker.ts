@@ -38,7 +38,7 @@ ctx.onmessage = async (event) => {
         }
 
         // Stitch the decrypted chunks together into a single file blob!
-        const fileBlob = new Blob(decryptedChunks, { type: mimeType });
+        const fileBlob = new Blob(decryptedChunks as any, { type: mimeType });
 
         ctx.postMessage({ type: 'SUCCESS', blob: fileBlob });
     } catch (error: any) {

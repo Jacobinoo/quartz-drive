@@ -136,7 +136,7 @@ async function createDpopProof(
     );
 
     return (
-        `${input}.${new Uint8Array(signature).toBase64({alphabet: "base64url", omitPadding: true})}`
+        `${input}.${(new Uint8Array(signature) as any).toBase64({alphabet: "base64url", omitPadding: true})}`
     )
 }
 

@@ -18,6 +18,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const hasBooted = useRef(false);
 
+  const [isOffline, setIsOffline] = useState(false);
+
   useEffect(() => {
     // 1. If we land on public auth pages, sanitize any leftover client state (cf / DPoP keys) immediately!
     if (pathname === "/signin" || pathname === "/signup") {
@@ -38,7 +40,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // This hits /v1/refresh and automatically populates your authStore in memory!
         await refreshSession();
         setIsBooting(false);
-      } catch (err) {
+      } catch (err: any) {
+        if (err.message === "NETWORK_ERROR") {
+          console.warn("Backend is offline during boot. Halting boot sequence without logging out.");
+          setIsOffline(true);
+          setIsBooting(false);
+          return;
+        }
         console.warn("Silent boot failed (cookie missing/expired). Wiping cookies and redirecting...");
         await signOut();
         router.push("/signin");
@@ -53,6 +61,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-background text-muted-foreground">
         <p className="animate-pulse text-sm font-medium">Loading Quartz Drive...</p>
+      </div>
+    );
+  }
+
+  if (isOffline) {
+    return (
+      <div className="flex flex-col h-screen w-screen items-center justify-center bg-background text-muted-foreground gap-4">
+        <p className="text-sm font-medium text-destructive">Cannot reach Quartz servers. Are you offline?</p>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="px-4 py-2 bg-primary text-primary-foreground font-medium rounded-md hover:opacity-90 transition-opacity"
+        >
+          Try Again
+        </button>
       </div>
     );
   }

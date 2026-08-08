@@ -381,6 +381,7 @@ function StaticTree({ item, icon }: { item: string, icon?: JSX.Element }) {
     <SidebarMenuItem>
       <SidebarMenuButton className="cursor-pointer"  onClick={() => {
         if(item == "Trash") router.push('/drive/trash')
+        if(item == "Devices") router.push('/drive/devices')
       }}>
         {icon == undefined ? <File /> : icon}
         {item}

@@ -8,6 +8,7 @@ import { getSodium } from "@/lib/crypto/sodium";
 import { FolderKey, useDriveStore } from "@/lib/driveStore";
 import { getAccountSigningPrivateKey } from "@/lib/authStore";
 import { customFetch } from "@/lib/api";
+import { fetchFiles } from "@/crypto/files";
 
 // 1. Recursive Folder Node (Decrypts children on the fly!)
 function PickerNode({ folder, selectedId, onSelect }: { folder: FolderKey, selectedId: string | null, onSelect: (f: FolderKey) => void }) {

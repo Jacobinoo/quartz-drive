@@ -1,4 +1,4 @@
-import { deleteDeviceKeys, deleteSessionKeys } from "@/DeviceKeyStore";
+import { deleteDeviceKeys } from "@/DeviceKeyStore";
 
 let memoryAccessToken: string | null = null;
 let memoryCsrfToken: string | null = null;

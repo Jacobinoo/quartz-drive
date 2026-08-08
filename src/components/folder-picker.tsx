@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronRight, ChevronDown, FolderIcon } from "lucide-react";
 import { getSodium } from "@/lib/crypto/sodium";
 import { FolderKey, useDriveStore } from "@/lib/driveStore";
-import { useAuthStore } from "@/lib/authStore";
+import { getAccountSigningPrivateKey } from "@/lib/authStore";
 import { customFetch } from "@/lib/api";
 
 // 1. Recursive Folder Node (Decrypts children on the fly!)
@@ -95,7 +95,7 @@ export function FolderPickerModal({ itemToMove, onClose }: { itemToMove: any, on
 
             const newEncryptedNodePassphrase = sodium.crypto_box_seal(fileKey, selectedFolder.publicKey);
 
-            const accountSigningPrivKey = useAuthStore.getState().accountSigningPrivKey;
+            const accountSigningPrivKey = getAccountSigningPrivateKey();
             if (!accountSigningPrivKey) throw new Error("Missing signing key");
             const signature = sodium.crypto_sign_detached(newEncryptedNodePassphrase, accountSigningPrivKey);
             const newSignedEncryptedNodePassphrase = sodium.to_base64(signature);

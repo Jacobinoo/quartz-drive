@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { fetchFiles, getDownloadUrls } from "@/crypto/files";
 import { getSodium } from "@/lib/crypto/sodium";
 import { useDriveStore } from "@/lib/driveStore";
-import { useAuthStore } from "@/lib/authStore";
+import { getAccountSigningPrivateKey } from "@/lib/authStore";
 import { FileIcon, FolderIcon, Info, MoreVertical, Pencil, Share2, Trash2, ShieldCheck, ShieldAlert } from "lucide-react";
 import { customFetch } from "@/lib/api"; // Added for our direct API calls
 import {
@@ -218,7 +218,7 @@ export function FileList() {
             // 3. Re-wrap the moving item's Passphrase for the TARGET folder!
             const newEncryptedNodePassphrase = sodium.crypto_box_seal(fileKey, targetPublicKey);
             
-            const accountSigningPrivKey = useAuthStore.getState().accountSigningPrivKey;
+            const accountSigningPrivKey = getAccountSigningPrivateKey();
             if (!accountSigningPrivKey) throw new Error("Missing signing key");
             const signature = sodium.crypto_sign_detached(newEncryptedNodePassphrase, accountSigningPrivKey);
             const newSignedEncryptedNodePassphrase = sodium.to_base64(signature);

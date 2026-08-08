@@ -21,7 +21,7 @@ import { redirect, useRouter } from "next/navigation";
 import { FileList } from "@/components/file-list";
 import { NewDriveItemButton } from "@/components/new-drive-item-button";
 import { FolderKey, useDriveStore } from "@/lib/driveStore";
-import { useAuthStore } from "@/lib/authStore";
+import { getAccountSigningPrivateKey } from "@/lib/authStore";
 import { getSodium } from "@/lib/crypto/sodium";
 import { customFetch } from "@/lib/api";
 import { SearchBar } from "@/components/search-bar";
@@ -68,7 +68,7 @@ export default function DriveHomePage() {
           // 3. Re-wrap
           const newEncryptedNodePassphrase = sodium.crypto_box_seal(fileKey, targetPublicKey);
 
-          const accountSigningPrivKey = useAuthStore.getState().accountSigningPrivKey;
+          const accountSigningPrivKey = getAccountSigningPrivateKey();
           if (!accountSigningPrivKey) throw new Error("Missing signing key");
           const signature = sodium.crypto_sign_detached(newEncryptedNodePassphrase, accountSigningPrivKey);
           const newSignedEncryptedNodePassphrase = sodium.to_base64(signature);

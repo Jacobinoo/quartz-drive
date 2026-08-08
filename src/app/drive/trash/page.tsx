@@ -178,7 +178,7 @@ export default function TrashPage() {
 
       try {
         // Unwrap passphrase using parent's keypair
-        const nodePassphrase = sodium.crypto_box_seal_open(
+        const nodePassphrase: Uint8Array = sodium.crypto_box_seal_open(
           sodium.from_base64(entry.encryptedNodePassphrase),
           currentKey!.publicKey,
           currentKey!.privateKey

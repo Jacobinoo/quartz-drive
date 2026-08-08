@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { refreshSession } from "@/refresh";
 import { useRouter, usePathname } from "next/navigation";
 import { signOut } from "@/signout";
@@ -16,6 +16,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return pathname !== "/signin" && pathname !== "/signup";
   });
 
+  const hasBooted = useRef(false);
+
   useEffect(() => {
     // 1. If we land on public auth pages, sanitize any leftover client state (cf / DPoP keys) immediately!
     if (pathname === "/signin" || pathname === "/signup") {
@@ -26,30 +28,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    if (hasBooted.current) return;
+    hasBooted.current = true;
+
     // 2. Run the boot-up refresh!
     async function boot() {
       try {
         console.log("App booting... restoring session from secure cookie...");
         // This hits /v1/refresh and automatically populates your authStore in memory!
         await refreshSession();
+        setIsBooting(false);
       } catch (err) {
         console.warn("Silent boot failed (cookie missing/expired). Wiping cookies and redirecting...");
         await signOut();
-        window.location.href = "/signin";
-      } finally {
-        setIsBooting(false);
+        router.push("/signin");
       }
     }
 
     boot();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [pathname, router]);
 
   // 3. Show a sleek loading screen while we verify cookies and unwrap keys
   if (isBooting) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-background text-muted-foreground">
-        <p className="animate-pulse text-sm font-medium">Restoring secure session...</p>
+        <p className="animate-pulse text-sm font-medium">Loading Quartz Drive...</p>
       </div>
     );
   }

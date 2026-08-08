@@ -1,16 +1,18 @@
 package app
 
 import (
-	"context"
 	"quartz/pkg/storage"
-	pb "quartz/proto"
+
+	"github.com/redis/go-redis/v9"
 
 	"gorm.io/gorm"
 )
 
 type ServerState struct {
 	DB             *gorm.DB
-	GRPCClient     pb.QuartzInternalCryptoServiceClient
-	GRPCContext    context.Context
+	Redis          *redis.Client
+	OpaqueSetup    []byte
+	// GRPCClient     pb.QuartzInternalCryptoServiceClient
+	// GRPCContext    context.Context
 	StorageService storage.StorageService
 }

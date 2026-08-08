@@ -268,7 +268,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	url, err := h.storage.GenerateUploadUrl(r.Context(), chunkRow.ObjectKey, expiry, uploadRequest.DeclaredSize, uploadRequest.ChunkHash)
 	if err != nil {
-		log.Printf("%w", err)
+		log.Printf("%v", err)
 		http.Error(w, "failed to generate presigned url", http.StatusInternalServerError)
 		return
 	}
@@ -278,7 +278,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	result := h.db.Save(&chunkRow)
 	if result.Error != nil {
-		log.Printf("chunk row generated urls amount and declared size could not be saved", err)
+		log.Printf("chunk row generated urls amount and declared size could not be saved: %v", err)
 		http.Error(w, "failed to generate presigned url", http.StatusInternalServerError)
 		return
 	}
@@ -373,7 +373,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 	log.Printf("checksum is %s", sha256)
 
 	if subtle.ConstantTimeCompare([]byte(sha256), []byte(uploadRequest.ChunkHash)) == 0 {
-		log.Printf("integrity check failed", err)
+		log.Printf("integrity check failed: %v", err)
 		go func(objectKey string) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()

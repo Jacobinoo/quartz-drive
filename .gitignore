@@ -8,3 +8,6 @@ build/
 
 .DS_Store
 *.log
+
+# Rust artifacts
+internal/bindings/opaque_rust/target/

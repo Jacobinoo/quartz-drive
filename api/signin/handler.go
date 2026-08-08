@@ -4,35 +4,40 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"quartz/internal/bindings"
 	"quartz/internal/dto"
 	"quartz/internal/model"
 	"quartz/pkg/dpop"
 	"quartz/pkg/token"
-	pb "quartz/proto"
+
+	// pb "quartz/proto"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/mssola/useragent"
-
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 type Handler struct {
-	db   *gorm.DB
-	grpc pb.QuartzInternalCryptoServiceClient
-	ctx  context.Context
+	db          *gorm.DB
+	redis       *redis.Client
+	opaqueSetup []byte
 }
 
-func NewHandler(db *gorm.DB, grpc pb.QuartzInternalCryptoServiceClient, ctx context.Context) *Handler {
-	return &Handler{db: db, grpc: grpc, ctx: ctx}
+func NewHandler(db *gorm.DB, redisClient *redis.Client, opaqueSetup []byte) *Handler {
+	return &Handler{db: db, redis: redisClient, opaqueSetup: opaqueSetup}
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -50,29 +55,54 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	grpcStartLoginReq := &pb.StartLoginRequest{
-		Email:              m1.Email,
-		RegistrationRecord: userRegistrationRecord.RegistrationRecord,
-		UserIdentifier:     userRegistrationRecord.CredentialID.String(),
-		StartLoginRequest:  m1.LoginRequest,
+	regRecordBytes, err := base64.RawURLEncoding.DecodeString(userRegistrationRecord.RegistrationRecord)
+	if err != nil {
+		fmt.Print(err)
+		http.Error(w, "invalid registration record in database", http.StatusInternalServerError)
+		return
 	}
 
-	startLogRes, startLogErr := h.grpc.StartLogin(h.ctx, grpcStartLoginReq)
-	if startLogErr != nil {
-		log.Printf("grpc StartLogin call failed: %v", startLogErr)
-	} else {
-		log.Println("grpc StartLogin call succeeded")
+	loginReqBytes, err := base64.RawURLEncoding.DecodeString(m1.LoginRequest)
+	if err != nil {
+		http.Error(w, "invalid base64 in login request", http.StatusBadRequest)
+		return
 	}
+
+	log.Printf("DEBUG: opaqueSetup len=%d", len(h.opaqueSetup))
+	log.Printf("DEBUG: regRecordBytes len=%d", len(regRecordBytes))
+	log.Printf("DEBUG: loginReqBytes len=%d", len(loginReqBytes))
+	log.Printf("DEBUG: credentialID len=%d", len(userRegistrationRecord.CredentialID.String()))
+
+	startLogRes, serverLoginState, err := bindings.StartLogin(
+		h.opaqueSetup,
+		regRecordBytes,
+		loginReqBytes,
+		[]byte(userRegistrationRecord.CredentialID.String()),
+	)
 
 	var m2 dto.M2Login
 
-	if startLogErr == nil {
+	if err == nil {
+		// Generate nonce
+		nonceBytes := make([]byte, 32)
+		rand.Read(nonceBytes)
+		nonce := hex.EncodeToString(nonceBytes)
+
+		// Store in Redis
+		nonceData := map[string]string{
+			"serverLoginState": base64.RawURLEncoding.EncodeToString(serverLoginState),
+			"email":            m1.Email,
+		}
+		nonceJSON, _ := json.Marshal(nonceData)
+		h.redis.Set(context.Background(), "login:nonce:"+nonce, nonceJSON, 30*time.Second)
+
 		m2 = dto.M2Login{
 			Status:        "ok",
-			LoginResponse: startLogRes.LoginResponse,
-			Nonce:         startLogRes.Nonce,
+			LoginResponse: base64.RawURLEncoding.EncodeToString(startLogRes),
+			Nonce:         nonce,
 		}
 	} else {
+		log.Printf("bindings StartLogin call failed: %v", err)
 		m2 = dto.M2Login{
 			Status:        "not_ok",
 			LoginResponse: "",
@@ -80,7 +110,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	err := json.NewEncoder(w).Encode(m2)
+	err = json.NewEncoder(w).Encode(m2)
 	if err != nil {
 		log.Fatalln(err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -89,6 +119,8 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -108,26 +140,44 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	grpcFinishLoginReq := &pb.FinishLoginRequest{
-		Nonce:              m3.Nonce,
-		FinishLoginRequest: m3.FinishLoginRequest,
+	// Fetch from Redis
+	nonceJSON, err := h.redis.Get(context.Background(), "login:nonce:"+m3.Nonce).Result()
+	if err != nil {
+		http.Error(w, "invalid or expired nonce", http.StatusBadRequest)
+		return
 	}
 
-	finishLogRes, finishLogErr := h.grpc.FinishLogin(h.ctx, grpcFinishLoginReq)
-	if finishLogErr != nil {
-		log.Printf("grpc FinishLogin call failed: %v", finishLogErr)
-	} else {
-		log.Println("grpc FinishLogin call succeeded")
+	var nonceData map[string]string
+	json.Unmarshal([]byte(nonceJSON), &nonceData)
+
+	serverLoginState, _ := base64.RawURLEncoding.DecodeString(nonceData["serverLoginState"])
+	email := nonceData["email"]
+
+	finishLoginReqBytes, err := base64.RawURLEncoding.DecodeString(m3.FinishLoginRequest)
+	if err != nil {
+		http.Error(w, "invalid base64 in finish login request", http.StatusBadRequest)
+		return
 	}
 
-	fmt.Println("Established a new trusted session key: ", finishLogRes.SessionKey)
+	sessionKey, err := bindings.FinishLogin(
+		serverLoginState,
+		finishLoginReqBytes,
+	)
+
+	if err != nil {
+		log.Printf("bindings FinishLogin call failed: %v", err)
+		http.Error(w, "login failed", http.StatusUnauthorized)
+		return
+	}
+
+	fmt.Println("Established a new trusted session key: ", hex.EncodeToString(sessionKey))
 
 	var trustedUserInfo dto.TrustedUserInformation
 
 	err = h.db.Model(&model.User{}).
 		Select("users.*, user_key_stores.*").
 		Joins("INNER JOIN user_key_stores ON user_key_stores.user_id = users.id").
-		Where("users.email = ?", finishLogRes.Email).
+		Where("users.email = ?", email).
 		First(&trustedUserInfo).Error
 
 	if err != nil {

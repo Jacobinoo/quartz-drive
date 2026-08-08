@@ -16,7 +16,8 @@ type (
 
 		App
 		DB
-		GRPC
+		// GRPC
+		KV
 		JWT
 		CRYPTO
 		S3
@@ -41,9 +42,14 @@ type (
 		ConnectingApplicationName string `env:"APP_NAME,required"`
 	}
 
-	GRPC struct {
-		Host string `env:"GRPC_HOST,required"`
-		Port string `env:"GRPC_PORT,required"`
+	// GRPC struct {
+	// 	Host string `env:"GRPC_HOST,required"`
+	// 	Port string `env:"GRPC_PORT,required"`
+	// }
+
+	KV struct {
+		URL string `env:"KV_URL,required"`
+		Key string `env:"KV_KEY,required"`
 	}
 
 	JWT struct {
@@ -52,10 +58,11 @@ type (
 	}
 
 	CRYPTO struct {
-		KdfOpsLimit       int8  `env:"KDF_OPSLIMIT,required"`
-		KdfMemLimit       int64 `env:"KDF_MEMLIMIT,required"`
-		KdfAlg            int8  `env:"KDF_ALG,required"`
-		EncryptionVersion int16 `env:"ENC_VERSION,required"`
+		KdfOpsLimit       int8   `env:"KDF_OPSLIMIT,required"`
+		KdfMemLimit       int64  `env:"KDF_MEMLIMIT,required"`
+		KdfAlg            int8   `env:"KDF_ALG,required"`
+		EncryptionVersion int16  `env:"ENC_VERSION,required"`
+		OpaqueServerSetup string `env:"OPAQUE_SERVER_SETUP,required"`
 	}
 
 	S3 struct {

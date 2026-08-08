@@ -1,31 +1,37 @@
 package signup
 
 import (
-	"context"
+	"encoding/base64"
 	"encoding/json"
 	"log"
 	"net/http"
 	"quartz/config"
+	"quartz/internal/bindings"
 	"quartz/internal/dto"
 	"quartz/internal/model"
-	pb "quartz/proto"
+
+	// pb "quartz/proto"
+
+	"github.com/redis/go-redis/v9"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 type Handler struct {
-	db   *gorm.DB
-	grpc pb.QuartzInternalCryptoServiceClient
-	ctx  context.Context
+	db          *gorm.DB
+	redis       *redis.Client
+	opaqueSetup []byte
 }
 
-func NewHandler(db *gorm.DB, grpc pb.QuartzInternalCryptoServiceClient, ctx context.Context) *Handler {
-	return &Handler{db: db, grpc: grpc, ctx: ctx}
+func NewHandler(db *gorm.DB, redisClient *redis.Client, opaqueSetup []byte) *Handler {
+	return &Handler{db: db, redis: redisClient, opaqueSetup: opaqueSetup}
 }
 
 // Signup: (opaque receive m1 & send m2)
 func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -37,25 +43,27 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	grpcStartRegistrationReq := &pb.StartRegistrationRequest{
-		RegistrationRequest: m1.RegistrationRequest,
-		Email:               m1.Email,
+	credID := uuid.New()
+
+	regReqBytes, err := base64.RawURLEncoding.DecodeString(m1.RegistrationRequest)
+	if err != nil {
+		http.Error(w, "invalid base64 in registration request", http.StatusBadRequest)
+		return
 	}
 
-	startRegRes, startRegErr := h.grpc.StartRegistration(h.ctx, grpcStartRegistrationReq)
-	if startRegErr != nil {
-		log.Printf("grpc StartRegistration call failed: %v", startRegErr)
-	} else {
-		log.Println("grpc StartRegistration call succeeded")
-	}
+	regResponse, err := bindings.StartRegistration(
+		h.opaqueSetup,
+		regReqBytes,
+		[]byte(credID.String()),
+	)
 
 	var registrationResponse dto.M2
 
-	if startRegErr == nil {
+	if err == nil {
 		registrationResponse = dto.M2{
 			Status:               "ok",
-			RegistrationResponse: startRegRes.RegistrationResponse,
-			Nonce:                startRegRes.Nonce,
+			RegistrationResponse: base64.RawURLEncoding.EncodeToString(regResponse),
+			Nonce:                credID.String(), // Use the generated UUID as the nonce
 		}
 		w.WriteHeader(http.StatusOK)
 	} else {
@@ -83,26 +91,34 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	grpcFinishRegistrationReq := &pb.FinishRegistrationRequest{
-		Nonce:              m3.User.APAKE.RegistrationNonce,
-		RegistrationRecord: m3.User.APAKE.RegistrationRecord,
-	}
-
-	finishRegRes, finishRegErr := h.grpc.FinishRegistration(h.ctx, grpcFinishRegistrationReq)
-	if finishRegErr != nil {
-		log.Printf("grpc FinishRegistration call failed: %v", finishRegErr)
-	} else {
-		log.Println("grpc FinishRegistration call succeeded")
-	}
-
-	uuidString := finishRegRes.Uuid
+	uuidString := m3.User.APAKE.RegistrationNonce
 	credID, uuidParseErr := uuid.Parse(uuidString)
 	if uuidParseErr != nil {
-		http.Error(w, uuidParseErr.Error(), http.StatusInternalServerError)
+		http.Error(w, "invalid user identifier in nonce", http.StatusBadRequest)
 		return
 	}
 
-	err := h.db.Transaction(func(tx *gorm.DB) error {
+	regRecordBytes, err := base64.RawURLEncoding.DecodeString(m3.User.APAKE.RegistrationRecord)
+	if err != nil {
+		http.Error(w, "invalid base64 in registration record", http.StatusBadRequest)
+		return
+	}
+
+	passwordFileRecord, err := bindings.FinishRegistration(
+		regRecordBytes,
+	)
+
+	if err != nil {
+		log.Printf("bindings FinishRegistration call failed: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	} else {
+		log.Println("bindings FinishRegistration call succeeded")
+	}
+
+	m3.User.APAKE.RegistrationRecord = base64.RawURLEncoding.EncodeToString(passwordFileRecord)
+
+	err = h.db.Transaction(func(tx *gorm.DB) error {
 		storedUserKeyStore := model.UserKeyStore{
 			UserID:                               credID,
 			MasterKdfSalt:                        m3.User.Keys.MasterKdfSalt,

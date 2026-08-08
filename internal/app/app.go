@@ -16,16 +16,20 @@ import (
 	"quartz/config"
 	"quartz/pkg/database"
 	"quartz/pkg/storage"
-	pb "quartz/proto"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"encoding/base64"
+
+	// "google.golang.org/grpc"
+	// "google.golang.org/grpc/credentials/insecure"
 	"gorm.io/gorm"
 )
 
 func Run() {
-	grpcClient, conn := initGrpcClient()
-	defer conn.Close()
+	// grpcClient, conn := initGrpcClient()
+	// defer conn.Close()
+
+	redisClient := database.NewRedis()
+	defer redisClient.Close()
 
 	db := initDb()
 	if db == nil {
@@ -40,8 +44,10 @@ func Run() {
 
 	state := &ServerState{
 		DB:             db,
-		GRPCClient:     *grpcClient,
-		GRPCContext:    context.WithoutCancel(context.Background()),
+		Redis:          redisClient,
+		OpaqueSetup:    opaqueSetupBytes(),
+		// GRPCClient:     *grpcClient,
+		// GRPCContext:    context.WithoutCancel(context.Background()),
 		StorageService: storageService,
 	}
 
@@ -70,17 +76,33 @@ func initDb() *gorm.DB {
 	return db
 }
 
-func initGrpcClient() (*pb.QuartzInternalCryptoServiceClient, *grpc.ClientConn) {
-	var opts []grpc.DialOption
-	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+// func initGrpcClient() (*pb.QuartzInternalCryptoServiceClient, *grpc.ClientConn) {
+// 	var opts []grpc.DialOption
+// 	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+// 
+// 	conn, grpcErr := grpc.NewClient(config.Cfg.GRPC.Host+":"+config.Cfg.GRPC.Port, opts...)
+// 	if grpcErr != nil {
+// 		log.Fatalf("grpc did not connect: %v", grpcErr)
+// 	}
+// 
+// 	grpcClient := pb.NewQuartzInternalCryptoServiceClient(conn)
+// 	return &grpcClient, conn
+// }
 
-	conn, grpcErr := grpc.NewClient(config.Cfg.GRPC.Host+":"+config.Cfg.GRPC.Port, opts...)
-	if grpcErr != nil {
-		log.Fatalf("grpc did not connect: %v", grpcErr)
+func opaqueSetupBytes() []byte {
+	str := config.Cfg.CRYPTO.OpaqueServerSetup
+	bytes, err := base64.StdEncoding.DecodeString(str)
+	if err != nil {
+		// fallback to URLEncoding if standard fails
+		bytes, err = base64.URLEncoding.WithPadding(base64.NoPadding).DecodeString(str)
+		if err != nil {
+			log.Fatalf("failed to decode OPAQUE_SERVER_SETUP: %v", err)
+		}
 	}
-
-	grpcClient := pb.NewQuartzInternalCryptoServiceClient(conn)
-	return &grpcClient, conn
+	if len(bytes) != 128 {
+		log.Fatalf("OPAQUE_SERVER_SETUP has invalid length %d (expected 128 bytes)", len(bytes))
+	}
+	return bytes
 }
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
@@ -92,13 +114,13 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 func initV1Mux(state *ServerState) *http.ServeMux {
 	mux := http.NewServeMux()
 
-	signinHandler := signin.NewHandler(state.DB, state.GRPCClient, state.GRPCContext)
+	signinHandler := signin.NewHandler(state.DB, state.Redis, state.OpaqueSetup)
 	signin.RegisterRoutes(mux, signinHandler)
 
 	signoutHandler := signout.NewHandler(state.DB)
 	signout.RegisterRoutes(mux, signoutHandler)
 
-	signupHandler := signup.NewHandler(state.DB, state.GRPCClient, state.GRPCContext)
+	signupHandler := signup.NewHandler(state.DB, state.Redis, state.OpaqueSetup)
 	signup.RegisterRoutes(mux, signupHandler)
 
 	refreshHandler := refresh.NewHandler(state.DB)

@@ -15,7 +15,10 @@ type Link struct {
 	//   (Szyfrowane kluczem ParentNode).
 	// - Jeśli == NULL: To jest "Volume Root" (główny folder udziału).
 	//   (Szyfrowane kluczem Share).
-	ParentNodeID *uuid.UUID `gorm:"type:uuid;index"`
+	ParentNodeID *uuid.UUID `gorm:"type:uuid;index:idx_parent_node_deleted"`
+
+	// DeletedAt explicitly defined to join the composite index
+	DeletedAt gorm.DeletedAt `gorm:"index:idx_parent_node_deleted"`
 
 	// ChildNodeID: Wskazuje na PLIK lub FOLDER (Węzeł), który ten link reprezentuje.
 	// To tutaj "żyje" plik. Link to tylko etykieta w katalogu rodzica.

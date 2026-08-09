@@ -8,7 +8,7 @@ import (
 
 type ShareMember struct {
 	ShareID uuid.UUID `gorm:"type:uuid;primaryKey;not null"`
-	UserID  uuid.UUID `gorm:"type:uuid;primaryKey;not null"`
+	UserID  uuid.UUID `gorm:"type:uuid;primaryKey;index;not null"`
 
 	Permissions int16 `gorm:"type:smallint;not null"`
 

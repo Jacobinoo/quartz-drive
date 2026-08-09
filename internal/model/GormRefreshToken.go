@@ -11,12 +11,12 @@ type GormRefreshToken struct {
 	ID uuid.UUID `gorm:"primarykey;not null;default:gen_random_uuid()"`
 
 	//UUIDv4
-	UserID uuid.UUID `gorm:"type:uuid;index;not null"`
+	UserID uuid.UUID `gorm:"type:uuid;index:idx_user_revoked;not null"`
 
 	TokenHash string `gorm:"type:varchar(64);uniqueIndex;not null"`
 
 	FamilyID  uuid.UUID `gorm:"type:uuid;index;not null"`
-	IsRevoked bool      `gorm:"default:false;not null"`
+	IsRevoked bool      `gorm:"default:false;index:idx_user_revoked;not null"`
 
 	LastUsedAt time.Time `gorm:"default:null"`
 

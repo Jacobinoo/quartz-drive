@@ -1,0 +1,8 @@
+build/
+target/
+.git/
+.idea/
+.env
+*.log
+sweeps.log
+*.md

@@ -1,0 +1,14 @@
+services:
+  quartz-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: quartz-api
+    ports:
+      - "3100:3100"
+    env_file:
+      - .env
+    volumes:
+      # Mount the cert directory so you can update certs without rebuilding the image
+      - ./cert:/app/cert
+    restart: unless-stopped

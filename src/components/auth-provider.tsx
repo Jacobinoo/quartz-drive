@@ -19,6 +19,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hasBooted = useRef(false);
 
   const [isOffline, setIsOffline] = useState(false);
+  const [isRateLimited, setIsRateLimited] = useState(false);
 
   useEffect(() => {
     // 1. If we land on public auth pages, sanitize any leftover client state (cf / DPoP keys) immediately!
@@ -47,6 +48,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsBooting(false);
           return;
         }
+        if (err.message === "RATE_LIMIT_ERROR") {
+          console.warn("Backend rate limit exceeded during boot.");
+          setIsRateLimited(true);
+          setIsBooting(false);
+          return;
+        }
         console.warn("Silent boot failed (cookie missing/expired). Wiping cookies and redirecting...");
         await signOut();
         router.push("/signin");
@@ -69,6 +76,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex flex-col h-screen w-screen items-center justify-center bg-background text-muted-foreground gap-4">
         <p className="text-sm font-medium text-destructive">Cannot reach Quartz servers. Are you offline?</p>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="px-4 py-2 bg-primary text-primary-foreground font-medium rounded-md hover:opacity-90 transition-opacity"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
+  if (isRateLimited) {
+    return (
+      <div className="flex flex-col h-screen w-screen items-center justify-center bg-background text-muted-foreground gap-4">
+        <p className="text-sm font-medium text-destructive">Rate limited. Try again in a minute.</p>
         <button 
           onClick={() => window.location.reload()} 
           className="px-4 py-2 bg-primary text-primary-foreground font-medium rounded-md hover:opacity-90 transition-opacity"

@@ -29,6 +29,10 @@ export async function refreshSession(): Promise<RefreshSessionResponse> {
         throw new Error("NETWORK_ERROR");
     }
 
+    if (refreshRes.status === 429) {
+        throw new Error("RATE_LIMIT_ERROR");
+    }
+    
     if (refreshRes.status >= 500) {
         throw new Error("NETWORK_ERROR");
     }

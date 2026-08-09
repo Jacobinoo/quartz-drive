@@ -147,26 +147,26 @@ func initV1Mux(state *ServerState) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	signinHandler := signin.NewHandler(state.DB, state.Redis, state.OpaqueSetup)
-	signin.RegisterRoutes(mux, signinHandler)
+	signin.RegisterRoutes(mux, signinHandler, state.Redis)
 
 	signoutHandler := signout.NewHandler(state.DB)
-	signout.RegisterRoutes(mux, signoutHandler)
+	signout.RegisterRoutes(mux, signoutHandler, state.Redis)
 
 	signupHandler := signup.NewHandler(state.DB, state.Redis, state.OpaqueSetup)
-	signup.RegisterRoutes(mux, signupHandler)
+	signup.RegisterRoutes(mux, signupHandler, state.Redis)
 
 	refreshHandler := refresh.NewHandler(state.DB)
-	refresh.RegisterRoutes(mux, refreshHandler)
+	refresh.RegisterRoutes(mux, refreshHandler, state.Redis)
 
 	filesHandler := files.NewHandler(state.DB, state.StorageService)
 	go filesHandler.StartSweepScheduler(context.Background())
-	files.RegisterRoutes(mux, filesHandler)
+	files.RegisterRoutes(mux, filesHandler, state.Redis)
 
 	devicesHandler := devices.NewHandler(state.DB)
-	devices.RegisterRoutes(mux, devicesHandler)
+	devices.RegisterRoutes(mux, devicesHandler, state.Redis)
 
 	keysHandler := keys.NewHandler(state.DB)
-	keys.RegisterRoutes(mux, keysHandler)
+	keys.RegisterRoutes(mux, keysHandler, state.Redis)
 
 	return mux
 }

@@ -4,30 +4,12 @@ import (
 	"net"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/go-redis/redis_rate/v10"
 	"github.com/google/uuid"
-	"golang.org/x/time/rate"
+	"github.com/redis/go-redis/v9"
 )
-
-type client struct {
-	limiter  *rate.Limiter
-	lastSeen time.Time
-}
-
-
-func cleanupClients(clientsMap *sync.Map) {
-	now := time.Now()
-	clientsMap.Range(func(key, value interface{}) bool {
-		c := value.(*client)
-		// If the client hasn't made a request in 3 minutes, remove their bucket
-		if now.Sub(c.lastSeen) > 3*time.Minute {
-			clientsMap.Delete(key)
-		}
-		return true
-	})
-}
 
 // extractIP gets the true IP address even behind proxies
 func extractIP(r *http.Request) string {
@@ -47,39 +29,27 @@ func extractIP(r *http.Request) string {
 	return ip
 }
 
-func getLimiter(clientsMap *sync.Map, key string, r rate.Limit, b int) *rate.Limiter {
-	if v, ok := clientsMap.Load(key); ok {
-		c := v.(*client)
-		c.lastSeen = time.Now()
-		return c.limiter
-	}
-
-	limiter := rate.NewLimiter(r, b)
-	clientsMap.Store(key, &client{
-		limiter:  limiter,
-		lastSeen: time.Now(),
-	})
-	return limiter
-}
-
 // RateLimitIP limits based on client IP address
-func RateLimitIP(requests int, per time.Duration, burst int) func(http.HandlerFunc) http.HandlerFunc {
-	limit := rate.Limit(float64(requests) / per.Seconds())
-	clientsMap := &sync.Map{}
-
-	go func() {
-		for {
-			time.Sleep(time.Minute)
-			cleanupClients(clientsMap)
-		}
-	}()
+func RateLimitIP(rdb *redis.Client, name string, requests int, per time.Duration, burst int) func(http.HandlerFunc) http.HandlerFunc {
+	limiter := redis_rate.NewLimiter(rdb)
+	limit := redis_rate.Limit{
+		Rate:   requests,
+		Burst:  burst,
+		Period: per,
+	}
 
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			ip := extractIP(r)
-			limiter := getLimiter(clientsMap, ip, limit, burst)
+			res, err := limiter.Allow(r.Context(), "rate:ip:"+name+":"+ip, limit)
 			
-			if !limiter.Allow() {
+			if err != nil {
+				// Fail open if Redis is temporarily unreachable
+				next.ServeHTTP(w, r)
+				return
+			}
+			
+			if res.Allowed == 0 {
 				http.Error(w, "429 Too Many Requests", http.StatusTooManyRequests)
 				return
 			}
@@ -90,16 +60,13 @@ func RateLimitIP(requests int, per time.Duration, burst int) func(http.HandlerFu
 }
 
 // RateLimitUser limits based on UserID from JWT context
-func RateLimitUser(requests int, per time.Duration, burst int) func(http.HandlerFunc) http.HandlerFunc {
-	limit := rate.Limit(float64(requests) / per.Seconds())
-	clientsMap := &sync.Map{}
-
-	go func() {
-		for {
-			time.Sleep(time.Minute)
-			cleanupClients(clientsMap)
-		}
-	}()
+func RateLimitUser(rdb *redis.Client, name string, requests int, per time.Duration, burst int) func(http.HandlerFunc) http.HandlerFunc {
+	limiter := redis_rate.NewLimiter(rdb)
+	limit := redis_rate.Limit{
+		Rate:   requests,
+		Burst:  burst,
+		Period: per,
+	}
 
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
@@ -117,8 +84,13 @@ func RateLimitUser(requests int, per time.Duration, burst int) func(http.Handler
 				return
 			}
 			
-			limiter := getLimiter(clientsMap, userID.String(), limit, burst)
-			if !limiter.Allow() {
+			res, err := limiter.Allow(r.Context(), "rate:user:"+name+":"+userID.String(), limit)
+			if err != nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+			
+			if res.Allowed == 0 {
 				http.Error(w, "429 Too Many Requests", http.StatusTooManyRequests)
 				return
 			}

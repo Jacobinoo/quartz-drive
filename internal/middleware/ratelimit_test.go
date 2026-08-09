@@ -9,13 +9,28 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
+func setupTestRedis(t *testing.T) *redis.Client {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
+	}
+	t.Cleanup(mr.Close)
+
+	return redis.NewClient(&redis.Options{
+		Addr: mr.Addr(),
+	})
+}
+
 func TestRateLimitIP_Strict(t *testing.T) {
+	rdb := setupTestRedis(t)
 	// Strict limit: 5 requests per minute, burst of 2.
 	// This means we can only do 2 requests immediately. The 3rd should fail unless time passes.
-	middleware := RateLimitIP(5, time.Minute, 2)
+	middleware := RateLimitIP(rdb, "test", 5, time.Minute, 2)
 	handler := middleware(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -53,9 +68,10 @@ func TestRateLimitIP_Strict(t *testing.T) {
 }
 
 func TestRateLimitUser_Standard(t *testing.T) {
+	rdb := setupTestRedis(t)
 	// Standard limit: 1 request per sec, burst 50.
 	// We use 1 req/sec to prevent the bucket from refilling while the test executes.
-	middleware := RateLimitUser(1, time.Second, 50)
+	middleware := RateLimitUser(rdb, "test", 1, time.Second, 50)
 	handler := middleware(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -95,12 +111,13 @@ func TestRateLimitUser_Standard(t *testing.T) {
 }
 
 func TestRateLimitStacked(t *testing.T) {
+	rdb := setupTestRedis(t)
 	// Stacked middleware: Loose IP limit, Strict User limit.
 	// Loose IP: burst 100
 	// Strict User: burst 50
 
-	looseIP := RateLimitIP(300, time.Second, 100)
-	strictUser := RateLimitUser(1, time.Second, 50)
+	looseIP := RateLimitIP(rdb, "test", 300, time.Second, 100)
+	strictUser := RateLimitUser(rdb, "test", 1, time.Second, 50)
 
 	handler := looseIP(strictUser(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

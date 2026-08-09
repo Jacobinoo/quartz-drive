@@ -1,7 +1,8 @@
 package bindings
 
 /*
-#cgo LDFLAGS: -L${SRCDIR}/opaque_rust/target/release -lopaque_rust -lm -ldl -framework Security -framework CoreFoundation
+#cgo darwin LDFLAGS: -L${SRCDIR}/opaque_rust/target/release -lopaque_rust -lm -ldl -framework Security -framework CoreFoundation
+#cgo linux LDFLAGS: -L${SRCDIR}/opaque_rust/target/release -lopaque_rust -lm -ldl
 #cgo CFLAGS: -I${SRCDIR}/opaque_rust
 
 #include "opaque_rust/opaque_rust.h"

@@ -3,9 +3,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: quartz-api
-    ports:
-      - "3100:3100"
     env_file:
       - .env
     volumes:
@@ -18,3 +15,14 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+    deploy:
+      replicas: 3
+
+  lb:
+    image: nginx:latest
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - quartz-api

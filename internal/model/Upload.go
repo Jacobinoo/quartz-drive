@@ -18,7 +18,7 @@ const (
 
 type Upload struct {
 	gorm.Model
-	ID                uuid.UUID    `gorm:"primarykey;not null;default:uuidv7()"`
+	ID                uuid.UUID    `gorm:"primarykey;not null;default:gen_random_uuid()"`
 	UserID            uuid.UUID    `gorm:"type:uuid;not null"`
 	NodeID            uuid.UUID    `gorm:"type:uuid;not null"`
 	TotalChunks       int64        `gorm:"not null"`

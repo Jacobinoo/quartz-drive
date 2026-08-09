@@ -7,7 +7,7 @@ import (
 )
 
 type Session struct {
-	ID                 uuid.UUID `gorm:"primarykey;not null;default:uuidv7()"`
+	ID                 uuid.UUID `gorm:"primarykey;not null;default:gen_random_uuid()"`
 	UserID             uuid.UUID `gorm:"type:uuid;index;not null"`
 	DevicePublicKey    string    `gorm:"type:text;"`
 	WrappedAccountKeys string    `gorm:"type:text;"`

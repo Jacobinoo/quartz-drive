@@ -8,7 +8,7 @@ import (
 
 type GormRefreshToken struct {
 	//UUIDv7
-	ID uuid.UUID `gorm:"primarykey;not null;default:uuidv7()"`
+	ID uuid.UUID `gorm:"primarykey;not null;default:gen_random_uuid()"`
 
 	//UUIDv4
 	UserID uuid.UUID `gorm:"type:uuid;index;not null"`

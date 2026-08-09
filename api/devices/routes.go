@@ -8,7 +8,7 @@ import (
 
 func RegisterRoutes(mux *http.ServeMux, h *Handler) {
 	limitIP := middleware.RateLimitIP(300, time.Second, 100)
-	limitUser := middleware.RateLimitUser(100, time.Second, 50)
+	limitUser := middleware.RateLimitUser(6, time.Minute, 30)
 
 	wrap := func(handler http.HandlerFunc) http.HandlerFunc {
 		return middleware.CorsMiddleware(

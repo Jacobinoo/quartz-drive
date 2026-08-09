@@ -53,8 +53,9 @@ func TestRateLimitIP_Strict(t *testing.T) {
 }
 
 func TestRateLimitUser_Standard(t *testing.T) {
-	// Standard limit: 100 requests per sec, burst 50.
-	middleware := RateLimitUser(100, time.Second, 50)
+	// Standard limit: 1 request per sec, burst 50.
+	// We use 1 req/sec to prevent the bucket from refilling while the test executes.
+	middleware := RateLimitUser(1, time.Second, 50)
 	handler := middleware(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -99,7 +100,7 @@ func TestRateLimitStacked(t *testing.T) {
 	// Strict User: burst 50
 
 	looseIP := RateLimitIP(300, time.Second, 100)
-	strictUser := RateLimitUser(100, time.Second, 50)
+	strictUser := RateLimitUser(1, time.Second, 50)
 
 	handler := looseIP(strictUser(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

@@ -16,21 +16,6 @@ type client struct {
 	lastSeen time.Time
 }
 
-var (
-	ipClients   = &sync.Map{}
-	userClients = &sync.Map{}
-)
-
-func init() {
-	// Background cleanup to prevent memory leaks from old IPs/Users
-	go func() {
-		for {
-			time.Sleep(time.Minute)
-			cleanupClients(ipClients)
-			cleanupClients(userClients)
-		}
-	}()
-}
 
 func cleanupClients(clientsMap *sync.Map) {
 	now := time.Now()
@@ -80,10 +65,19 @@ func getLimiter(clientsMap *sync.Map, key string, r rate.Limit, b int) *rate.Lim
 // RateLimitIP limits based on client IP address
 func RateLimitIP(requests int, per time.Duration, burst int) func(http.HandlerFunc) http.HandlerFunc {
 	limit := rate.Limit(float64(requests) / per.Seconds())
+	clientsMap := &sync.Map{}
+
+	go func() {
+		for {
+			time.Sleep(time.Minute)
+			cleanupClients(clientsMap)
+		}
+	}()
+
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			ip := extractIP(r)
-			limiter := getLimiter(ipClients, ip, limit, burst)
+			limiter := getLimiter(clientsMap, ip, limit, burst)
 			
 			if !limiter.Allow() {
 				http.Error(w, "429 Too Many Requests", http.StatusTooManyRequests)
@@ -98,6 +92,15 @@ func RateLimitIP(requests int, per time.Duration, burst int) func(http.HandlerFu
 // RateLimitUser limits based on UserID from JWT context
 func RateLimitUser(requests int, per time.Duration, burst int) func(http.HandlerFunc) http.HandlerFunc {
 	limit := rate.Limit(float64(requests) / per.Seconds())
+	clientsMap := &sync.Map{}
+
+	go func() {
+		for {
+			time.Sleep(time.Minute)
+			cleanupClients(clientsMap)
+		}
+	}()
+
 	return func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			// Extract UUID from context
@@ -114,7 +117,7 @@ func RateLimitUser(requests int, per time.Duration, burst int) func(http.Handler
 				return
 			}
 			
-			limiter := getLimiter(userClients, userID.String(), limit, burst)
+			limiter := getLimiter(clientsMap, userID.String(), limit, burst)
 			if !limiter.Allow() {
 				http.Error(w, "429 Too Many Requests", http.StatusTooManyRequests)
 				return

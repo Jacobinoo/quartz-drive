@@ -16,16 +16,18 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 type Handler struct {
 	db      *gorm.DB
 	storage storage.StorageService
+	rdb     *redis.Client
 }
 
-func NewHandler(db *gorm.DB, storage storage.StorageService) *Handler {
-	return &Handler{db: db, storage: storage}
+func NewHandler(db *gorm.DB, storage storage.StorageService, rdb *redis.Client) *Handler {
+	return &Handler{db: db, storage: storage, rdb: rdb}
 }
 
 // inits upload session and sends back upload & node id

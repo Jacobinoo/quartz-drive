@@ -13,6 +13,7 @@ import (
 	"quartz/internal/model"
 
 	"github.com/google/uuid"
+	"github.com/bsm/redislock"
 	"gorm.io/gorm"
 )
 
@@ -39,47 +40,30 @@ func (h *Handler) StartSweepScheduler(ctx context.Context) {
 	}
 
 	initSweepLogger()
-	sweepLog.Println("Starting Sweep Scheduler...")
+	sweepLog.Println("Starting Sweep Scheduler (waiting for master lock)...")
 
-	hourlyDuration, err := time.ParseDuration(config.Cfg.Sweeper.HourlyInterval)
-	if err != nil {
-		hourlyDuration = 1 * time.Hour
-	}
-	dailyDuration, err := time.ParseDuration(config.Cfg.Sweeper.DailyInterval)
-	if err != nil {
-		dailyDuration = 24 * time.Hour
-	}
-	completedDuration, err := time.ParseDuration(config.Cfg.Sweeper.CompletedInterval)
-	if err != nil {
-		completedDuration = 1 * time.Hour
-	}
-
-	hourly := time.NewTicker(hourlyDuration)
-	daily := time.NewTicker(dailyDuration)
-	completedTicker := time.NewTicker(completedDuration)
+	locker := redislock.New(h.rdb)
 
 	go func() {
 		for {
 			select {
-			case <-hourly.C:
-				sweepLog.Println("Hourly sweep triggered")
-				h.SweepExpiredUploads(ctx)
-				h.SweepOversizedChunks(ctx)
-			case <-completedTicker.C:
-				sweepLog.Println("Completed sessions sweep triggered")
-				h.SweepCompletedUploads(ctx)
-			case <-daily.C:
-				sweepLog.Println("Running daily sweeps...")
-				h.ReportFlaggedSessions()
-				h.SweepReconciliation(ctx)
-				h.SweepTrashRetention(ctx)
 			case <-ctx.Done():
-				sweepLog.Println("Sweep scheduler stopped")
-				hourly.Stop()
-				daily.Stop()
-				completedTicker.Stop()
 				return
+			default:
 			}
+
+			lock, err := locker.Obtain(ctx, "sweep:scheduler:master", 15*time.Second, nil)
+			if err == redislock.ErrNotObtained {
+				time.Sleep(5 * time.Second)
+				continue
+			} else if err != nil {
+				sweepLog.Printf("Error obtaining sweep lock: %v", err)
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
+			sweepLog.Println("Acquired master sweep lock! Proceeding with scheduler...")
+			h.runSweepLoopWithHeartbeat(ctx, lock)
 		}
 	}()
 
@@ -118,6 +102,68 @@ func (h *Handler) StartSweepScheduler(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+func (h *Handler) runSweepLoopWithHeartbeat(ctx context.Context, lock *redislock.Lock) {
+	hbCtx, hbCancel := context.WithCancel(ctx)
+	defer hbCancel()
+
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-hbCtx.Done():
+				return
+			case <-ticker.C:
+				if err := lock.Refresh(hbCtx, 15*time.Second, nil); err != nil {
+					sweepLog.Printf("Failed to refresh sweep master lock: %v. Relinquishing master role.", err)
+					hbCancel()
+					return
+				}
+			}
+		}
+	}()
+
+	hourlyDuration, _ := time.ParseDuration(config.Cfg.Sweeper.HourlyInterval)
+	if hourlyDuration == 0 {
+		hourlyDuration = 1 * time.Hour
+	}
+	dailyDuration, _ := time.ParseDuration(config.Cfg.Sweeper.DailyInterval)
+	if dailyDuration == 0 {
+		dailyDuration = 24 * time.Hour
+	}
+	completedDuration, _ := time.ParseDuration(config.Cfg.Sweeper.CompletedInterval)
+	if completedDuration == 0 {
+		completedDuration = 1 * time.Hour
+	}
+
+	hourly := time.NewTicker(hourlyDuration)
+	defer hourly.Stop()
+	daily := time.NewTicker(dailyDuration)
+	defer daily.Stop()
+	completedTicker := time.NewTicker(completedDuration)
+	defer completedTicker.Stop()
+
+	for {
+		select {
+		case <-hbCtx.Done():
+			sweepLog.Println("Lost master sweep lock or shutting down. Stopping sweepers.")
+			return
+		case <-hourly.C:
+			sweepLog.Println("Hourly sweep triggered")
+			h.SweepExpiredUploads(hbCtx)
+			h.SweepOversizedChunks(hbCtx)
+		case <-completedTicker.C:
+			sweepLog.Println("Completed sessions sweep triggered")
+			h.SweepCompletedUploads(hbCtx)
+		case <-daily.C:
+			sweepLog.Println("Running daily sweeps...")
+			h.ReportFlaggedSessions()
+			h.SweepReconciliation(hbCtx)
+			h.SweepTrashRetention(hbCtx)
+		}
+	}
 }
 
 func (h *Handler) SweepExpiredUploads(ctx context.Context) {

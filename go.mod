@@ -18,6 +18,7 @@ require (
 
 require (
 	github.com/alicebob/miniredis/v2 v2.38.0 // indirect
+	github.com/bsm/redislock v0.10.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-redis/redis_rate/v10 v10.0.1 // indirect

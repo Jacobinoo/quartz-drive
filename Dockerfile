@@ -21,8 +21,8 @@ RUN make build
 FROM debian:bookworm-slim
 WORKDIR /app
 
-# Install CA certificates for outbound HTTPS connections (Supabase, Backblaze B2, etc.)
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+# Install CA certificates for outbound HTTPS connections and curl for healthchecks
+RUN apt-get update && apt-get install -y ca-certificates curl && rm -rf /var/lib/apt/lists/*
 
 # Copy the compiled binary and necessary directories
 COPY --from=builder /app/build/quartz-account /usr/local/bin/quartz-account

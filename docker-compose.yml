@@ -11,4 +11,10 @@ services:
     volumes:
       # Mount the cert directory so you can update certs without rebuilding the image
       - ./cert:/app/cert
+    healthcheck:
+      test: ["CMD", "curl", "-k", "-f", "https://127.0.0.1:3100/"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
     restart: unless-stopped

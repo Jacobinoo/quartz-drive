@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/big"
 	"net/http"
 	"quartz/config"
 	"quartz/internal/bindings"
@@ -56,18 +55,17 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate 6 digit code
-	max := big.NewInt(1000000)
-	n, err := rand.Int(rand.Reader, max)
-	if err != nil {
+	// Generate secure token
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
 		http.Error(w, "failed to generate token", http.StatusInternalServerError)
 		return
 	}
-	code := fmt.Sprintf("%06d", n.Int64())
+	tokenStr := fmt.Sprintf("%x", tokenBytes)
 
 	token := model.PasswordResetToken{
 		UserID:    user.ID,
-		Token:     code,
+		Token:     tokenStr,
 		ExpiresAt: time.Now().Add(15 * time.Minute),
 	}
 
@@ -79,18 +77,20 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	// Send email using Resend
 	client := resend.NewClient(config.Cfg.Email.Key)
 
+	magicLink := fmt.Sprintf("%s/reset-password?token=%s&email=%s", config.Cfg.App.FrontendURL, tokenStr, req.Email)
+
 	params := &resend.SendEmailRequest{
 		From:    "Quartz <noreply@resend.dev>", // Replace with verified domain in production
 		To:      []string{req.Email},
-		Subject: "Quartz Account Recovery Code",
-		Html:    fmt.Sprintf("<p>Your Quartz account recovery code is: <strong>%s</strong></p><p>This code expires in 15 minutes.</p>", code),
+		Subject: "Quartz Account Recovery",
+		Html:    fmt.Sprintf("<p>Click the link below to recover your Quartz account:</p><p><a href=\"%s\">Recover Account</a></p><p>This link expires in 15 minutes.</p>", magicLink),
 	}
 
-	_, err = client.Emails.Send(params)
+	_, err := client.Emails.Send(params)
 	if err != nil {
 		log.Printf("Failed to send email: %v", err)
-		// For local testing without a verified domain/key, we print the code
-		fmt.Printf("LOCAL DEV RECOVERY CODE FOR %s: %s\n", req.Email, code)
+		// For local testing without a verified domain/key, we print the link
+		fmt.Printf("LOCAL DEV MAGIC LINK FOR %s: %s\n", req.Email, magicLink)
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -99,11 +99,11 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 
 type VerifyCodeRequest struct {
 	Email string `json:"email"`
-	Code  string `json:"code"`
+	Token string `json:"token"`
 }
 
 type VerifyCodeResponse struct {
-	Status string `json:"status"`
+	Status       string      `json:"status"`
 	RecoveryKeys dto.KeysDTO `json:"recoveryKeys"`
 }
 
@@ -121,13 +121,13 @@ func (h *Handler) VerifyResetCode(w http.ResponseWriter, r *http.Request) {
 
 	var user model.User
 	if err := h.db.Where("email = ?", req.Email).First(&user).Error; err != nil {
-		http.Error(w, "invalid code or email", http.StatusBadRequest)
+		http.Error(w, "invalid token or email", http.StatusBadRequest)
 		return
 	}
 
 	var token model.PasswordResetToken
-	if err := h.db.Where("user_id = ? AND token = ? AND expires_at > ?", user.ID, req.Code, time.Now()).First(&token).Error; err != nil {
-		http.Error(w, "invalid or expired code", http.StatusBadRequest)
+	if err := h.db.Where("user_id = ? AND token = ? AND expires_at > ?", user.ID, req.Token, time.Now()).First(&token).Error; err != nil {
+		http.Error(w, "invalid or expired token", http.StatusBadRequest)
 		return
 	}
 
@@ -140,10 +140,10 @@ func (h *Handler) VerifyResetCode(w http.ResponseWriter, r *http.Request) {
 	res := VerifyCodeResponse{
 		Status: "ok",
 		RecoveryKeys: dto.KeysDTO{
-			MasterKdfSalt: keyStore.MasterKdfSalt,
+			MasterKdfSalt:              keyStore.MasterKdfSalt,
 			AccountEncryptionPublicKey: keyStore.AccountEncryptionPublicKey,
-			AccountSigningPublicKey: keyStore.AccountSigningPublicKey,
-			
+			AccountSigningPublicKey:    keyStore.AccountSigningPublicKey,
+
 			RecoveryEncryptedAccountEncryptionPrivateKey: keyStore.RecoveryEncryptedAccountEncryptionPrivateKey,
 			RecoveryAccountEncryptionKeyNonce:            keyStore.RecoveryAccountEncryptionKeyNonce,
 			RecoveryEncryptedAccountSigningPrivateKey:    keyStore.RecoveryEncryptedAccountSigningPrivateKey,
@@ -157,7 +157,7 @@ func (h *Handler) VerifyResetCode(w http.ResponseWriter, r *http.Request) {
 
 type ResetM1 struct {
 	Email               string `json:"email"`
-	Code                string `json:"code"`
+	Token               string `json:"token"`
 	RegistrationRequest string `json:"registrationRequest"`
 }
 
@@ -180,8 +180,8 @@ func (h *Handler) ResetPasswordM1(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var token model.PasswordResetToken
-	if err := h.db.Where("user_id = ? AND token = ? AND expires_at > ?", user.ID, m1.Code, time.Now()).First(&token).Error; err != nil {
-		http.Error(w, "invalid or expired code", http.StatusBadRequest)
+	if err := h.db.Where("user_id = ? AND token = ? AND expires_at > ?", user.ID, m1.Token, time.Now()).First(&token).Error; err != nil {
+		http.Error(w, "invalid or expired token", http.StatusBadRequest)
 		return
 	}
 
@@ -220,8 +220,8 @@ func (h *Handler) ResetPasswordM1(w http.ResponseWriter, r *http.Request) {
 }
 
 type ResetM3 struct {
-	Email string `json:"email"`
-	Code  string `json:"code"`
+	Email string      `json:"email"`
+	Token string      `json:"token"`
 	User  dto.UserDTO `json:"user"`
 }
 
@@ -244,8 +244,8 @@ func (h *Handler) ResetPasswordM3(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var token model.PasswordResetToken
-	if err := h.db.Where("user_id = ? AND token = ? AND expires_at > ?", user.ID, m3.Code, time.Now()).First(&token).Error; err != nil {
-		http.Error(w, "invalid or expired code", http.StatusBadRequest)
+	if err := h.db.Where("user_id = ? AND token = ? AND expires_at > ?", user.ID, m3.Token, time.Now()).First(&token).Error; err != nil {
+		http.Error(w, "invalid or expired token", http.StatusBadRequest)
 		return
 	}
 
@@ -283,12 +283,12 @@ func (h *Handler) ResetPasswordM3(w http.ResponseWriter, r *http.Request) {
 		// Update keystore with newly encrypted standard keys
 		// Recovery keys remain the same (unless frontend re-encrypts them too)
 		if err := tx.Model(&model.UserKeyStore{}).Where("user_id = ?", user.ID).Updates(map[string]interface{}{
-			"master_kdf_salt": m3.User.Keys.MasterKdfSalt,
+			"master_kdf_salt":                          m3.User.Keys.MasterKdfSalt,
 			"encrypted_account_encryption_private_key": m3.User.Keys.EncryptedAccountEncryptionPrivateKey,
 			"account_encryption_key_nonce":             m3.User.Keys.AccountEncryptionKeyNonce,
 			"encrypted_account_signing_private_key":    m3.User.Keys.EncryptedAccountSigningPrivateKey,
 			"account_signing_key_nonce":                m3.User.Keys.AccountSigningKeyNonce,
-			
+
 			"recovery_encrypted_account_encryption_private_key": m3.User.Keys.RecoveryEncryptedAccountEncryptionPrivateKey,
 			"recovery_account_encryption_key_nonce":             m3.User.Keys.RecoveryAccountEncryptionKeyNonce,
 			"recovery_encrypted_account_signing_private_key":    m3.User.Keys.RecoveryEncryptedAccountSigningPrivateKey,

@@ -40,4 +40,5 @@ type Upload struct {
 
 	EncryptedMetadata string `gorm:"type:text"`
 	MetadataNonce     string `gorm:"type:text"`
+	IsUpdate          bool   `gorm:"type:boolean;not null;default:false"`
 }

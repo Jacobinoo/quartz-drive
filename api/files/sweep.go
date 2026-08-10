@@ -395,6 +395,11 @@ func (h *Handler) wipeTrashedLinks(ctx context.Context, links []model.Link) {
 				return err
 			}
 
+			// Clean up any remaining soft-deleted file_blocks so we don't violate the foreign key constraint
+			if err := tx.Exec("DELETE FROM file_blocks WHERE node_id IN (?)", cleanNodeIDs).Error; err != nil {
+				return err
+			}
+
 			if err := tx.Exec("DELETE FROM nodes WHERE id IN (?)", cleanNodeIDs).Error; err != nil {
 				return err
 			}

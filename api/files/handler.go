@@ -30,6 +30,146 @@ func NewHandler(db *gorm.DB, storage storage.StorageService, rdb *redis.Client) 
 	return &Handler{db: db, storage: storage, rdb: rdb}
 }
 
+// inits update session for an existing file
+func (h *Handler) InitUpdate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	var updateRequest dto.InitUpdateFileRequest
+	if err := json.NewDecoder(r.Body).Decode(&updateRequest); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	userID := r.Context().Value(middleware.UserIDKey)
+	if userID == nil {
+		http.Error(w, "access token invalid", http.StatusUnauthorized)
+		return
+	}
+
+	if updateRequest.TotalChunks <= 0 || updateRequest.TotalFileSize <= 0 {
+		http.Error(w, "total chunks or total file size invalid", http.StatusUnprocessableEntity)
+		return
+	}
+
+	const maxChunkSize = 4 * 1024 * 1024 //4MB
+
+	nodeUUID, err := uuid.Parse(updateRequest.NodeID)
+	if err != nil {
+		http.Error(w, "invalid nodeId uuid", http.StatusBadRequest)
+		return
+	}
+
+	var node model.Node
+	if err := h.db.First(&node, "id = ? AND owner_id = ?", nodeUUID, userID).Error; err != nil {
+		http.Error(w, "file not found", http.StatusNotFound)
+		return
+	}
+	
+	if node.Type != model.NodeTypeFile {
+		http.Error(w, "node is not a file", http.StatusBadRequest)
+		return
+	}
+
+	var user model.User
+	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
+		http.Error(w, "user not found", http.StatusUnauthorized)
+		return
+	}
+
+	// We calculate the net difference in storage. 
+	// The file's existing physical size is node.SizeBytes.
+	netSizeChange := updateRequest.TotalFileSize - node.SizeBytes
+	if user.StorageUsed+netSizeChange > user.StorageQuota {
+		http.Error(w, "quota exceeded", http.StatusForbidden)
+		return
+	}
+
+	minPlausibleChunks := int(math.Ceil(float64(updateRequest.TotalFileSize) / float64(maxChunkSize)))
+	if updateRequest.TotalChunks < int64(minPlausibleChunks) {
+		http.Error(w, "totalChunks too low for declared file size", http.StatusUnprocessableEntity)
+		return
+	}
+
+	const chunkCountSlack = 1.05 // 5% slack for per-chunk overhead
+	maxPlausibleChunks := int(math.Ceil(float64(minPlausibleChunks)*chunkCountSlack)) + 1
+	if updateRequest.TotalChunks > int64(maxPlausibleChunks) {
+		http.Error(w, "totalChunks too high for declared file size", http.StatusUnprocessableEntity)
+		return
+	}
+
+	uploadID, uErr := uuid.NewV7()
+	if uErr != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	expiresAt := time.Now().UTC().Add(time.Duration(config.Cfg.Sweeper.UploadSessionExpiresHours) * time.Hour)
+
+	chunkRows := []model.UploadChunk{}
+
+	for i := int64(0); i < updateRequest.TotalChunks; i++ {
+		id, err := uuid.NewV7()
+		if err != nil {
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		// Save the chunks in an "updates" prefix to avoid colliding with original upload blocks if they overlap indices
+		chunkRows = append(chunkRows, model.UploadChunk{
+			ID:         id,
+			UploadID:   uploadID,
+			ChunkIndex: i,
+			ObjectKey:  fmt.Sprintf("authors/%s/uploads/%s/nodes/%s/chunk_%d", user.ID.String(), uploadID.String(), node.ID.String(), i),
+			Status:     model.ChunkUploadStatusPending,
+		})
+	}
+
+	err = h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&model.Upload{
+			ID:                uploadID,
+			UserID:            user.ID,
+			NodeID:            node.ID,
+			TotalChunks:       updateRequest.TotalChunks,
+			ReportedTotalSize: updateRequest.TotalFileSize,
+			Status:            model.UploadStatusPending,
+			ExpiresAt:         expiresAt,
+			IsUpdate:          true,
+
+			EncryptedMetadata: updateRequest.EncryptedMetadata,
+			MetadataNonce:     updateRequest.MetadataNonce,
+		}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.CreateInBatches(chunkRows, len(chunkRows)).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		http.Error(w, "could not init an upload session", http.StatusInternalServerError)
+		return
+	}
+
+	uploadResponse := InitFileUploadResponse{
+		UploadID:  uploadID,
+		NodeID:    node.ID,
+		ExpiresAt: expiresAt,
+	}
+
+	err = json.NewEncoder(w).Encode(uploadResponse)
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
 // inits upload session and sends back upload & node id
 func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -460,6 +600,106 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 		// don't fail the whole request over this — the chunk itself verified successfully;
 		// completion can be caught by a reconciliation sweep if this save fails
 	}
+	
+	if uploadSession.IsUpdate {
+		log.Print("processing file update hierarchy")
+		var verifiedChunks []model.UploadChunk
+		if err := h.db.Where("upload_id = ? AND status = ?", uploadSession.ID, model.ChunkUploadStatusVerified).
+			Order("chunk_index asc").Find(&verifiedChunks).Error; err != nil {
+			log.Printf("failed to fetch verified chunks: %v", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		var trueTotalSize int64
+		var newBlocks []model.FileBlock
+		for _, chunk := range verifiedChunks {
+			trueTotalSize += chunk.VerifiedSize
+			newBlocks = append(newBlocks, model.FileBlock{
+				ID:        uuid.New(),
+				NodeID:    uploadSession.NodeID,
+				Index:     int(chunk.ChunkIndex),
+				Bucket:    "default",
+				ObjectKey: chunk.ObjectKey,
+				Size:      int(chunk.VerifiedSize),
+			})
+		}
+
+		var oldBlocks []model.FileBlock
+
+		err = h.db.Transaction(func(tx *gorm.DB) error {
+			// Find old blocks to delete from S3 later
+			if err := tx.Where("node_id = ?", uploadSession.NodeID).Find(&oldBlocks).Error; err != nil {
+				return err
+			}
+			
+			// Update the Node
+			if err := tx.Model(&model.Node{}).Where("id = ?", uploadSession.NodeID).Updates(map[string]interface{}{
+				"size_bytes":         trueTotalSize,
+				"encrypted_metadata": uploadSession.EncryptedMetadata,
+				"metadata_nonce":     uploadSession.MetadataNonce,
+			}).Error; err != nil {
+				return err
+			}
+
+			// Delete old blocks
+			if err := tx.Where("node_id = ?", uploadSession.NodeID).Delete(&model.FileBlock{}).Error; err != nil {
+				return err
+			}
+
+			// Insert new blocks
+			if len(newBlocks) > 0 {
+				if err := tx.Create(&newBlocks).Error; err != nil {
+					return err
+				}
+			}
+
+			// Clean up upload session
+			if err := tx.Unscoped().Where("upload_id = ?", uploadSession.ID).Delete(&model.UploadChunk{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Unscoped().Delete(&uploadSession).Error; err != nil {
+				return err
+			}
+
+			// Adjust the user's storage quota safely (atomic)
+			var oldTotalSize int64
+			for _, b := range oldBlocks {
+				oldTotalSize += int64(b.Size)
+			}
+			sizeDiff := trueTotalSize - oldTotalSize
+			if sizeDiff != 0 {
+				if err := tx.Model(&model.User{}).Where("id = ?", uploadSession.UserID).
+					UpdateColumn("storage_used", gorm.Expr("storage_used + ?", sizeDiff)).Error; err != nil {
+					return err
+				}
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			log.Printf("Failed to finish file update in DB: %v", err)
+			http.Error(w, "database error while saving file metadata", http.StatusInternalServerError)
+			return
+		}
+
+		// Delete old blocks from S3 asynchronously
+		go func(blocks []model.FileBlock) {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			for _, b := range blocks {
+				if delErr := h.storage.DeleteChunk(ctx, b.ObjectKey); delErr != nil {
+					log.Printf("Failed to delete old block %s from S3: %v", b.ObjectKey, delErr)
+				}
+			}
+		}(oldBlocks)
+
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"status": "updated", "nodeId": uploadSession.NodeID.String()})
+		return
+	}
+
 	log.Print("creating cryptographic hierarchy (link,node,file_block)")
 	log.Printf("will clean upload_chunks and upload session")
 

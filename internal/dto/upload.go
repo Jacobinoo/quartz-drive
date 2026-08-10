@@ -24,6 +24,16 @@ type InitFileUploadRequest struct {
 	MetadataNonce     string `json:"metadataNonce"`
 }
 
+type InitUpdateFileRequest struct {
+	NodeID        string `json:"nodeId"`
+	TotalFileSize int64  `json:"totalFileSize"`
+	TotalChunks   int64  `json:"totalChunks"`
+
+	EncryptedMetadata string `json:"encryptedMetadata"`
+	MetadataNonce     string `json:"metadataNonce"`
+}
+
+
 type RequestChunkUploadRequest struct {
 	UploadID     uuid.UUID `json:"uploadId"`
 	ChunkIndex   int       `json:"chunkIndex"`

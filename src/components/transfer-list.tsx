@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 
 export function TransferList() {
-    const allJobs = useUploadStore(s=>s.jobs);
-    const jobs = allJobs.filter(j => !j.isHidden);
+    const jobs = useUploadStore(s=>s.jobs);
     const cancelJob = useUploadStore(s=>s.cancelJob);
 
     if (jobs.length === 0) return null;

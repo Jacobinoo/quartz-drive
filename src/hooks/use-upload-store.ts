@@ -13,7 +13,6 @@ export interface UploadJob {
   fileKey: Uint8Array;
   errorMessage?: string;
   activity?: string;
-  isHidden?: boolean;
 
 
   parentNodeId: string;

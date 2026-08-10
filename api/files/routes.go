@@ -31,9 +31,6 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler, rdb *redis.Client) {
 	mux.HandleFunc("/files/upload", wrap(h.Upload))
 	mux.HandleFunc("/files/upload/chunk_finish", wrap(h.ReportChunkUploadDone))
 
-	mux.HandleFunc("/files/update/init", wrap(h.InitUpdate))
-
-
 	mux.HandleFunc("/files/download", wrap(h.Download))
 	mux.HandleFunc("/files/root", wrap(h.GetRootFolder))
 	mux.HandleFunc("/files/folder", wrap(h.CreateFolder))

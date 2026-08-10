@@ -22,6 +22,8 @@ import { addSingleSearchItem, removeSearchItem } from "@/lib/SearchIndexStore";
 import { FilePreviewModal } from "./file-preview-modal";
 import { ShareModal } from "./share-modal";
 
+import { NoteEditorModal } from "./note-editor-modal";
+
 export function FileList() {
     const currentFolder = useDriveStore(s => s.getCurrentFolder());
     const draggedItem = useDriveStore(s => s.draggedItem);
@@ -29,6 +31,7 @@ export function FileList() {
   const [files, setFiles] = useState<any[]>([]);
   const [pickerItemToMove, setPickerItemToMove] = useState<any>(null);
   const [detailsFile, setDetailsFile] = useState<any>(null);
+  const [noteFile, setNoteFile] = useState<any>(null);
   const [previewFile, setPreviewFile] = useState<{
     file: any,
     url: string | null,
@@ -304,7 +307,11 @@ export function FileList() {
                                 }`}
                             onClick={() => {
                                 if (file.type !== 'FILE') return;
-                                handlePreview(file);
+                                if (file.plaintextName.endsWith('.md')) {
+                                    setNoteFile(file);
+                                } else {
+                                    handlePreview(file);
+                                }
                             }}
                             draggable={true}
                             onDragStart={(e) => {
@@ -425,6 +432,13 @@ export function FileList() {
                     unsupported={previewFile.unsupported}
                     onClose={() => setPreviewFile(null)}
                     onDownload={() => handleDownload(previewFile.file)}
+                />
+            )}
+
+            {noteFile && (
+                <NoteEditorModal
+                    file={noteFile}
+                    onClose={() => setNoteFile(null)}
                 />
             )}
 

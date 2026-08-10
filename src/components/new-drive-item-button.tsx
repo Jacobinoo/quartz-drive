@@ -9,7 +9,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
-    FileUpIcon, FolderPlusIcon, FolderUpIcon, Plus,
+    FileUpIcon, FolderPlusIcon, FolderUpIcon, Plus, FileEdit
 } from "lucide-react"
 import { useState } from "react"
 import {
@@ -38,13 +38,23 @@ export function NewDriveItemButton(){
   const [newFolderName, setNewFolderName] = useState("");
 
     const handleUpload = async () => {
-
         console.log("opening file picker")
-
         const files = await openFilePicker({ multiple: true });
+        console.log("file picker closed")
+        await handleUploadFiles(files);
+    };
 
-      console.log("file picker closed")
+    const handleNewNote = async () => {
+        const title = window.prompt("Enter note title:", "Untitled Note");
+        if (!title) return;
+        let filename = title.trim();
+        if (!filename.endsWith('.md')) filename += '.md';
+        
+        const file = new File([`# ${title}\n\nStart writing your note here...`], filename, { type: "text/markdown" });
+        await handleUploadFiles([file]);
+    };
 
+    const handleUploadFiles = async (files: File[]) => {
       const currentFolder = useDriveStore.getState().getCurrentFolder();
       if (!currentFolder) throw new Error("Drive keys not initialized");
 
@@ -234,6 +244,10 @@ export function NewDriveItemButton(){
                     Upload Folder
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleNewNote} className="cursor-pointer">
+                    <FileEdit className="mr-2 h-4 w-4" />
+                    New Note (Markdown)
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setIsFolderDialogOpen(true)} className="cursor-pointer">
                     <FolderPlusIcon className="mr-2 h-4 w-4" />
                     New Folder

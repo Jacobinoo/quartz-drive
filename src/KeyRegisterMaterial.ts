@@ -29,6 +29,11 @@ type KeyRegisterMaterial = {
     encAccountSigningPrivateKey: Base64String;
     accountSigningKeyNonce: Base64String;
 
+    recoveryEncAccountEncryptionPrivateKey: Base64String;
+    recoveryAccountEncryptionKeyNonce: Base64String;
+    recoveryEncAccountSigningPrivateKey: Base64String;
+    recoveryAccountSigningKeyNonce: Base64String;
+
     sharePublicKey: Base64String;
     wrappedSharePrivateKey: Base64String;
     sharePrivNonce: Base64String;
@@ -39,8 +44,10 @@ type KeyRegisterMaterial = {
     wrappedRootNodePrivateKey: Base64String;
   rootNodePrivNonce: Base64String;
 
-  encryptedRootNodePassphrase: Base64String;
+    encryptedRootNodePassphrase: Base64String;
     signedEncryptedRootNodePassphrase: Base64String;
+
+    recoveryPhrase: string;
 }
 
 export default interface M3ServerPayload {
@@ -60,6 +67,11 @@ export default interface M3ServerPayload {
             accountSigningPublicKey: Base64String;
             encAccountSigningPrivateKey: Base64String;
             accountSigningKeyNonce: Base64String;
+
+            recoveryEncAccountEncryptionPrivateKey: Base64String;
+            recoveryAccountEncryptionKeyNonce: Base64String;
+            recoveryEncAccountSigningPrivateKey: Base64String;
+            recoveryAccountSigningKeyNonce: Base64String;
         };
     };
     drive: {

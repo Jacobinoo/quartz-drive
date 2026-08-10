@@ -28,6 +28,31 @@ export function SignupForm({
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
 
+  const [recoveryPhrase, setRecoveryPhrase] = useState<string>("");
+
+  if (recoveryPhrase) {
+      return (
+          <div className={cn("flex flex-col gap-6", className)} {...props}>
+              <Card>
+                  <CardHeader className="text-center">
+                      <CardTitle className="text-xl">Save Your Recovery Phrase</CardTitle>
+                      <CardDescription>
+                          This is the <strong>ONLY</strong> way to recover your account if you forget your password. We cannot reset your password for you.
+                      </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-4">
+                      <div className="p-4 bg-muted text-center rounded font-mono text-lg break-all">
+                          {recoveryPhrase}
+                      </div>
+                      <Button onClick={() => router.push("/signin")}>
+                          I have saved my recovery phrase
+                      </Button>
+                  </CardContent>
+              </Card>
+          </div>
+      )
+  }
+
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
@@ -62,9 +87,9 @@ export function SignupForm({
                 <Button type="submit" onClick={(e) => {
                   e.preventDefault();
                   signUp(email, password)
-                      .then(() => {
+                      .then((res) => {
                         console.log("Sign up successfully");
-                        router.push("/drive");
+                        setRecoveryPhrase(res.recoveryPhrase);
                       })
                       .catch((err: Error) => {
                         console.error(`Error occured on sign up: ${err.message}}`);

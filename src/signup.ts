@@ -1,4 +1,5 @@
 import * as opaque from '@serenity-kit/opaque'
+import * as bip39 from 'bip39'
 import {
     KeyRegisterMaterial
 } from "@/KeyRegisterMaterial";
@@ -40,6 +41,36 @@ async function registerKeyMaterial(email: string, password: string): Promise<Key
         null,
         accountEncryptionPrivNonce,
         derivedMasterKey
+    );
+
+    // Layer 1.5 - Recovery Keys
+    const recoveryPhrase = bip39.generateMnemonic(128); // 12-word phrase
+
+    const derivedRecoveryKey = sodium.crypto_pwhash(
+        sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES,
+        recoveryPhrase,
+        masterSalt,
+        sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
+        sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,
+        sodium.crypto_pwhash_ALG_ARGON2ID13
+    );
+
+    const recoveryAccountSigningPrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+    const recoveryEncryptedAccountSigningPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+        accountSigningKeyPair.privateKey,
+        sodium.from_string(email.toLowerCase()+"_sign"),
+        null,
+        recoveryAccountSigningPrivNonce,
+        derivedRecoveryKey
+    );
+
+    const recoveryAccountEncryptionPrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+    const recoveryEncryptedAccountEncryptionPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+        accountEncryptionKeyPair.privateKey,
+        sodium.from_string(email.toLowerCase()+"_encrypt"),
+        null,
+        recoveryAccountEncryptionPrivNonce,
+        derivedRecoveryKey
     );
 
     // Layer 2 - Session Persistence
@@ -113,9 +144,14 @@ async function registerKeyMaterial(email: string, password: string): Promise<Key
         wrappedRootNodePrivateKey: sodium.to_base64(wrappedRootNodePrivateKey),
       rootNodePrivNonce: sodium.to_base64(rootNodePrivNonce),
 
-      encryptedRootNodePassphrase: sodium.to_base64(encryptedRootNodePassphrase),
+        encryptedRootNodePassphrase: sodium.to_base64(encryptedRootNodePassphrase),
         signedEncryptedRootNodePassphrase: sodium.to_base64(signedEncryptedRootNodePassphrase),
 
+        recoveryPhrase: recoveryPhrase,
+        recoveryEncAccountEncryptionPrivateKey: sodium.to_base64(recoveryEncryptedAccountEncryptionPrivateKey),
+        recoveryAccountEncryptionKeyNonce: sodium.to_base64(recoveryAccountEncryptionPrivNonce),
+        recoveryEncAccountSigningPrivateKey: sodium.to_base64(recoveryEncryptedAccountSigningPrivateKey),
+        recoveryAccountSigningKeyNonce: sodium.to_base64(recoveryAccountSigningPrivNonce),
     };
 }
 
@@ -176,9 +212,13 @@ export async function signUp(email: string, password: string) {
 
                 accountSigningPublicKey: km.accountSigningPublicKey,
                 encAccountSigningPrivateKey: km.encAccountSigningPrivateKey,
-              accountSigningKeyNonce: km.accountSigningKeyNonce,
+                accountSigningKeyNonce: km.accountSigningKeyNonce,
 
-        },
+                recoveryEncAccountEncryptionPrivateKey: km.recoveryEncAccountEncryptionPrivateKey,
+                recoveryAccountEncryptionKeyNonce: km.recoveryAccountEncryptionKeyNonce,
+                recoveryEncAccountSigningPrivateKey: km.recoveryEncAccountSigningPrivateKey,
+                recoveryAccountSigningKeyNonce: km.recoveryAccountSigningKeyNonce,
+            },
         },
         drive: {
             defaultShare: {
@@ -209,4 +249,8 @@ export async function signUp(email: string, password: string) {
     const m3ResponseData = await m3Response.json();
 
     console.log(m3ResponseData)
+    
+    return {
+        recoveryPhrase: km.recoveryPhrase
+    }
 }

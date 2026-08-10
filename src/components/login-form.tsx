@@ -56,6 +56,7 @@ export function LoginForm({
                   <FieldLabel htmlFor="password">Password</FieldLabel>
                   <a
                     href="#"
+                    onClick={(e) => { e.preventDefault(); router.push('/forgot-password'); }}
                     className="ml-auto text-sm underline-offset-4 hover:underline"
                   >
                     Forgot your password?

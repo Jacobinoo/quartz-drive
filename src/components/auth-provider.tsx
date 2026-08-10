@@ -11,9 +11,11 @@ import { deleteDeviceKeys } from "@/DeviceKeyStore";
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const publicPaths = ["/signin", "/signup", "/forgot-password", "/reset-password"];
+
   const [isBooting, setIsBooting] = useState(() => {
     // If we start on a public auth page, do not show the session restoration loading screen!
-    return pathname !== "/signin" && pathname !== "/signup";
+    return !publicPaths.includes(pathname);
   });
 
   const hasBooted = useRef(false);
@@ -23,7 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // 1. If we land on public auth pages, sanitize any leftover client state (cf / DPoP keys) immediately!
-    if (pathname === "/signin" || pathname === "/signup") {
+    if (publicPaths.includes(pathname)) {
       clearAuthState();
       deleteDpopDatabase().catch((e) => console.warn("Could not wipe DPoP database:", e));
       deleteDeviceKeys().catch((e) => console.warn("Could not wipe device keys DB:", e));

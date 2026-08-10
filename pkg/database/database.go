@@ -35,6 +35,7 @@ func New() (db *gorm.DB, err error) {
 					&model.Session{},
 					&model.Upload{},
 					&model.UploadChunk{},
+					&model.PasswordResetToken{},
 				)
 			}
 			return db, err

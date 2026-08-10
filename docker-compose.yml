@@ -3,6 +3,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    environment:
+      - DB_AUTO_MIGRATE=true
+      - FRONTEND_URL=https://localhost:3000
+      - DISABLE_SWEEPS=false
     env_file:
       - .env
     volumes:

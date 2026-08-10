@@ -20,6 +20,11 @@ type UserKeyStore struct {
 	EncryptedAccountSigningPrivateKey string `gorm:"type:text;not null"`
 	AccountSigningKeyNonce            string `gorm:"type:text;not null"`
 
+	RecoveryEncryptedAccountEncryptionPrivateKey string `gorm:"type:text;not null"`
+	RecoveryAccountEncryptionKeyNonce            string `gorm:"type:text;not null"`
+	RecoveryEncryptedAccountSigningPrivateKey    string `gorm:"type:text;not null"`
+	RecoveryAccountSigningKeyNonce               string `gorm:"type:text;not null"`
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt sql.NullTime `gorm:"index"`

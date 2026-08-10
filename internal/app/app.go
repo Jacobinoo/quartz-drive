@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"quartz/api/account"
 	"quartz/api/devices"
 	"quartz/api/files"
 	"quartz/api/keys"
@@ -145,6 +146,9 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 
 func initV1Mux(state *ServerState) *http.ServeMux {
 	mux := http.NewServeMux()
+
+	accountHandler := account.NewHandler(state.DB, state.Redis, state.OpaqueSetup)
+	account.RegisterRoutes(mux, accountHandler, state.Redis)
 
 	signinHandler := signin.NewHandler(state.DB, state.Redis, state.OpaqueSetup)
 	signin.RegisterRoutes(mux, signinHandler, state.Redis)

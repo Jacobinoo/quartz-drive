@@ -23,12 +23,18 @@ type (
 		S3
 		B2
 		Sweeper
+		Email
+	}
+
+	Email struct {
+		Key string `env:"EMAIL_KEY,required"`
 	}
 
 	App struct {
-		Env     string `env:"APP_ENV,required"`
-		Name    string `env:"APP_NAME,required"`
-		Version string `env:"APP_VERSION,required"`
+		Env        string `env:"APP_ENV,required"`
+		Name       string `env:"APP_NAME,required"`
+		Version    string `env:"APP_VERSION,required"`
+		FrontendURL string `env:"FRONTEND_URL,required"`
 	}
 
 	DB struct {

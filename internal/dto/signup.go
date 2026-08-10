@@ -40,6 +40,11 @@ type KeysDTO struct {
 	AccountSigningPublicKey           string `json:"accountSigningPublicKey"`
 	EncryptedAccountSigningPrivateKey string `json:"encAccountSigningPrivateKey"`
 	AccountSigningKeyNonce            string `json:"accountSigningKeyNonce"`
+
+	RecoveryEncryptedAccountEncryptionPrivateKey string `json:"recoveryEncAccountEncryptionPrivateKey"`
+	RecoveryAccountEncryptionKeyNonce            string `json:"recoveryAccountEncryptionKeyNonce"`
+	RecoveryEncryptedAccountSigningPrivateKey    string `json:"recoveryEncAccountSigningPrivateKey"`
+	RecoveryAccountSigningKeyNonce               string `json:"recoveryAccountSigningKeyNonce"`
 }
 
 func (k KeysDTO) Value() (driver.Value, error) {

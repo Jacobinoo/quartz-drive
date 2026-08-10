@@ -128,6 +128,11 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) {
 			AccountSigningPublicKey:              m3.User.Keys.AccountSigningPublicKey,
 			EncryptedAccountSigningPrivateKey:    m3.User.Keys.EncryptedAccountSigningPrivateKey,
 			AccountSigningKeyNonce:               m3.User.Keys.AccountSigningKeyNonce,
+
+			RecoveryEncryptedAccountEncryptionPrivateKey: m3.User.Keys.RecoveryEncryptedAccountEncryptionPrivateKey,
+			RecoveryAccountEncryptionKeyNonce:            m3.User.Keys.RecoveryAccountEncryptionKeyNonce,
+			RecoveryEncryptedAccountSigningPrivateKey:    m3.User.Keys.RecoveryEncryptedAccountSigningPrivateKey,
+			RecoveryAccountSigningKeyNonce:               m3.User.Keys.RecoveryAccountSigningKeyNonce,
 		}
 
 		storedUser := model.User{
@@ -190,32 +195,32 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) {
 
 		if err := tx.Create(&storedUser).Error; err != nil {
 			// registrationSessions.Delete(m3.RegistrationNonce)
-			http.Error(w, err.Error(), http.StatusConflict)
+			http.Error(w, "email registered already", http.StatusConflict)
 			return err
 		}
 
 		if err := tx.Create(&storedUserKeyStore).Error; err != nil {
-			http.Error(w, err.Error(), http.StatusConflict)
+			http.Error(w, "cannot register keys", http.StatusConflict)
 			return err
 		}
 
 		if err := tx.Create(&storedNode).Error; err != nil {
-			http.Error(w, err.Error(), http.StatusConflict)
+			http.Error(w, "cannot register keys", http.StatusConflict)
 			return err
 		}
 
 		if err := tx.Create(&storedLink).Error; err != nil {
-			http.Error(w, err.Error(), http.StatusConflict)
+			http.Error(w, "cannot register keys", http.StatusConflict)
 			return err
 		}
 
 		if err := tx.Create(&storedShare).Error; err != nil {
-			http.Error(w, err.Error(), http.StatusConflict)
+			http.Error(w, "cannot register keys", http.StatusConflict)
 			return err
 		}
 
 		if err := tx.Create(&storedShareMember).Error; err != nil {
-			http.Error(w, err.Error(), http.StatusConflict)
+			http.Error(w, "cannot register keys", http.StatusConflict)
 			return err
 		}
 

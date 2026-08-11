@@ -46,9 +46,9 @@ func Run() {
 	}
 
 	state := &ServerState{
-		DB:             db,
-		Redis:          redisClient,
-		OpaqueSetup:    opaqueSetupBytes(),
+		DB:          db,
+		Redis:       redisClient,
+		OpaqueSetup: opaqueSetupBytes(),
 		// GRPCClient:     *grpcClient,
 		// GRPCContext:    context.WithoutCancel(context.Background()),
 		StorageService: storageService,
@@ -82,7 +82,7 @@ func Run() {
 	// the request it is currently handling
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	
+
 	if err := server.Shutdown(ctx); err != nil {
 		log.Fatal("Server forced to shutdown: ", err)
 	}
@@ -112,12 +112,12 @@ func initDb() *gorm.DB {
 // func initGrpcClient() (*pb.QuartzInternalCryptoServiceClient, *grpc.ClientConn) {
 // 	var opts []grpc.DialOption
 // 	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-// 
+//
 // 	conn, grpcErr := grpc.NewClient(config.Cfg.GRPC.Host+":"+config.Cfg.GRPC.Port, opts...)
 // 	if grpcErr != nil {
 // 		log.Fatalf("grpc did not connect: %v", grpcErr)
 // 	}
-// 
+//
 // 	grpcClient := pb.NewQuartzInternalCryptoServiceClient(conn)
 // 	return &grpcClient, conn
 // }
@@ -141,7 +141,7 @@ func opaqueSetupBytes() []byte {
 func rootHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(config.Cfg.App)
+	json.NewEncoder(w).Encode(config.Cfg.App) //this is public
 }
 
 func initV1Mux(state *ServerState) *http.ServeMux {

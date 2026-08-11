@@ -14,7 +14,7 @@ type (
 		CertFilePath string `env:"CERT_FILE_PATH,required"`
 		KeyFilePath  string `env:"KEY_FILE_PATH,required"`
 
-		App
+		App //this is public on GET /
 		DB
 		// GRPC
 		KV
@@ -30,10 +30,10 @@ type (
 		Key string `env:"EMAIL_KEY,required"`
 	}
 
-	App struct {
-		Env        string `env:"APP_ENV,required"`
-		Name       string `env:"APP_NAME,required"`
-		Version    string `env:"APP_VERSION,required"`
+	App struct { //this is public on GET /
+		Env         string `env:"APP_ENV,required"`
+		Name        string `env:"APP_NAME,required"`
+		Version     string `env:"APP_VERSION,required"`
 		FrontendURL string `env:"FRONTEND_URL,required"`
 	}
 
@@ -85,12 +85,12 @@ type (
 	}
 
 	Sweeper struct {
-		Disabled                 bool   `env:"DISABLE_SWEEPS" envDefault:"false"`
-		HourlyInterval           string `env:"SWEEP_HOURLY_INTERVAL" envDefault:"1h"`
-		DailyInterval            string `env:"SWEEP_DAILY_INTERVAL" envDefault:"24h"`
-		CompletedInterval        string `env:"SWEEP_COMPLETED_INTERVAL" envDefault:"1h"`
+		Disabled                  bool   `env:"DISABLE_SWEEPS" envDefault:"false"`
+		HourlyInterval            string `env:"SWEEP_HOURLY_INTERVAL" envDefault:"1h"`
+		DailyInterval             string `env:"SWEEP_DAILY_INTERVAL" envDefault:"24h"`
+		CompletedInterval         string `env:"SWEEP_COMPLETED_INTERVAL" envDefault:"1h"`
 		UploadSessionExpiresHours int    `env:"UPLOAD_SESSION_EXPIRES_HOURS" envDefault:"24"`
-		TrashRetentionDays       int    `env:"TRASH_RETENTION_DAYS" envDefault:"30"`
+		TrashRetentionDays        int    `env:"TRASH_RETENTION_DAYS" envDefault:"30"`
 	}
 )
 

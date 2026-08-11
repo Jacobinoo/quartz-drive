@@ -56,7 +56,7 @@ export async function signIn(email: string, password: string) {
         throw new Error("Login failed");
     }
 
-    const { finishLoginRequest } = loginResult;
+    const { finishLoginRequest, exportKey } = loginResult;
     const opaqueSessionKey = loginResult.sessionKey;
 
     console.log("Agreed session key, client is done, waiting for trust attestation from server. SK: " + opaqueSessionKey) //session key agreed, waiting for server trust attestation
@@ -128,10 +128,10 @@ export async function signIn(email: string, password: string) {
     );
   console.log("session priv key:", loginAttestationData.sessionPrivateKey)
     const kdfSalt = sodium.from_base64(loginAttestationData.masterKdfSalt);
-        // 1. Derive master key from password via Argon2id
+        // 1. Derive master key from OPAQUE exportKey via Argon2id
         const derivedMasterKey = sodium.crypto_pwhash(
             sodium.crypto_secretbox_KEYBYTES,
-            password,
+            exportKey,
             kdfSalt,
             sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
             sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,

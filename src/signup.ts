@@ -7,14 +7,16 @@ import M3ServerPayload from "@/KeyRegisterMaterial";
 import {Base64String} from "@/UtilTypes";
 import {getSodium} from "@/lib/crypto/sodium";
 
-async function registerKeyMaterial(email: string, password: string): Promise<KeyRegisterMaterial> {
+async function registerKeyMaterial(email: string, exportKey: string): Promise<KeyRegisterMaterial> {
     const sodium = await getSodium();
 
-    // Layer 0 - Master Key
+    // Layer 0 - Master Key (derived from OPAQUE exportKey, NOT the raw password)
+    // This prevents offline dictionary attacks if the database is leaked
+    // without the server's OPRF secret key.
     const masterSalt = sodium.randombytes_buf(sodium.crypto_pwhash_SALTBYTES);
     const derivedMasterKey = sodium.crypto_pwhash(
         sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES,
-        password,
+        exportKey,
         masterSalt,
         sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
         sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,
@@ -184,7 +186,7 @@ export async function signUp(email: string, password: string) {
         throw Error("Cannot find registration response in payload.")
     }
 
-    const { registrationRecord } = opaque.client.finishRegistration({
+    const { registrationRecord, exportKey } = opaque.client.finishRegistration({
         clientRegistrationState,
         registrationResponse,
         password,
@@ -194,7 +196,7 @@ export async function signUp(email: string, password: string) {
         // }
     })
 
-    const km: KeyRegisterMaterial = await registerKeyMaterial(email, password);
+    const km: KeyRegisterMaterial = await registerKeyMaterial(email, exportKey);
 
     const m3: M3ServerPayload = {
         user: {

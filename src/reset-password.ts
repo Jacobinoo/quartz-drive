@@ -69,17 +69,17 @@ export async function resetPassword(email: string, token: string, recoveryPhrase
 
     const { registrationResponse, nonce } = await m1Response.json();
 
-    const { registrationRecord } = opaque.client.finishRegistration({
+    const { registrationRecord, exportKey } = opaque.client.finishRegistration({
         clientRegistrationState,
         registrationResponse,
         password: newPassword,
     });
 
-    // 5. Derive NEW Master Key from NEW password
+    // 5. Derive NEW Master Key from OPAQUE exportKey (NOT the raw password)
     const newMasterSalt = sodium.randombytes_buf(sodium.crypto_pwhash_SALTBYTES);
     const newDerivedMasterKey = sodium.crypto_pwhash(
         sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES,
-        newPassword,
+        exportKey,
         newMasterSalt,
         sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
         sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,

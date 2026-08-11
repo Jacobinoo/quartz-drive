@@ -3,7 +3,7 @@ name: Deploy API to Google Cloud
 on:
   push:
     branches:
-      - main
+      - master
 
 jobs:
   build-and-deploy:

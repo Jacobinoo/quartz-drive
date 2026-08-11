@@ -15,7 +15,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22' # Change this if you use a different Go version
+          go-version: '1.26.5' # Change this if you use a different Go version
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -23,7 +23,7 @@ jobs:
       - name: Build Go and Rust Binaries
         run: |
           make build
-          
+
       - name: Copy Files to Google Cloud
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -43,22 +43,22 @@ jobs:
           script: |
             # 1. Stop the currently running service
             sudo systemctl stop quartz
-            
+
             # 2. Move the new files into place
             mv /home/${{ secrets.SERVER_USERNAME }}/deploy_temp/build/quartz-account /home/${{ secrets.SERVER_USERNAME }}/quartz-account
             sudo mv /home/${{ secrets.SERVER_USERNAME }}/deploy_temp/internal/bindings/opaque_rust/target/release/libopaque_rust.so /usr/lib/
-            
+
             # 3. Clean up the temp folder
             rm -rf /home/${{ secrets.SERVER_USERNAME }}/deploy_temp
-            
+
             # 4. Make sure it's executable
             chmod +x /home/${{ secrets.SERVER_USERNAME }}/quartz-account
-            
+
             # 5. Reload the shared libraries cache
             sudo ldconfig
-            
+
             # 6. Start the service
             sudo systemctl start quartz
-            
+
             # 7. Check status
             sudo systemctl is-active quartz

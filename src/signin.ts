@@ -6,6 +6,7 @@ import { Base64String } from './UtilTypes';
 import { setAccountPrivateKeys, setAuthState } from './lib/authStore';
 import { saveDevicePrivateKey } from './DeviceKeyStore';
 import { customFetch } from './lib/api';
+import { SERVER_PUBLIC_KEY } from './lib/constants';
 
 export async function signIn(email: string, password: string) {
     if (!email || !password) throw new Error("Email and password required");
@@ -56,8 +57,12 @@ export async function signIn(email: string, password: string) {
         throw new Error("Login failed");
     }
 
-    const { finishLoginRequest, exportKey } = loginResult;
-    const opaqueSessionKey = loginResult.sessionKey;
+    const { finishLoginRequest, exportKey, serverStaticPublicKey } = loginResult;
+  const opaqueSessionKey = loginResult.sessionKey;
+
+  if (serverStaticPublicKey !== SERVER_PUBLIC_KEY) {
+      throw new Error("Server identity verification failed. Aborting login.");
+  }
 
     console.log("Agreed session key, client is done, waiting for trust attestation from server. SK: " + opaqueSessionKey) //session key agreed, waiting for server trust attestation
 

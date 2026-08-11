@@ -1,6 +1,7 @@
 import * as opaque from '@serenity-kit/opaque'
 import { Base64String } from "@/UtilTypes";
 import { getSodium } from "@/lib/crypto/sodium";
+import { SERVER_PUBLIC_KEY } from './lib/constants';
 
 export async function resetPassword(email: string, token: string, recoveryPhrase: string, newPassword: string) {
     const sodium = await getSodium();
@@ -11,7 +12,7 @@ export async function resetPassword(email: string, token: string, recoveryPhrase
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, token })
     });
-    
+
     if (!verifyResponse.ok) {
         throw new Error("Invalid or expired reset link");
     }
@@ -32,7 +33,7 @@ export async function resetPassword(email: string, token: string, recoveryPhrase
     // 3. Decrypt the account private keys
     let accountSigningPrivateKey: Uint8Array;
     let accountEncryptionPrivateKey: Uint8Array;
-    
+
     try {
         accountSigningPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
             null,
@@ -69,11 +70,15 @@ export async function resetPassword(email: string, token: string, recoveryPhrase
 
     const { registrationResponse, nonce } = await m1Response.json();
 
-    const { registrationRecord, exportKey } = opaque.client.finishRegistration({
+    const { registrationRecord, exportKey, serverStaticPublicKey } = opaque.client.finishRegistration({
         clientRegistrationState,
         registrationResponse,
         password: newPassword,
     });
+
+    if (serverStaticPublicKey !== SERVER_PUBLIC_KEY) {
+        throw new Error("Server identity verification failed. Aborting login.");
+    }
 
     // 5. Derive NEW Master Key from OPAQUE exportKey (NOT the raw password)
     const newMasterSalt = sodium.randombytes_buf(sodium.crypto_pwhash_SALTBYTES);

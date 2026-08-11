@@ -6,6 +6,7 @@ import {
 import M3ServerPayload from "@/KeyRegisterMaterial";
 import {Base64String} from "@/UtilTypes";
 import {getSodium} from "@/lib/crypto/sodium";
+import { SERVER_PUBLIC_KEY } from './lib/constants';
 
 async function registerKeyMaterial(email: string, exportKey: string): Promise<KeyRegisterMaterial> {
     const sodium = await getSodium();
@@ -186,15 +187,19 @@ export async function signUp(email: string, password: string) {
         throw Error("Cannot find registration response in payload.")
     }
 
-    const { registrationRecord, exportKey } = opaque.client.finishRegistration({
+    const { registrationRecord, exportKey, serverStaticPublicKey } = opaque.client.finishRegistration({
         clientRegistrationState,
         registrationResponse,
-        password,
+      password,
         // identifiers: {
         //     server: "server-identity",
         //     client: email
         // }
     })
+    if (serverStaticPublicKey !== SERVER_PUBLIC_KEY) {
+        throw new Error("Server identity verification failed. Aborting registration.");
+    }
+
 
     const km: KeyRegisterMaterial = await registerKeyMaterial(email, exportKey);
 
@@ -251,7 +256,7 @@ export async function signUp(email: string, password: string) {
     const m3ResponseData = await m3Response.json();
 
     console.log(m3ResponseData)
-    
+
     return {
         recoveryPhrase: km.recoveryPhrase
     }

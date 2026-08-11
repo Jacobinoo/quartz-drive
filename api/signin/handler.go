@@ -159,7 +159,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sessionKey, err := bindings.FinishLogin(
+	_, err = bindings.FinishLogin(
 		serverLoginState,
 		finishLoginReqBytes,
 	)
@@ -170,7 +170,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Println("Established a new trusted session key: ", hex.EncodeToString(sessionKey))
+	fmt.Println("Established a new trusted session key.")
 
 	var trustedUserInfo dto.TrustedUserInformation
 

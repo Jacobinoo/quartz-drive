@@ -141,7 +141,18 @@ func opaqueSetupBytes() []byte {
 func rootHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(config.Cfg.App) //this is public
+
+	response := struct {
+		Service     string
+		Version     string
+		Description string
+	}{
+		Service:     config.Cfg.App.Name,
+		Version:     config.Cfg.App.Version,
+		Description: "Quartz API Server",
+	}
+
+	json.NewEncoder(w).Encode(&response) //this is public
 }
 
 func initV1Mux(state *ServerState) *http.ServeMux {

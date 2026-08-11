@@ -35,7 +35,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "build/quartz-server,internal/bindings/opaque_rust/target/release/libopaque_rust.so"
+          source: "build/quartz-account,internal/bindings/opaque_rust/target/release/libopaque_rust.so"
           target: "/home/${{ secrets.SERVER_USERNAME }}/deploy_temp"
           strip_components: 0
 
@@ -50,7 +50,7 @@ jobs:
             sudo systemctl stop quartz
 
             # 2. Move the new files into place
-            mv /home/${{ secrets.SERVER_USERNAME }}/deploy_temp/build/quartz-server /home/${{ secrets.SERVER_USERNAME }}/quartz-server
+            mv /home/${{ secrets.SERVER_USERNAME }}/deploy_temp/build/quartz-account /home/${{ secrets.SERVER_USERNAME }}/quartz-server
             sudo mv /home/${{ secrets.SERVER_USERNAME }}/deploy_temp/internal/bindings/opaque_rust/target/release/libopaque_rust.so /usr/lib/
 
             # 3. Clean up the temp folder

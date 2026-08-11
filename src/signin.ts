@@ -132,14 +132,22 @@ export async function signIn(email: string, password: string) {
     );
   console.log("session priv key:", loginAttestationData.sessionPrivateKey)
     const kdfSalt = sodium.from_base64(loginAttestationData.masterKdfSalt);
-        // 1. Derive master key from OPAQUE exportKey via Argon2id
-        const derivedMasterKey = sodium.crypto_pwhash(
-            sodium.crypto_secretbox_KEYBYTES,
-            exportKey,
-            kdfSalt,
-            sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
-            sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,
-            sodium.crypto_pwhash_ALG_ARGON2ID13
+        
+        // 1. Derive master key from OPAQUE exportKey via fast KDF
+        // We first hash the exportKey to exactly 32 bytes
+        const exportKeyBytes = typeof exportKey === "string" ? sodium.from_string(exportKey) : exportKey;
+        const kdfRootKey = sodium.crypto_generichash(
+            sodium.crypto_kdf_KEYBYTES,
+            exportKeyBytes,
+            null
+        );
+
+        // Then we use domain separation to derive the specific master key
+        const derivedMasterKey = sodium.crypto_kdf_derive_from_key(
+            sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES,
+            1,              // Subkey ID 1
+            "QMaster!",     // 8-byte context string
+            kdfRootKey
         );
         // 2. Decrypt Account Encryption Private Key
         const accountEncryptionPrivNonce = sodium.from_base64(loginAttestationData.accountEncryptionKeyNonce);

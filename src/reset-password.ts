@@ -80,16 +80,24 @@ export async function resetPassword(email: string, token: string, recoveryPhrase
         throw new Error("Server identity verification failed. Aborting login.");
     }
 
-    // 5. Derive NEW Master Key from OPAQUE exportKey (NOT the raw password)
-    const newMasterSalt = sodium.randombytes_buf(sodium.crypto_pwhash_SALTBYTES);
-    const newDerivedMasterKey = sodium.crypto_pwhash(
-        sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES,
-        exportKey,
-        newMasterSalt,
-        sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
-        sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,
-        sodium.crypto_pwhash_ALG_ARGON2ID13
+    // 5. Derive NEW Master Key from OPAQUE exportKey via fast KDF
+    const exportKeyBytes = typeof exportKey === "string" ? sodium.from_string(exportKey) : exportKey;
+    const kdfRootKey = sodium.crypto_generichash(
+        sodium.crypto_kdf_KEYBYTES,
+        exportKeyBytes,
+        null
     );
+
+    const newDerivedMasterKey = sodium.crypto_kdf_derive_from_key(
+        sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES,
+        1,              // Subkey ID 1
+        "QMaster!",     // 8-byte context string
+        kdfRootKey
+    );
+
+    // We still generate a random salt because the Recovery Phrase
+    // requires the slow Argon2id algorithm.
+    const newMasterSalt = sodium.randombytes_buf(sodium.crypto_pwhash_SALTBYTES);
 
     // 6. Re-encrypt the Account Private Keys with the NEW Master Key
     const newAccountSigningPrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);

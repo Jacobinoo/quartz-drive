@@ -11,18 +11,26 @@ import { SERVER_PUBLIC_KEY } from './lib/constants';
 async function registerKeyMaterial(email: string, exportKey: string): Promise<KeyRegisterMaterial> {
     const sodium = await getSodium();
 
-    // Layer 0 - Master Key (derived from OPAQUE exportKey, NOT the raw password)
-    // This prevents offline dictionary attacks if the database is leaked
-    // without the server's OPRF secret key.
-    const masterSalt = sodium.randombytes_buf(sodium.crypto_pwhash_SALTBYTES);
-    const derivedMasterKey = sodium.crypto_pwhash(
-        sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES,
-        exportKey,
-        masterSalt,
-        sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
-        sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,
-        sodium.crypto_pwhash_ALG_ARGON2ID13
+    // Layer 0 - Master Key (derived from OPAQUE exportKey via fast KDF)
+    // We first hash the exportKey to exactly 32 bytes (crypto_kdf_KEYBYTES)
+    const exportKeyBytes = typeof exportKey === "string" ? sodium.from_string(exportKey) : exportKey;
+    const kdfRootKey = sodium.crypto_generichash(
+        sodium.crypto_kdf_KEYBYTES,
+        exportKeyBytes,
+        null
     );
+
+    // Then we use domain separation to derive the specific master key for Account Keys
+    const derivedMasterKey = sodium.crypto_kdf_derive_from_key(
+        sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES,
+        1,              // Subkey ID 1
+        "QMaster!",     // 8-byte context string
+        kdfRootKey
+    );
+
+    // We still generate a random salt because the Recovery Phrase (which has low entropy)
+    // still requires the slow Argon2id algorithm.
+    const masterSalt = sodium.randombytes_buf(sodium.crypto_pwhash_SALTBYTES);
 
     // Layer 1 - Account Identity
     const accountEncryptionKeyPair = sodium.crypto_box_keypair();

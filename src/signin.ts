@@ -58,13 +58,12 @@ export async function signIn(email: string, password: string) {
     }
 
     const { finishLoginRequest, exportKey, serverStaticPublicKey } = loginResult;
-  const opaqueSessionKey = loginResult.sessionKey;
 
   if (serverStaticPublicKey !== SERVER_PUBLIC_KEY) {
       throw new Error("Server identity verification failed. Aborting login.");
   }
 
-    console.log("Agreed session key, client is done, waiting for trust attestation from server. SK: " + opaqueSessionKey) //session key agreed, waiting for server trust attestation
+    console.log("Agreed session key, client is done, waiting for trust attestation from server.") //session key agreed, waiting for server trust attestation
 
     //DPoP
     const dpopPublicKey = await generateAndStoreDpopKey();
@@ -103,7 +102,7 @@ export async function signIn(email: string, password: string) {
         throw Error("Login failed")
     }
 
-    console.log("Opaque SessionKey received trust attestation. SK: " + opaqueSessionKey)
+    console.log("Opaque SessionKey received trust attestation.")
 
     const loginAttestationData: LoginAttestationConfirmed = {
         accountEncryptionKeyNonce: loginAttestationRaw.accountEncryptionKeyNonce,

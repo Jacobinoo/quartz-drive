@@ -27,7 +27,7 @@ jobs:
 
       - name: Build Go and Rust Binaries
         run: |
-          make build
+          make build-prod
 
       - name: Copy Files to Google Cloud
         uses: appleboy/scp-action@v0.1.7

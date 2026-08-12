@@ -11,6 +11,10 @@ rust:
 build: rust
 	go build -o build/quartz-account ./cmd/app
 
+# Build the backend for production (depends on rust bindings)
+build-prod: rust
+	CGO_ENABLED=1 go build -ldflags="-s -w" -trimpath -o build/quartz-account ./cmd/app
+
 # Run the Go backend
 run: rust
 	go run ./cmd/app

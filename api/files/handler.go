@@ -359,88 +359,90 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if chunkRow.Status != model.ChunkUploadStatusPending {
+	if chunkRow.Status != model.ChunkUploadStatusPending && chunkRow.Status != model.ChunkUploadStatusVerified {
 		log.Printf("error: requested chunk %d status is %s", chunkRow.ChunkIndex, chunkRow.Status)
 		http.Error(w, "requested chunk not found", http.StatusNotFound)
 		return
 	}
 
-	size, etag, sha256, err := h.storage.GetChunkSize(r.Context(), chunkRow.ObjectKey)
-	if err != nil {
-		log.Printf("failed to get chunk size, etag and checksum: %v", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
+	// If it's already verified from a previous interrupted attempt, skip S3 validation and go straight to assembly check
+	if chunkRow.Status == model.ChunkUploadStatusPending {
+		size, etag, sha256, err := h.storage.GetChunkSize(r.Context(), chunkRow.ObjectKey)
+		if err != nil {
+			log.Printf("failed to get chunk size, etag and checksum: %v", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 
-	log.Printf("checksum is %s", sha256)
+		log.Printf("checksum is %s", sha256)
 
-	if subtle.ConstantTimeCompare([]byte(sha256), []byte(uploadRequest.ChunkHash)) == 0 {
-		log.Printf("integrity check failed: %v", err)
-		go func(objectKey string) {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			if delErr := h.storage.DeleteChunk(ctx, objectKey); delErr != nil {
-				log.Printf("failed to delete (integrity check failed) chunk %s: %v", objectKey, delErr)
-			}
-		}(chunkRow.ObjectKey)
-		http.Error(w, "integrity check failed", http.StatusForbidden)
-		return
-	}
+		if subtle.ConstantTimeCompare([]byte(sha256), []byte(uploadRequest.ChunkHash)) == 0 {
+			log.Printf("integrity check failed: %v", err)
+			go func(objectKey string) {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				if delErr := h.storage.DeleteChunk(ctx, objectKey); delErr != nil {
+					log.Printf("failed to delete (integrity check failed) chunk %s: %v", objectKey, delErr)
+				}
+			}(chunkRow.ObjectKey)
+			http.Error(w, "integrity check failed", http.StatusForbidden)
+			return
+		}
 
-	if size > maxChunkSize {
-		log.Printf("CHUNK %s OVERSIZED: %d > %d", chunkRow.ObjectKey, size, maxChunkSize)
-		go func(objectKey string) {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			if delErr := h.storage.DeleteChunk(ctx, objectKey); delErr != nil {
-				log.Printf("failed to delete oversized chunk %s: %v", objectKey, delErr)
-			}
-		}(chunkRow.ObjectKey)
+		if size > maxChunkSize {
+			log.Printf("CHUNK %s OVERSIZED: %d > %d", chunkRow.ObjectKey, size, maxChunkSize)
+			go func(objectKey string) {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				if delErr := h.storage.DeleteChunk(ctx, objectKey); delErr != nil {
+					log.Printf("failed to delete oversized chunk %s: %v", objectKey, delErr)
+				}
+			}(chunkRow.ObjectKey)
 
-		chunkRow.Status = model.ChunkUploadStatusFlagged
-		h.db.Save(&chunkRow)
-		uploadSession.Status = model.UploadStatusFlaggedMalicious
-		h.db.Save(&uploadSession)
+			chunkRow.Status = model.ChunkUploadStatusFlagged
+			h.db.Save(&chunkRow)
+			uploadSession.Status = model.UploadStatusFlaggedMalicious
+			h.db.Save(&uploadSession)
 
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 
-	if etag != uploadRequest.Etag {
-		log.Printf("CHUNK %s etags dont match: %s != %s", chunkRow.ObjectKey, etag, uploadRequest.Etag)
+		if etag != uploadRequest.Etag {
+			log.Printf("CHUNK %s etags dont match: %s != %s", chunkRow.ObjectKey, etag, uploadRequest.Etag)
 
-		go func(objectKey string) {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			if delErr := h.storage.DeleteChunk(ctx, objectKey); delErr != nil {
-				log.Printf("failed to delete (mismatch etag) chunk %s: %v", objectKey, delErr)
-			}
-		}(chunkRow.ObjectKey)
+			go func(objectKey string) {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				if delErr := h.storage.DeleteChunk(ctx, objectKey); delErr != nil {
+					log.Printf("failed to delete (mismatch etag) chunk %s: %v", objectKey, delErr)
+				}
+			}(chunkRow.ObjectKey)
 
-		chunkRow.Status = model.ChunkUploadStatusFlagged
-		h.db.Save(&chunkRow)
-		uploadSession.Status = model.UploadStatusFlaggedMalicious
-		h.db.Save(&uploadSession)
+			chunkRow.Status = model.ChunkUploadStatusFlagged
+			h.db.Save(&chunkRow)
+			uploadSession.Status = model.UploadStatusFlaggedMalicious
+			h.db.Save(&uploadSession)
 
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 
-	if size != chunkRow.DeclaredSize {
-		//log it and save verified size later
-		log.Printf("log: size of chunk %s declared by client does not match with verified size: declared %d vs verified %d", chunkRow.ObjectKey, chunkRow.DeclaredSize, size)
-	}
+		if size != chunkRow.DeclaredSize {
+			log.Printf("log: size of chunk %s declared by client does not match with verified size: declared %d vs verified %d", chunkRow.ObjectKey, chunkRow.DeclaredSize, size)
+		}
 
-	chunkRow.Etag = etag
-	chunkRow.VerifiedSize = size
-	chunkRow.VerifiedAt = time.Now()
-	chunkRow.Status = model.ChunkUploadStatusVerified
+		chunkRow.Etag = etag
+		chunkRow.VerifiedSize = size
+		chunkRow.VerifiedAt = time.Now()
+		chunkRow.Status = model.ChunkUploadStatusVerified
 
-	result := h.db.Save(&chunkRow)
-	if result.Error != nil {
-		log.Printf("chunk etag, size, timestamp, status could not be saved: %v", result.Error)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+		result := h.db.Save(&chunkRow)
+		if result.Error != nil {
+			log.Printf("chunk etag, size, timestamp, status could not be saved: %v", result.Error)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	var verifiedCount int64
@@ -525,7 +527,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 	fileNode.SizeBytes = trueTotalSize
 
 	// 4. Save everything in an atomic Postgres transaction!
-	err = h.db.Transaction(func(tx *gorm.DB) error {
+	err := h.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&fileNode).Error; err != nil {
 			return err
 		}

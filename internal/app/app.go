@@ -140,6 +140,13 @@ func opaqueSetupBytes() []byte {
 }
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
+	// In Go's ServeMux, "/" is a wildcard prefix match.
+	// If the path isn't exactly "/", return a 404 Not Found.
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 

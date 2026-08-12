@@ -1,14 +1,18 @@
 package model
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 type Link struct {
-	gorm.Model
 	// ID: Unikalne ID linku, nie mylić z ID pliku/węzła
-	ID uuid.UUID `gorm:"type:uuid;primaryKey;not null"`
+	ID        uuid.UUID      `gorm:"type:uuid;primaryKey;not null"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index:idx_parent_node_deleted"`
 
 	// ParentNodeID: Wskazuje na FOLDER (Węzeł), w którym ten link się znajduje.
 	// - Jeśli != NULL: To jest zwykły plik/folder wewnątrz innego folderu.
@@ -16,9 +20,6 @@ type Link struct {
 	// - Jeśli == NULL: To jest "Volume Root" (główny folder udziału).
 	//   (Szyfrowane kluczem Share).
 	ParentNodeID *uuid.UUID `gorm:"type:uuid;index:idx_parent_node_deleted"`
-
-	// DeletedAt explicitly defined to join the composite index
-	DeletedAt gorm.DeletedAt `gorm:"index:idx_parent_node_deleted"`
 
 	// ChildNodeID: Wskazuje na PLIK lub FOLDER (Węzeł), który ten link reprezentuje.
 	// To tutaj "żyje" plik. Link to tylko etykieta w katalogu rodzica.

@@ -22,7 +22,6 @@ func New() (db *gorm.DB, err error) {
 		}); err == nil {
 			log.Println("database connected")
 
-			// Configure the Connection Pool to prevent 100ms connection latency spikes
 			sqlDB, err := db.DB()
 			if err == nil {
 				sqlDB.SetMaxIdleConns(10)

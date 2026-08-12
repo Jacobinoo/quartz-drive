@@ -67,7 +67,7 @@ async function hashUint8Array(data: Uint8Array<ArrayBuffer>): Promise<string> {
 }
 
 async function requestChunkPresignedUrl(uploadId: string, chunkIndex: number, declaredSize: number, chunkHash: string): Promise<string | null> {
-  const res = await customFetch("https://localhost:3100/v1/files/upload", {
+  const res = await customFetch("https://quartz-api.duckdns.org/v1/files/upload", {
     method: "POST",
     headers: {
         "Content-Type": "application/json",
@@ -88,7 +88,7 @@ async function requestChunkPresignedUrl(uploadId: string, chunkIndex: number, de
 }
 
 async function reportChunkDone(uploadId: string, chunkIndex: number, etag: string, chunkHash: string): Promise<boolean> {
-  const res = await customFetch("https://localhost:3100/v1/files/upload/chunk_finish", {
+  const res = await customFetch("https://quartz-api.duckdns.org/v1/files/upload/chunk_finish", {
     method: "POST",
     headers: {
         "Content-Type": "application/json",
@@ -108,6 +108,19 @@ async function reportChunkDone(uploadId: string, chunkIndex: number, etag: strin
   return true
 }
 
+
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 1500): Promise<T> {
+    for (let i = 0; i < retries; i++) {
+        try {
+            return await fn();
+        } catch (e) {
+            console.warn(`Network operation failed (attempt ${i + 1}/${retries}). Retrying in ${delayMs}ms...`, e);
+            if (i === retries - 1) throw e;
+            await new Promise(r => setTimeout(r, delayMs));
+        }
+    }
+    throw new Error("unreachable");
+}
 
 ctx.onmessage = async (event: MessageEvent<UploadWorkerInput>) => {
     const { file, nodeId, uploadId, totalChunks, fileKey, taskId, accessToken, csrfToken} = event.data;
@@ -188,57 +201,62 @@ ctx.onmessage = async (event: MessageEvent<UploadWorkerInput>) => {
             // We took an item, wake up the producer in case it was paused due to a full queue
             notifyQueueChange();
             const { chunkIndex, payload, chunkHash, declaredChunkSize } = item;
-            // 1. Get URL
-            const t0 = performance.now();
-            const presignedUrl = await requestChunkPresignedUrl(uploadId, chunkIndex, declaredChunkSize, chunkHash);
-            const t1 = performance.now();
             
-            if (!presignedUrl) throw new Error("Could not request chunk presigned url");
+            // 1. Get URL (Wrapped in Retry)
+            const t0 = performance.now();
+            const presignedUrl = await withRetry(async () => {
+                const url = await requestChunkPresignedUrl(uploadId, chunkIndex, declaredChunkSize, chunkHash);
+                if (!url) throw new Error("Could not request chunk presigned url");
+                return url;
+            });
+            const t1 = performance.now();
             
             // Increment by 0.05 (5%) for requesting URL
             chunkScores[chunkIndex] = 0.15;
             postProgress(`Uploading...`);
             
-            // 2. Upload (Using XHR for exact byte progress!)
+            // 2. Upload (Using XHR for exact byte progress, wrapped in Retry)
             const t2 = performance.now();
-            const uploadResponse: any = await new Promise((resolve, reject) => {
+            const uploadResponse: any = await withRetry(() => new Promise((resolve, reject) => {
                 const xhr = new XMLHttpRequest();
                 xhr.open('PUT', presignedUrl);
                 xhr.setRequestHeader("x-amz-checksum-sha256", chunkHash);
                 
                 xhr.upload.onprogress = (e) => {
                     if (e.lengthComputable) {
-                        // Dynamically update the 80% fraction as bytes upload!
                         chunkScores[chunkIndex] = 0.15 + ((e.loaded / e.total) * 0.80);
                         postProgress(`Uploading...`);
                     }
                 };
                 
                 xhr.onload = () => {
-                    chunkScores[chunkIndex] = 0.95; // Snap to exactly 95% when finished uploading
-                    resolve({
-                        ok: xhr.status >= 200 && xhr.status < 300,
-                        headers: { get: (name: string) => xhr.getResponseHeader(name) }
-                    });
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        chunkScores[chunkIndex] = 0.95; // Snap to exactly 95% when finished uploading
+                        resolve({
+                            ok: true,
+                            headers: { get: (name: string) => xhr.getResponseHeader(name) }
+                        });
+                    } else {
+                        reject(new Error(`S3 responded with status ${xhr.status}`));
+                    }
                 };
                 
-                xhr.onerror = () => reject(new Error("Network Error"));
+                xhr.onerror = () => reject(new Error("Network Error uploading to S3"));
                 xhr.send(payload as any);
-            });
+            }));
             const t3 = performance.now();
-
-            if (!uploadResponse.ok) throw new Error(`Chunk ${chunkIndex} failed to upload to cloud`);
 
             let etag = uploadResponse.headers.get("ETag");
             if (!etag) throw new Error(`Chunk ${chunkIndex} response missing ETag`);
             etag = etag.substring(1, etag.length - 1);
             
-            // 3. Report
+            // 3. Report (Wrapped in Retry)
             const t4 = performance.now();
-            const reportChunkResponse = await reportChunkDone(uploadId, chunkIndex, etag, chunkHash);
+            await withRetry(async () => {
+                const success = await reportChunkDone(uploadId, chunkIndex, etag, chunkHash);
+                if (!success) throw new Error(`Chunk ${chunkIndex} failed to report as done`);
+            });
             const t5 = performance.now();
-            
-            if (!reportChunkResponse) throw new Error(`Chunk ${chunkIndex} failed to report as done`);
             
             // Increment by 0.05 (5%) for reporting done (Total per chunk = 1.0)
             chunkScores[chunkIndex] = 1.0;

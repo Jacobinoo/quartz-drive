@@ -14,7 +14,7 @@ type (
 		CertFilePath string `env:"CERT_FILE_PATH,required"`
 		KeyFilePath  string `env:"KEY_FILE_PATH,required"`
 
-		App //this is public on GET /
+		App
 		DB
 		// GRPC
 		KV
@@ -60,11 +60,12 @@ type (
 		Key string `env:"EMAIL_KEY,required"`
 	}
 
-	App struct { //this is public on GET /
+	App struct {
 		Env         string `env:"APP_ENV,required"`
 		Name        string `env:"APP_NAME,required"`
 		Version     string `env:"APP_VERSION,required"`
 		FrontendURL string `env:"FRONTEND_URL,required"`
+		HealthToken string `env:"HEALTH_TOKEN,required"`
 	}
 
 	DB struct {

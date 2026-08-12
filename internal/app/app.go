@@ -95,6 +95,7 @@ func initRouter(state *ServerState) *http.ServeMux {
 	v1Mux := initV1Mux(state)
 
 	rootMux.HandleFunc("/", rootHandler)
+	rootMux.HandleFunc("/health", healthHandler(state))
 	rootMux.Handle("/v1/", http.StripPrefix("/v1", v1Mux))
 
 	return rootMux
@@ -152,7 +153,41 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 		Description: "Quartz API Server",
 	}
 
-	json.NewEncoder(w).Encode(&response) //this is public
+	json.NewEncoder(w).Encode(&response) //this is public on GET /
+}
+
+func healthHandler(state *ServerState) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Require Bearer token
+		expectedToken := "Bearer " + config.Cfg.App.HealthToken
+		if r.Header.Get("Authorization") != expectedToken {
+			w.WriteHeader(http.StatusUnauthorized)
+			json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+			return
+		}
+
+		status := "healthy"
+
+		// Check Database
+		sqlDB, err := state.DB.DB()
+		if err != nil || sqlDB.Ping() != nil {
+			status = "unhealthy (db)"
+			w.WriteHeader(http.StatusServiceUnavailable)
+		} else if state.Redis.Ping(r.Context()).Err() != nil {
+			// Check Redis/Valkey
+			status = "unhealthy (redis)"
+			w.WriteHeader(http.StatusServiceUnavailable)
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
+
+		json.NewEncoder(w).Encode(map[string]string{
+			"status": status,
+			"time":   time.Now().UTC().Format(time.RFC3339),
+		})
+	}
 }
 
 func initV1Mux(state *ServerState) *http.ServeMux {

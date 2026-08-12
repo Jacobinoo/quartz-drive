@@ -38,9 +38,12 @@ sudo systemctl start quartz-$TARGET_ENV
 # 4. Health Check
 echo "Waiting for service to boot (up to 60 seconds)..."
 
+# Extract the health token from the remote server's env file
+HEALTH_TOKEN=$(grep '^HEALTH_TOKEN=' /opt/quartz/.env | cut -d '=' -f2 | tr -d '"')
+
 HEALTHY=false
 for i in {1..60}; do
-    if curl -k -f -s https://127.0.0.1:$TARGET_PORT/ > /dev/null; then
+    if curl -k -f -s -H "Authorization: Bearer $HEALTH_TOKEN" https://127.0.0.1:$TARGET_PORT/health > /dev/null; then
         HEALTHY=true
         break
     fi

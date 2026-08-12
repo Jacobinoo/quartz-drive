@@ -19,6 +19,7 @@ func New() (db *gorm.DB, err error) {
 			Logger:                 logger.Default.LogMode(logger.Info),
 			SkipDefaultTransaction: true,
 			TranslateError:         true,
+			PrepareStmt:            true,
 		}); err == nil {
 			log.Println("database connected")
 

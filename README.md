@@ -1,5 +1,7 @@
 # Quartz Account Server (Go)
 
+[![Deploy API to Cloud](https://github.com/Jacobinoo/QuartzAccountGo/actions/workflows/deploy.yml/badge.svg?event=push)](https://github.com/Jacobinoo/QuartzAccountGo/actions/workflows/deploy.yml)
+
 A high-performance account authentication and key management server written in Go. It relies on the [OPAQUE](https://datatracker.ietf.org/doc/draft-irtf-cfrg-opaque/) cryptographic protocol to provide strong, asymmetric password-authenticated key exchange (PAKE). The backend relies on native Rust bindings (`opaque-ke`) via CGO to process the cryptographic heavy lifting.
 
 ## Prerequisites

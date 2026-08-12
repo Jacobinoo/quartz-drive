@@ -24,6 +24,36 @@ type (
 		B2
 		Sweeper
 		Email
+		RateLimits
+	}
+
+	RateLimits struct {
+		DevicesIPRate    int `env:"RL_DEVICES_IP_RATE" envDefault:"300"`
+		DevicesIPBurst   int `env:"RL_DEVICES_IP_BURST" envDefault:"100"`
+		DevicesUserRate  int `env:"RL_DEVICES_USER_RATE" envDefault:"6"`
+		DevicesUserBurst int `env:"RL_DEVICES_USER_BURST" envDefault:"30"`
+
+		FilesIPRate    int `env:"RL_FILES_IP_RATE" envDefault:"300"`
+		FilesIPBurst   int `env:"RL_FILES_IP_BURST" envDefault:"100"`
+		FilesUserRate  int `env:"RL_FILES_USER_RATE" envDefault:"100"`
+		FilesUserBurst int `env:"RL_FILES_USER_BURST" envDefault:"50"`
+
+		KeysIPRate    int `env:"RL_KEYS_IP_RATE" envDefault:"300"`
+		KeysIPBurst   int `env:"RL_KEYS_IP_BURST" envDefault:"100"`
+		KeysUserRate  int `env:"RL_KEYS_USER_RATE" envDefault:"100"`
+		KeysUserBurst int `env:"RL_KEYS_USER_BURST" envDefault:"50"`
+
+		RefreshIPRate  int `env:"RL_REFRESH_IP_RATE" envDefault:"10"`
+		RefreshIPBurst int `env:"RL_REFRESH_IP_BURST" envDefault:"5"`
+
+		SigninIPRate  int `env:"RL_SIGNIN_IP_RATE" envDefault:"10"`
+		SigninIPBurst int `env:"RL_SIGNIN_IP_BURST" envDefault:"10"`
+
+		SignoutIPRate  int `env:"RL_SIGNOUT_IP_RATE" envDefault:"10"`
+		SignoutIPBurst int `env:"RL_SIGNOUT_IP_BURST" envDefault:"5"`
+
+		SignupIPRate  int `env:"RL_SIGNUP_IP_RATE" envDefault:"5"`
+		SignupIPBurst int `env:"RL_SIGNUP_IP_BURST" envDefault:"2"`
 	}
 
 	Email struct {

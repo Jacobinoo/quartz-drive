@@ -2,14 +2,16 @@ package devices
 
 import (
 	"net/http"
+	"quartz/config"
 	"quartz/internal/middleware"
 	"time"
+
 	"github.com/redis/go-redis/v9"
 )
 
 func RegisterRoutes(mux *http.ServeMux, h *Handler, rdb *redis.Client) {
-	limitIP := middleware.RateLimitIP(rdb, "devices", 300, time.Second, 100)
-	limitUser := middleware.RateLimitUser(rdb, "devices", 6, time.Minute, 30)
+	limitIP := middleware.RateLimitIP(rdb, "devices", config.Cfg.RateLimits.DevicesIPRate, time.Second, config.Cfg.RateLimits.DevicesIPBurst)
+	limitUser := middleware.RateLimitUser(rdb, "devices", config.Cfg.RateLimits.DevicesUserRate, time.Minute, config.Cfg.RateLimits.DevicesUserBurst)
 
 	wrap := func(handler http.HandlerFunc) http.HandlerFunc {
 		return middleware.CorsMiddleware(

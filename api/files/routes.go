@@ -2,14 +2,16 @@ package files
 
 import (
 	"net/http"
+	"quartz/config"
 	"quartz/internal/middleware"
 	"time"
+
 	"github.com/redis/go-redis/v9"
 )
 
 func RegisterRoutes(mux *http.ServeMux, h *Handler, rdb *redis.Client) {
-	limitIP := middleware.RateLimitIP(rdb, "files", 300, time.Second, 100)
-	limitUser := middleware.RateLimitUser(rdb, "files", 100, time.Second, 50)
+	limitIP := middleware.RateLimitIP(rdb, "files", config.Cfg.RateLimits.FilesIPRate, time.Second, config.Cfg.RateLimits.FilesIPBurst)
+	limitUser := middleware.RateLimitUser(rdb, "files", config.Cfg.RateLimits.FilesUserRate, time.Second, config.Cfg.RateLimits.FilesUserBurst)
 
 	wrap := func(handler http.HandlerFunc) http.HandlerFunc {
 		return middleware.CorsMiddleware(

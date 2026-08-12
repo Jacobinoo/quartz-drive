@@ -2,12 +2,14 @@ package refresh
 
 import (
 	"net/http"
+	"quartz/config"
 	"quartz/internal/middleware"
 	"time"
+
 	"github.com/redis/go-redis/v9"
 )
 
 func RegisterRoutes(mux *http.ServeMux, h *Handler, rdb *redis.Client) {
-	limitIP := middleware.RateLimitIP(rdb, "refresh", 10, time.Minute, 5)
+	limitIP := middleware.RateLimitIP(rdb, "refresh", config.Cfg.RateLimits.RefreshIPRate, time.Minute, config.Cfg.RateLimits.RefreshIPBurst)
 	mux.HandleFunc("/refresh", middleware.CorsMiddleware(limitIP(h.Refresh)))
 }

@@ -39,7 +39,7 @@ sudo systemctl start quartz-$TARGET_ENV
 echo "Waiting for service to boot (up to 60 seconds)..."
 
 # Extract the health token from the remote server's env file
-HEALTH_TOKEN=$(grep '^HEALTH_TOKEN=' /opt/quartz/.env | cut -d '=' -f2 | tr -d '"')
+HEALTH_TOKEN=$(sudo grep '^HEALTH_TOKEN=' /opt/quartz/.env | cut -d '=' -f2 | tr -d '"')
 
 HEALTHY=false
 for i in {1..60}; do
@@ -53,8 +53,8 @@ done
 
 if [ "$HEALTHY" = false ]; then
     echo "Health check failed after 60 seconds! Aborting deployment."
-    echo "Checking logs for $TARGET_ENV..."
-    sudo journalctl -n 20 -u quartz-$TARGET_ENV.service
+    echo "Writing logs for $TARGET_ENV..."
+    sudo journalctl -n 20 -u quartz-$TARGET_ENV.service >> actions_latest.log
     sudo systemctl stop quartz-$TARGET_ENV
     exit 1
 fi

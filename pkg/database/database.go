@@ -15,8 +15,13 @@ func New() (db *gorm.DB, err error) {
 	dsn := config.Cfg.GetDSN()
 	for i := 1; i <= 3; i++ {
 		log.Printf("database is connecting... (attempt %d)", i)
+		logLevel := logger.Info
+		if config.Cfg.App.Env == "PROD" {
+			logLevel = logger.Error
+		}
+
 		if db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
-			Logger:                 logger.Default.LogMode(logger.Info),
+			Logger:                 logger.Default.LogMode(logLevel),
 			SkipDefaultTransaction: true,
 			TranslateError:         true,
 			PrepareStmt:            true,

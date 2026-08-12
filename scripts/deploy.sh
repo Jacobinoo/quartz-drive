@@ -21,15 +21,15 @@ echo "Active environment is $ACTIVE_ENV. Deploying to $TARGET_ENV ($TARGET_PORT)
 sudo systemctl stop quartz-$TARGET_ENV || true
 
 # 2. Move binaries into place
-sudo mv /home/$USER/deploy_temp/build/quartz-account /opt/quartz/quartz-$TARGET_ENV
+sudo mv /home/github_actions/deploy_temp/build/quartz-account /opt/quartz/quartz-$TARGET_ENV
 sudo chmod +x /opt/quartz/quartz-$TARGET_ENV
 sudo chown quartz:quartz /opt/quartz/quartz-$TARGET_ENV
 
-sudo mv /home/$USER/deploy_temp/internal/bindings/opaque_rust/target/release/libopaque_rust.so /usr/lib/
+sudo mv /home/github_actions/deploy_temp/internal/bindings/opaque_rust/target/release/libopaque_rust.so /usr/lib/
 sudo ldconfig
 
 # Clean up temp
-rm -rf /home/$USER/deploy_temp
+rm -rf /home/github_actions/deploy_temp
 
 # 3. Start target service
 echo "Starting quartz-$TARGET_ENV..."

@@ -35,7 +35,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "build/quartz-account,internal/bindings/opaque_rust/target/release/libopaque_rust.so,scripts/deploy.sh"
+          source: "build/quartz-account,internal/bindings/opaque_rust/target/release/libopaque_rust.so"
           target: "/home/${{ secrets.SERVER_USERNAME }}/deploy_temp"
           strip_components: 0
 
@@ -46,4 +46,4 @@ jobs:
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            bash /home/${{ secrets.SERVER_USERNAME }}/deploy_temp/scripts/deploy.sh
+            sudo /opt/quartz/deploy.sh

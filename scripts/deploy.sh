@@ -36,12 +36,20 @@ echo "Starting quartz-$TARGET_ENV..."
 sudo systemctl start quartz-$TARGET_ENV
 
 # 4. Health Check
-echo "Waiting 3 seconds for service to boot..."
-sleep 3
+echo "Waiting for service to boot (up to 15 seconds)..."
 
-# -k ignores SSL cert validation, -f fails on HTTP errors (e.g. 404, 500)
-if ! curl -k -f -s https://127.0.0.1:$TARGET_PORT/ > /dev/null; then
-    echo "Health check failed! Aborting deployment."
+HEALTHY=false
+for i in {1..15}; do
+    if curl -k -f -s https://127.0.0.1:$TARGET_PORT/ > /dev/null; then
+        HEALTHY=true
+        break
+    fi
+    echo "Still waiting... ($i/15)"
+    sleep 1
+done
+
+if [ "$HEALTHY" = false ]; then
+    echo "Health check failed after 15 seconds! Aborting deployment."
     echo "Checking logs for $TARGET_ENV..."
     sudo journalctl -n 20 -u quartz-$TARGET_ENV.service
     sudo systemctl stop quartz-$TARGET_ENV

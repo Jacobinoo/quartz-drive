@@ -75,6 +75,8 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}
 
+	log.Printf("user wants to register, waiting for m3, registration request %s", m1.RegistrationRequest)
+
 	json.NewEncoder(w).Encode(registrationResponse)
 }
 

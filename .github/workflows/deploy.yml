@@ -50,14 +50,15 @@ jobs:
             sudo systemctl stop quartz
 
             # 2. Move the new files into place
-            mv /home/${{ secrets.SERVER_USERNAME }}/deploy_temp/build/quartz-account /home/${{ secrets.SERVER_USERNAME }}/quartz-server
+            sudo mv /home/${{ secrets.SERVER_USERNAME }}/deploy_temp/build/quartz-account /opt/quartz/quartz-server
             sudo mv /home/${{ secrets.SERVER_USERNAME }}/deploy_temp/internal/bindings/opaque_rust/target/release/libopaque_rust.so /usr/lib/
 
             # 3. Clean up the temp folder
             rm -rf /home/${{ secrets.SERVER_USERNAME }}/deploy_temp
 
-            # 4. Make sure it's executable
-            chmod +x /home/${{ secrets.SERVER_USERNAME }}/quartz-server
+            # 4. Set permissions
+            sudo chmod +x /opt/quartz/quartz-server
+            sudo chown quartz:quartz /opt/quartz/quartz-server
 
             # 5. Reload the shared libraries cache
             sudo ldconfig

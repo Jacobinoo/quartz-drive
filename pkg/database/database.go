@@ -21,6 +21,15 @@ func New() (db *gorm.DB, err error) {
 			TranslateError:         true,
 		}); err == nil {
 			log.Println("database connected")
+
+			// Configure the Connection Pool to prevent 100ms connection latency spikes
+			sqlDB, err := db.DB()
+			if err == nil {
+				sqlDB.SetMaxIdleConns(10)
+				sqlDB.SetMaxOpenConns(50)
+				sqlDB.SetConnMaxLifetime(time.Hour)
+			}
+
 			if config.Cfg.DB.AutoMigrate {
 				log.Println("auto migration is running...")
 				err = db.AutoMigrate(

@@ -40,9 +40,15 @@ func Run() {
 		return
 	}
 
-	storageService, err := storage.NewB2Service()
+	var storageService storage.StorageService
+	var err error
+	if config.Cfg.App.Env == "development" {
+		storageService, err = storage.NewS3Service()
+	} else {
+		storageService, err = storage.NewB2Service()
+	}
 	if err != nil {
-		log.Fatal("storage service: connection failed")
+		log.Fatalf("storage service: connection failed: %v", err)
 	}
 
 	state := &ServerState{
@@ -64,7 +70,15 @@ func Run() {
 	// Start server in a goroutine
 	go func() {
 		fmt.Printf("Server running on %s:%s\n", config.Cfg.Host, config.Cfg.Port)
-		if err := server.ListenAndServeTLS(config.Cfg.CertFilePath, config.Cfg.KeyFilePath); err != nil && err != http.ErrServerClosed {
+		var err error
+		if config.Cfg.CertFilePath != "" && config.Cfg.KeyFilePath != "" {
+			err = server.ListenAndServeTLS(config.Cfg.CertFilePath, config.Cfg.KeyFilePath)
+		} else {
+			fmt.Println("No TLS certificates found, falling back to HTTP")
+			err = server.ListenAndServe()
+		}
+		
+		if err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen: %s\n", err)
 		}
 	}()

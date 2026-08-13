@@ -1,8 +1,11 @@
 package config
 
 import (
+	"crypto/x509"
+	"encoding/hex"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/caarlos0/env/v11"
 )
@@ -11,8 +14,8 @@ type (
 	Config struct {
 		Host         string `env:"HOST,required"`
 		Port         string `env:"PORT,required"`
-		CertFilePath string `env:"CERT_FILE_PATH,required"`
-		KeyFilePath  string `env:"KEY_FILE_PATH,required"`
+		CertFilePath string `env:"CERT_FILE_PATH"`
+		KeyFilePath  string `env:"KEY_FILE_PATH"`
 
 		App
 		DB
@@ -108,6 +111,7 @@ type (
 		SecretAccessKey    string `env:"S3_SECRET_ACCESS_KEY,required"`
 		BucketName         string `env:"S3_BUCKET_NAME,required"`
 		InsecureSkipVerify bool   `env:"S3_INSECURE_SKIP_VERIFY,required"`
+		Secure             bool   `env:"S3_SECURE" envDefault:"true"`
 	}
 
 	B2 struct {
@@ -127,11 +131,56 @@ type (
 
 var Cfg Config
 
+func (c *Config) validateApp() {
+	//TODO
+}
+
+func (c *Config) validateCrypto() {
+	//TODO
+}
+func (c *Config) validateJWT() {
+	//TODO
+}
+func (c *Config) validateSweeper() {
+	_, err := time.ParseDuration(c.Sweeper.HourlyInterval)
+	if err != nil {
+		log.Fatalf("failed to parse env vars: %v", err)
+		return
+	}
+	_, err = time.ParseDuration(c.Sweeper.DailyInterval)
+	if err != nil {
+		log.Fatalf("failed to parse env vars: %v", err)
+		return
+	}
+	_, err = time.ParseDuration(c.Sweeper.CompletedInterval)
+	if err != nil {
+		log.Fatalf("failed to parse env vars: %v", err)
+		return
+	}
+	if c.Sweeper.UploadSessionExpiresHours <= 0 {
+		log.Fatal("Sweeper.UploadSessionExpiresHours must be higher than 0")
+		return
+	}
+	if c.Sweeper.TrashRetentionDays <= 0 {
+		log.Fatal("Sweeper.TrashRetentionDays must be higher than 0")
+		return
+	}
+}
+
 func (c *Config) Init() {
 	err := env.Parse(c)
 	if err != nil {
 		log.Fatalf("failed to parse env vars: %v", err)
 		return
+	}
+
+	// Validate JWT Key to fail-fast
+	privateKeyBytes, err := hex.DecodeString(c.JWT.SecretKey)
+	if err != nil {
+		log.Fatalf("JWT_PRIVATE_KEY_HEX is not a valid hex string: %v", err)
+	}
+	if _, err := x509.ParseECPrivateKey(privateKeyBytes); err != nil {
+		log.Fatalf("JWT_PRIVATE_KEY_HEX is not a valid ECDSA P-256 private key: %v", err)
 	}
 
 	fmt.Printf("Environment \"%s\" loaded.\n", c.App.Env)

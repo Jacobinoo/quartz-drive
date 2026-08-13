@@ -2,7 +2,7 @@ cert
 *.pem
 *.crt
 *.key
-*.env
+.env*
 build/
 .idea/
 
@@ -11,3 +11,5 @@ build/
 
 # Rust artifacts
 internal/bindings/opaque_rust/target/
+
+weed-data/

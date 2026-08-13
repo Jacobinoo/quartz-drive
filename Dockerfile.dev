@@ -1,0 +1,21 @@
+FROM golang:1.26-bookworm
+
+# Install Rust and build dependencies
+RUN apt-get update && apt-get install -y curl build-essential \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install air for hot reloading
+RUN go install github.com/air-verse/air@latest
+
+WORKDIR /app
+
+# Download dependencies first (caching)
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Ensure the Go server can find the Rust shared library during runtime
+ENV LD_LIBRARY_PATH="/app/internal/bindings/opaque_rust/target/release:${LD_LIBRARY_PATH}"
+
+# We don't copy the source code here because docker-compose mounts it as a volume
+CMD ["air", "-c", ".air.toml"]

@@ -1,0 +1,68 @@
+services:
+  quartz-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    environment:
+      - APP_ENV=development
+    env_file:
+      - .env.development
+    volumes:
+      - .:/app # Mount the entire source code into the container for live reloading
+      - ./cert:/app/cert
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_started
+    platform: linux/arm64
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: quartz_user
+      POSTGRES_PASSWORD: quartz_password
+      POSTGRES_DB: quartz_dev
+    ports:
+      - "5432:5432" # Exposed to localhost for GoLand database inspector
+    volumes:
+      # In Postgres 18+, the volume MUST be mounted to /var/lib/postgresql (NOT /data)
+      - pgdata-dev:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quartz_user -d quartz_dev"]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: valkey/valkey:9.1.1-alpine
+    ports:
+      - "6379:6379" # Exposed to localhost
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+
+  seaweedfs:
+    image: chrislusf/seaweedfs
+    ports:
+      - "8333:8333" # S3
+      - "8888:8888" # Filer UI
+      - "9333:9333" # Master UI
+    volumes:
+      - ./s3.json:/etc/seaweedfs/s3.json:ro
+      - ./weed-data:/data
+    command: >
+      server
+      -dir=/data
+      -s3
+      -s3.port=8333
+      -s3.config=/etc/seaweedfs/s3.json
+
+volumes:
+  pgdata-dev:

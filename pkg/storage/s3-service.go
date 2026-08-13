@@ -31,7 +31,7 @@ func NewS3Service() (*S3Service, error) {
 
 	minioClient, err := minio.New(endpoint, &minio.Options{
 		Creds:     credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
-		Secure:    true,
+		Secure:    config.Cfg.S3.Secure,
 		Transport: customTransport,
 	})
 	if err != nil {
@@ -42,9 +42,18 @@ func NewS3Service() (*S3Service, error) {
 
 	// Check if the bucket exists, if not - create it
 	ctx := context.Background()
-	exists, err := minioClient.BucketExists(ctx, bucketName)
+	var exists bool
+	maxRetries := 30
+	for i := 0; i < maxRetries; i++ {
+		exists, err = minioClient.BucketExists(ctx, bucketName)
+		if err == nil {
+			break
+		}
+		log.Printf("Waiting for S3 to be ready... (attempt %d/%d)", i+1, maxRetries)
+		time.Sleep(2 * time.Second)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to check bucket existence: %w", err)
+		return nil, fmt.Errorf("failed to check bucket existence after retries: %w", err)
 	}
 	if !exists {
 		if err := minioClient.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{}); err != nil {

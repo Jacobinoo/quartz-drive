@@ -1,49 +1,32 @@
-name: Deploy API to Google Cloud
+name: Build and Push to Docker Hub
 
 on:
   push:
     branches:
-      - master
+      - main
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v7
-
-      - name: Set up Go
-        uses: actions/setup-go@v7
+      - name: Check out code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
         with:
-          go-version: '1.26.5'
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          
+      - name: Build and push
+        uses: docker/build-push-action@v5
         with:
-          workspaces: "internal/bindings/opaque_rust"
-
-      - name: Build Go and Rust Binaries
-        run: |
-          make build-prod
-
-      - name: Copy Files to Google Cloud
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USERNAME }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "build/quartz-account,internal/bindings/opaque_rust/target/release/libopaque_rust.so"
-          target: "/home/${{ secrets.SERVER_USERNAME }}/deploy_temp"
-          strip_components: 0
-
-      - name: Deploy and Restart Service
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USERNAME }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            sudo /opt/quartz/deploy.sh
+          context: .
+          file: Dockerfile.prod
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/quartz-api:latest
+          # Build for your VM's architecture
+          platforms: linux/amd64

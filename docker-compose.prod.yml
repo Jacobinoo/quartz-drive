@@ -1,0 +1,36 @@
+services:
+  traefik:
+    image: traefik:v3.0
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Automatically redirects HTTP to HTTPS
+      - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
+      # Let's Encrypt SSL Configuration
+      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Allows Traefik to listen to Docker events to route traffic
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      # Persists SSL certificates so you don't hit rate limits
+      - "./letsencrypt:/letsencrypt"
+    restart: unless-stopped
+
+  quartz-api:
+    image: ${DOCKERHUB_USERNAME}/quartz-api:latest
+    env_file:
+      - .env.production
+    labels:
+      - "traefik.enable=true"
+      # Securely loads the domain from .env.production
+      - "traefik.http.routers.quartz.rule=Host(`${DOMAIN_NAME}`)"
+      - "traefik.http.routers.quartz.entrypoints=websecure"
+      - "traefik.http.routers.quartz.tls.certresolver=myresolver"
+    restart: unless-stopped

@@ -6,7 +6,7 @@ export function proxy(request: NextRequest) {
 
   const isDev = process.env.NODE_ENV === 'development'
   const s3Endpoint = process.env.NEXT_PUBLIC_S3_ENDPOINT || ''
-  const apiOrigin = process.env.NEXT_PUBLIC_API_ORIGIN || ''
+  const apiOrigin = process.env.NEXT_PUBLIC_API_URL|| ''
 
   const devOrigins = [
     "https://localhost:3000",

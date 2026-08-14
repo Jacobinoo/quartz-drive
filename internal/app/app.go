@@ -77,7 +77,7 @@ func Run() {
 			fmt.Println("No TLS certificates found, falling back to HTTP")
 			err = server.ListenAndServe()
 		}
-		
+
 		if err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen: %s\n", err)
 		}
@@ -110,6 +110,7 @@ func initRouter(state *ServerState) *http.ServeMux {
 
 	rootMux.HandleFunc("/", rootHandler)
 	rootMux.HandleFunc("/health", healthHandler(state))
+	rootMux.HandleFunc("/up", upHandler(state))
 	rootMux.Handle("/v1/", http.StripPrefix("/v1", v1Mux))
 
 	return rootMux
@@ -209,6 +210,12 @@ func healthHandler(state *ServerState) http.HandlerFunc {
 			"time":   time.Now().UTC().Format(time.RFC3339),
 		})
 	}
+}
+
+func upHandler(w http.ResponseWriter, r *http.Request) {
+
+	w.WriteHeader(http.StatusOK)
+	return
 }
 
 func initV1Mux(state *ServerState) *http.ServeMux {

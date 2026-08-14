@@ -13,20 +13,20 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/app/internal/bindings/opaque_rust/target \
     --mount=type=cache,target=/root/.cargo/registry \
-    make build-prod
+    make build-prod && cp /app/internal/bindings/opaque_rust/target/release/libopaque_rust.so /app/build/
 
 # Stage 2: Runtime
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates wget && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user for security
-RUN useradd -m -s /bin/false quartz
+RUN useradd -m -s /bin/false quartzuser
 
 WORKDIR /app
 COPY --from=builder /app/build/quartz-account /usr/local/bin/quartz-account
-COPY --from=builder /app/internal/bindings/opaque_rust/target/release/libopaque_rust.so /usr/lib/
+COPY --from=builder /app/build/libopaque_rust.so /usr/lib/
 
 # Switch to the non-root user before running the app
-USER quartz
+USER quartzuser
 
 CMD ["quartz-account"]

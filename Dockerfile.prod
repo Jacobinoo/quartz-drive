@@ -4,16 +4,25 @@ RUN apt-get update && apt-get install -y curl build-essential \
     && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 WORKDIR /app
-COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod \
-    go mod download
 
+# 1. Cache Go dependencies in a Docker layer
+COPY go.mod go.sum ./
+RUN go mod download
+
+# 2. Cache Rust dependencies in a Docker layer
+WORKDIR /app
+COPY internal/bindings/opaque_rust/Cargo.toml internal/bindings/opaque_rust/Cargo.lock ./internal/bindings/opaque_rust/
+RUN cd internal/bindings/opaque_rust && mkdir src && echo "pub fn dummy() {}" > src/lib.rs && cargo build --release && rm -rf src
+
+# 3. Copy the rest of the application code
+WORKDIR /app
 COPY . .
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
-    --mount=type=cache,target=/app/internal/bindings/opaque_rust/target \
-    --mount=type=cache,target=/root/.cargo/registry \
-    make build-prod && cp /app/internal/bindings/opaque_rust/target/release/libopaque_rust.so /app/build/
+
+# 4. Build the real Rust library (dependencies are already cached)
+RUN cd internal/bindings/opaque_rust && cargo build --release && mkdir -p /app/build && cp target/release/libopaque_rust.so /app/build/
+
+# 5. Build the Go binary
+RUN CGO_ENABLED=1 go build -ldflags="-s -w" -trimpath -o build/quartz-account ./cmd/app
 
 # Stage 2: Runtime
 FROM debian:bookworm-slim

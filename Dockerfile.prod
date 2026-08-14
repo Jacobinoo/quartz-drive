@@ -19,7 +19,7 @@ WORKDIR /app
 COPY . .
 
 # 4. Build the real Rust library (dependencies are already cached)
-RUN cd internal/bindings/opaque_rust && cargo build --release && mkdir -p /app/build && cp target/release/libopaque_rust.so /app/build/
+RUN cd internal/bindings/opaque_rust && touch src/lib.rs && cargo build --release && mkdir -p /app/build && cp target/release/libopaque_rust.so /app/build/
 
 # 5. Build the Go binary
 RUN CGO_ENABLED=1 go build -ldflags="-s -w" -trimpath -o build/quartz-account ./cmd/app

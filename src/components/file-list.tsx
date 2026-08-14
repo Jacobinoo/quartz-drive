@@ -58,13 +58,17 @@ export function FileList() {
         if (!currentFolder) return;
         async function loadAndDecrypt() {
             try {
-                const rawFiles = await fetchFiles(currentFolder!.nodeId);
-                if (!rawFiles) {
+                // Fetch files from the API and download/compile the WebAssembly binary IN PARALLEL!
+                const [rawFiles, sodium] = await Promise.all([
+                    fetchFiles(currentFolder!.nodeId),
+                    getSodium()
+                ]);
+
+                if (!rawFiles || rawFiles.length === 0) {
                     setFiles([]);
                     return;
                 }
 
-                const sodium = await getSodium();
                 const decryptedFiles = rawFiles.map((file: any) => {
                     try {
                         const ciphertext = sodium.from_base64(file.encryptedName);

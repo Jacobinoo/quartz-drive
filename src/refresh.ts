@@ -1,3 +1,4 @@
+import { config } from "@/config/env";
 import { RefreshSessionResponse } from "@/RefreshSessionResponse";
 import { createDpopProof, getDpopKeyPair } from "./lib/dpop";
 import { getCsrfToken, setAccountPrivateKeys, setAuthState } from "./lib/authStore";
@@ -9,14 +10,14 @@ export async function refreshSession(): Promise<RefreshSessionResponse> {
   let dpopProof: string | null = null;
   try {
     const { privateKey, publicKey } = await getDpopKeyPair();
-    dpopProof = await createDpopProof(privateKey, publicKey, "POST", "https://localhost:3100/v1/refresh");
+    dpopProof = await createDpopProof(privateKey, publicKey, "POST", `${config.apiUrl}/v1/refresh`);
   } catch (e) {
     console.warn("Could not generate DPoP proof (user might not be logged in yet):", e);
   }
 
     let refreshRes: Response;
     try {
-        refreshRes = await fetch("https://localhost:3100/v1/refresh", {
+        refreshRes = await fetch(`${config.apiUrl}/v1/refresh`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",

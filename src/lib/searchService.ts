@@ -1,3 +1,4 @@
+import { config } from "@/config/env";
 import { getSodium } from "./crypto/sodium";
 import { saveSearchIndex, loadSearchIndex, DecryptedSearchItem } from "./SearchIndexStore";
 import { customFetch } from "./api";
@@ -6,7 +7,7 @@ import { getAccountEncryptionPrivateKey, getAccountSigningPrivateKey } from "./a
 import { FolderKey, useDriveStore } from "@/lib/driveStore";
 
 export async function buildE2EESearchIndex(): Promise<void> {
-    const res = await customFetch("https://localhost:3100/v1/files/all", {
+    const res = await customFetch(`${config.apiUrl}/v1/files/all`, {
         method: "GET",
     });
     if (!res.ok) throw new Error("Failed to fetch files for search index");
@@ -118,7 +119,7 @@ export async function searchFiles(query: string): Promise<DecryptedSearchItem[]>
 }
 
 export async function resolvePathAndNavigate(targetNodeId: string) {
-    const res = await customFetch(`https://localhost:3100/v1/files/path?nodeId=${targetNodeId}`, {
+    const res = await customFetch(`${config.apiUrl}/v1/files/path?nodeId=${targetNodeId}`, {
         method: "GET"
     });
     if (!res.ok) throw new Error("Failed to fetch path");

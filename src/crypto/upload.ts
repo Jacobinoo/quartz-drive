@@ -1,3 +1,4 @@
+import { config } from "@/config/env";
 import { customFetch } from "@/lib/api";
 import { UUID } from "crypto";
 
@@ -21,7 +22,7 @@ export async function initFileUpload(payload: {
   nodeId: UUID,
   expiresAt: number
 } | null> {
-  const res = await customFetch("https://localhost:3100/v1/files/upload/init", {
+  const res = await customFetch(`${config.apiUrl}/v1/files/upload/init`, {
     method: "POST",
     headers: {
         "Content-Type": "application/json",
@@ -72,7 +73,7 @@ export async function finishFileUpload(payload: {
     encryptedMetadata: string;
      metadataNonce: string;
 }): Promise<any> {
-    const res = await customFetch(`https://localhost:3100/v1/files/finish`, {
+    const res = await customFetch(`${config.apiUrl}/v1/files/finish`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",

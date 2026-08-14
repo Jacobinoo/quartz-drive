@@ -1,3 +1,4 @@
+import { config } from "@/config/env";
 import { customFetch } from "./api";
 
 export interface DeviceResponse {
@@ -10,7 +11,7 @@ export interface DeviceResponse {
 }
 
 export async function getDevices(): Promise<DeviceResponse[]> {
-    const response = await customFetch("https://localhost:3100/v1/devices/list");
+    const response = await customFetch(`${config.apiUrl}/v1/devices/list`);
     if (!response.ok) {
         throw new Error("Failed to fetch devices");
     }
@@ -18,7 +19,7 @@ export async function getDevices(): Promise<DeviceResponse[]> {
 }
 
 export async function revokeDevice(sessionId: string): Promise<void> {
-    const response = await customFetch("https://localhost:3100/v1/devices/revoke", {
+    const response = await customFetch(`${config.apiUrl}/v1/devices/revoke`, {
         method: "DELETE",
         headers: {
             "Content-Type": "application/json"

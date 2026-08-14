@@ -1,13 +1,13 @@
+import { config } from "@/config/env";
 import * as opaque from '@serenity-kit/opaque'
 import { Base64String } from "@/UtilTypes";
 import { getSodium } from "@/lib/crypto/sodium";
-import { SERVER_PUBLIC_KEY } from './lib/constants';
 
 export async function resetPassword(email: string, token: string, recoveryPhrase: string, newPassword: string) {
     const sodium = await getSodium();
 
     // 1. Verify token and get recovery keys
-    const verifyResponse = await fetch("https://localhost:3100/v1/account/verify-reset-code", {
+    const verifyResponse = await fetch(`${config.apiUrl}/v1/account/verify-reset-code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, token })
@@ -58,7 +58,7 @@ export async function resetPassword(email: string, token: string, recoveryPhrase
     await opaque.ready;
     const { clientRegistrationState, registrationRequest } = opaque.client.startRegistration({ password: newPassword });
 
-    const m1Response = await fetch("https://localhost:3100/v1/account/reset-password/m1", {
+    const m1Response = await fetch(`${config.apiUrl}/v1/account/reset-password/m1`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, token, registrationRequest })
@@ -76,7 +76,7 @@ export async function resetPassword(email: string, token: string, recoveryPhrase
         password: newPassword,
     });
 
-    if (serverStaticPublicKey !== SERVER_PUBLIC_KEY) {
+    if (serverStaticPublicKey !== process.env.NEXT_PUBLIC_SERVER_PUBLIC_KEY) {
         throw new Error("Server identity verification failed. Aborting login.");
     }
 
@@ -175,7 +175,7 @@ export async function resetPassword(email: string, token: string, recoveryPhrase
         }
     };
 
-    const m3Response = await fetch("https://localhost:3100/v1/account/reset-password/m3", {
+    const m3Response = await fetch(`${config.apiUrl}/v1/account/reset-password/m3`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(m3)

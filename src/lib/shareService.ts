@@ -1,3 +1,4 @@
+import { config } from "@/config/env";
 import { customFetch } from "./api";
 import { getSodium } from "./crypto/sodium";
 import { useDriveStore } from "./driveStore";
@@ -9,7 +10,7 @@ export async function shareFolderCryptographically(folderToShare: any, recipient
     if (!currentFolder) throw new Error("Not inside a folder");
 
     // 1. Fetch Jane's Public Key from the server
-    const userRes = await customFetch(`https://localhost:3100/v1/keys?email=${encodeURIComponent(recipientEmail)}`, { method: "GET" });
+    const userRes = await customFetch(`${config.apiUrl}/v1/keys?email=${encodeURIComponent(recipientEmail)}`, { method: "GET" });
     if (!userRes.ok) throw new Error("Could not find a user with that email");
     const recipientData = await userRes.json();
     const recipientAccountPubKey = sodium.from_base64(recipientData.accountEncryptionPublicKey);
@@ -74,7 +75,7 @@ export async function shareFolderCryptographically(folderToShare: any, recipient
         nameNonce: sodium.to_base64(nameNonce)
     };
 
-    const shareRes = await customFetch("https://localhost:3100/v1/files/share", {
+    const shareRes = await customFetch(`${config.apiUrl}/v1/files/share`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sharePayload)

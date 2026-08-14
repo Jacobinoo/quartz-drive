@@ -1,3 +1,4 @@
+import { config } from "@/config/env";
 // src/signout.ts
 import { getCsrfToken, clearAuthState } from "./lib/authStore";
 import { deleteDpopDatabase } from "./lib/dpop";
@@ -5,7 +6,7 @@ import { deleteDpopDatabase } from "./lib/dpop";
 export async function signOut() {
   try {
     // 1. Tell Go server to destroy the session in DB and wipe HttpOnly cookies
-    await fetch("https://localhost:3100/v1/signout", {
+    await fetch(`${config.apiUrl}/v1/signout`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

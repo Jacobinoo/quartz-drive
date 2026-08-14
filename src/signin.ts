@@ -1,3 +1,4 @@
+import { config } from "@/config/env";
 import * as opaque from '@serenity-kit/opaque'
 import { LoginAttestationConfirmed } from "@/LoginAttestationTypes";
 import {getSodium} from "@/lib/crypto/sodium";
@@ -6,7 +7,6 @@ import { Base64String } from './UtilTypes';
 import { setAccountPrivateKeys, setAuthState } from './lib/authStore';
 import { saveDevicePrivateKey } from './DeviceKeyStore';
 import { customFetch } from './lib/api';
-import { SERVER_PUBLIC_KEY } from './lib/constants';
 
 export async function signIn(email: string, password: string) {
     if (!email || !password) throw new Error("Email and password required");
@@ -24,7 +24,7 @@ export async function signIn(email: string, password: string) {
     }
 
     // send opaque m1 and fetch m2 from response
-    const res = await fetch(`https://localhost:3100/v1/signin`, {
+    const res = await fetch(`${config.apiUrl}/v1/signin`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -59,7 +59,7 @@ export async function signIn(email: string, password: string) {
 
     const { finishLoginRequest, exportKey, serverStaticPublicKey } = loginResult;
 
-  if (serverStaticPublicKey !== SERVER_PUBLIC_KEY) {
+  if (serverStaticPublicKey !== process.env.NEXT_PUBLIC_SERVER_PUBLIC_KEY) {
       throw new Error("Server identity verification failed. Aborting login.");
   }
 
@@ -68,7 +68,7 @@ export async function signIn(email: string, password: string) {
     //DPoP
     const dpopPublicKey = await generateAndStoreDpopKey();
     const dpopPrivateKey = await getDpopPrivateKey();
-    const dpopProof = await createDpopProof(dpopPrivateKey, dpopPublicKey, "POST", "https://localhost:3100/v1/signin/m3");
+    const dpopProof = await createDpopProof(dpopPrivateKey, dpopPublicKey, "POST", `${config.apiUrl}/v1/signin/m3`);
 
   console.log(dpopProof);
 
@@ -80,7 +80,7 @@ export async function signIn(email: string, password: string) {
     }
 
     // send opaque m3
-    const res3 = await fetch(`https://localhost:3100/v1/signin/m3`, {
+    const res3 = await fetch(`${config.apiUrl}/v1/signin/m3`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
@@ -198,7 +198,7 @@ export async function signIn(email: string, password: string) {
                 await saveDevicePrivateKey(deviceKeyPair.devicePrivateKey);
   console.log("Non-extractable Device Private Key written to IndexedDB.");
 
-  await customFetch(`https://localhost:3100/v1/devices/register`, {
+  await customFetch(`${config.apiUrl}/v1/devices/register`, {
               method: "POST",
               body: JSON.stringify({
                   devicePublicKey: deviceKeyPair.devicePublicKey,

@@ -1,3 +1,4 @@
+import { config } from "@/config/env";
 // Stub localStorage for the Web Worker environment
 if (typeof globalThis.localStorage === 'undefined') {
     (globalThis as any).localStorage = {
@@ -67,7 +68,7 @@ async function hashUint8Array(data: Uint8Array<ArrayBuffer>): Promise<string> {
 }
 
 async function requestChunkPresignedUrl(uploadId: string, chunkIndex: number, declaredSize: number, chunkHash: string): Promise<string | null> {
-  const res = await customFetch("https://quartz-api.duckdns.org/v1/files/upload", {
+  const res = await customFetch(`${config.apiUrl}/v1/files/upload`, {
     method: "POST",
     headers: {
         "Content-Type": "application/json",
@@ -88,7 +89,7 @@ async function requestChunkPresignedUrl(uploadId: string, chunkIndex: number, de
 }
 
 async function reportChunkDone(uploadId: string, chunkIndex: number, etag: string, chunkHash: string): Promise<boolean> {
-  const res = await customFetch("https://quartz-api.duckdns.org/v1/files/upload/chunk_finish", {
+  const res = await customFetch(`${config.apiUrl}/v1/files/upload/chunk_finish`, {
     method: "POST",
     headers: {
         "Content-Type": "application/json",

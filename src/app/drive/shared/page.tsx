@@ -1,5 +1,7 @@
 "use client";
 
+import { config } from "@/config/env";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -18,7 +20,7 @@ export default function SharedWithMePage() {
     useEffect(() => {
         async function fetchShared() {
             try {
-                const res = await customFetch("https://localhost:3100/v1/files/shared", { method: "GET" });
+                const res = await customFetch(`${config.apiUrl}/v1/files/shared`, { method: "GET" });
                 if (!res.ok) throw new Error("Failed to fetch");
                 const rawVolumes = await res.json();
                 if (!rawVolumes) return setVolumes([]);

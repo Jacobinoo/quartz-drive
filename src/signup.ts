@@ -1,3 +1,4 @@
+import { config } from "@/config/env";
 import * as opaque from '@serenity-kit/opaque'
 import * as bip39 from 'bip39'
 import {
@@ -6,7 +7,6 @@ import {
 import M3ServerPayload from "@/KeyRegisterMaterial";
 import {Base64String} from "@/UtilTypes";
 import {getSodium} from "@/lib/crypto/sodium";
-import { SERVER_PUBLIC_KEY } from './lib/constants';
 
 async function registerKeyMaterial(email: string, exportKey: string): Promise<KeyRegisterMaterial> {
     const sodium = await getSodium();
@@ -178,7 +178,7 @@ export async function signUp(email: string, password: string) {
         registrationRequest: registrationRequest,
     };
 
-    const response = await fetch("https://localhost:3100/v1/signup", {
+    const response = await fetch(`${config.apiUrl}/v1/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
@@ -204,7 +204,7 @@ export async function signUp(email: string, password: string) {
         //     client: email
         // }
     })
-    if (serverStaticPublicKey !== SERVER_PUBLIC_KEY) {
+    if (serverStaticPublicKey !== process.env.NEXT_PUBLIC_SERVER_PUBLIC_KEY) {
         throw new Error("Server identity verification failed. Aborting registration.");
     }
 
@@ -255,7 +255,7 @@ export async function signUp(email: string, password: string) {
         },
     };
 
-    const m3Response = await fetch("https://localhost:3100/v1/signup/m3", {
+    const m3Response = await fetch(`${config.apiUrl}/v1/signup/m3`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(m3)

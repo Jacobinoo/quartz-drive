@@ -1,4 +1,6 @@
 "use client";
+import { config } from "@/config/env";
+
 
 import { useEffect, useState } from "react";
 import { fetchFiles, getDownloadUrls } from "@/crypto/files";
@@ -89,7 +91,7 @@ export function FileList() {
                                   );
                                   metadata = JSON.parse(sodium.to_string(decryptedMetaBytes));
                               }
-                              
+
                               let signatureVerified = false;
                               try {
                                   if (file.signedEncryptedNodePassphrase && file.authorSigningPublicKey) {
@@ -142,7 +144,7 @@ export function FileList() {
             );
 
             // 2. Send PATCH to Go Backend
-            const res = await customFetch(`https://localhost:3100/v1/files/rename?nodeId=${file.nodeId}&parentFolderId=${currentFolder.nodeId}`, {
+            const res = await customFetch(`${config.apiUrl}/v1/files/rename?nodeId=${file.nodeId}&parentFolderId=${currentFolder.nodeId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -172,7 +174,7 @@ export function FileList() {
     const handleTrash = async (file: any) => {
         try {
             if (!currentFolder) return;
-            const res = await customFetch(`https://localhost:3100/v1/files/trash?nodeId=${file.nodeId}&parentFolderId=${currentFolder.nodeId}`, {
+            const res = await customFetch(`${config.apiUrl}/v1/files/trash?nodeId=${file.nodeId}&parentFolderId=${currentFolder.nodeId}`, {
                 method: 'DELETE'
             });
 
@@ -217,7 +219,7 @@ export function FileList() {
 
             // 3. Re-wrap the moving item's Passphrase for the TARGET folder!
             const newEncryptedNodePassphrase = sodium.crypto_box_seal(fileKey, targetPublicKey);
-            
+
             const accountSigningPrivKey = getAccountSigningPrivateKey();
             if (!accountSigningPrivKey) throw new Error("Missing signing key");
             const signature = sodium.crypto_sign_detached(newEncryptedNodePassphrase, accountSigningPrivKey);
@@ -230,7 +232,7 @@ export function FileList() {
                 null, null, nameNonce, targetPrivateKey
             );
 
-            await customFetch("https://localhost:3100/v1/files/move", {
+            await customFetch(`${config.apiUrl}/v1/files/move`, {
                 method: "PATCH",
                 body: JSON.stringify({
                     nodeId: itemToMove.nodeId,

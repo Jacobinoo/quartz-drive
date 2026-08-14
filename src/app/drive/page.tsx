@@ -1,4 +1,6 @@
 "use client";
+import { config } from "@/config/env";
+
 
 import AppSidebar from "@/components/app-sidebar";
 import {
@@ -80,7 +82,7 @@ export default function DriveHomePage() {
           );
 
           // 5. Send API
-          const res = await customFetch("https://localhost:3100/v1/files/move", {
+          const res = await customFetch(`${config.apiUrl}/v1/files/move`, {
               method: "PATCH",
               body: JSON.stringify({
                   nodeId: draggedItem.nodeId,

@@ -1,5 +1,7 @@
 "use client";
 
+import { config } from "@/config/env";
+
 import * as React from "react"
 import { ChevronRight, File, Folder, LucideMonitorSmartphone, Users, Trash2 } from "lucide-react"
 
@@ -42,7 +44,7 @@ function StorageQuota() {
         async function fetchQuota() {
             try {
                 // In production, wire this to use your customFetch with DPoP!
-                const res = await customFetch("https://localhost:3100/v1/files/quota");
+                const res = await customFetch(`${config.apiUrl}/v1/files/quota`);
                 if (res.ok) {
                     const data = await res.json();
                     setUsed(data.usedBytes);
@@ -261,7 +263,7 @@ function SharedVolumesTree() {
         if (isOpen && !hasFetched) {
             async function fetchShared() {
                 try {
-                    const res = await customFetch("https://localhost:3100/v1/files/shared", { method: "GET" });
+                    const res = await customFetch(`${config.apiUrl}/v1/files/shared`, { method: "GET" });
                     if (!res.ok) throw new Error("Failed to fetch shared volumes");
                     const rawVolumes = await res.json();
                     if (!rawVolumes) {

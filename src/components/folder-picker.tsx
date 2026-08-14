@@ -1,4 +1,6 @@
 "use client";
+import { config } from "@/config/env";
+
 
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -107,7 +109,7 @@ export function FolderPickerModal({ itemToMove, onClose }: { itemToMove: any, on
             );
 
             // 3. Send API
-            const res = await customFetch("https://localhost:3100/v1/files/move", {
+            const res = await customFetch(`${config.apiUrl}/v1/files/move`, {
                 method: "PATCH",
                 body: JSON.stringify({
                     nodeId: itemToMove.nodeId,

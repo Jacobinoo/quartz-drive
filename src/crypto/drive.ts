@@ -1,3 +1,4 @@
+import { config } from "@/config/env";
 import { customFetch } from "@/lib/api";
 import { getSodium } from "@/lib/crypto/sodium";
 import { getAccessToken, getAccountEncryptionPrivateKey } from "@/lib/authStore";
@@ -11,7 +12,7 @@ export async function initializeDriveKeys() {
         const sodium = await getSodium();
 
         // 1. Fetch the full chain from the Go backend
-        const res = await customFetch("https://localhost:3100/v1/files/root", { method: "GET" });
+        const res = await customFetch(`${config.apiUrl}/v1/files/root`, { method: "GET" });
         if (!res.ok) throw new Error("Failed to fetch root folder");
         const rootData = await res.json();
 

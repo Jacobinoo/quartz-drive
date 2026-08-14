@@ -1,4 +1,5 @@
 "use client";
+import { config } from "@/config/env";
 
 import { useEffect, useState, useRef } from "react";
 import { getSodium } from "@/lib/crypto/sodium";
@@ -50,7 +51,7 @@ export default function TrashPage() {
       if (root) {
         keyCache.set(root.nodeId, { privateKey: root.privateKey, publicKey: root.publicKey });
       }
-      const res = await customFetch("https://localhost:3100/v1/files/trash/list");
+      const res = await customFetch(`${config.apiUrl}/v1/files/trash/list`);
       if (!res.ok) return;
       const rawFiles: TrashedItem[] | null = await res.json();
       if (!rawFiles || rawFiles.length === 0) {
@@ -146,7 +147,7 @@ export default function TrashPage() {
 
     // Fetch the ancestor chain from the backend
     const res = await customFetch(
-      `https://localhost:3100/v1/files/path?nodeId=${nodeId}`
+      `${config.apiUrl}/v1/files/path?nodeId=${nodeId}`
     );
     if (!res.ok) return null;
     const ancestors: any[] = await res.json();
@@ -216,7 +217,7 @@ export default function TrashPage() {
 
     try {
       const res = await customFetch(
-        `https://localhost:3100/v1/files/path?nodeId=${parentNodeId}`
+        `${config.apiUrl}/v1/files/path?nodeId=${parentNodeId}`
       );
       if (!res.ok) return "Unknown";
       const ancestors: any[] = await res.json();
@@ -257,7 +258,7 @@ export default function TrashPage() {
   const handleRestore = async (file: TrashedItem) => {
     try {
       const res = await customFetch(
-        `https://localhost:3100/v1/files/restore?nodeId=${file.nodeId}&parentFolderId=${file.parentNodeId}`,
+        `${config.apiUrl}/v1/files/restore?nodeId=${file.nodeId}&parentFolderId=${file.parentNodeId}`,
         { method: "POST" }
       );
       if (res.ok) {
@@ -273,7 +274,7 @@ export default function TrashPage() {
   const handleEmptyTrash = async () => {
     try {
       const res = await customFetch(
-        `https://localhost:3100/v1/files/trash/empty`,
+        `${config.apiUrl}/v1/files/trash/empty`,
         { method: "DELETE" }
       );
       if (res.ok) {

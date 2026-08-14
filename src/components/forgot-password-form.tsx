@@ -1,4 +1,6 @@
 "use client";
+import { config } from "@/config/env";
+
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -75,7 +77,7 @@ export function ForgotPasswordForm({
                 <Button type="submit" onClick={(e) => {
                   e.preventDefault();
                   setError("");
-                  fetch("https://localhost:3100/v1/account/forgot-password", {
+                  fetch(`${config.apiUrl}/v1/account/forgot-password`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ email })

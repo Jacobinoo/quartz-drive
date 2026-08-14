@@ -1,4 +1,5 @@
 "use client"
+import { config } from "@/config/env";
 
 import { Button } from "@/components/ui/button"
 import {
@@ -191,7 +192,7 @@ export function NewDriveItemButton(){
             );
 
             // Send it to the Go backend
-            const res = await customFetch("https://localhost:3100/v1/files/folder", {
+            const res = await customFetch(`${config.apiUrl}/v1/files/folder`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)

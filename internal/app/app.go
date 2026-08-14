@@ -110,7 +110,7 @@ func initRouter(state *ServerState) *http.ServeMux {
 
 	rootMux.HandleFunc("/", rootHandler)
 	rootMux.HandleFunc("/health", healthHandler(state))
-	rootMux.HandleFunc("/up", upHandler(state))
+	rootMux.HandleFunc("/up", upHandler)
 	rootMux.Handle("/v1/", http.StripPrefix("/v1", v1Mux))
 
 	return rootMux

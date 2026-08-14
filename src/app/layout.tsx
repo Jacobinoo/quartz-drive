@@ -20,15 +20,11 @@ export const metadata: Metadata = {
   description: "End-to-end encrypted cloud",
 };
 
-import { headers } from "next/headers";
-
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const nonce = (await headers()).get("x-nonce") || "";
-
   return (
     <html lang="en" suppressHydrationWarning>
       <body
@@ -39,7 +35,6 @@ export default async function RootLayout({
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange
-          nonce={nonce}
       >
           <TooltipProvider>
             <AuthProvider>

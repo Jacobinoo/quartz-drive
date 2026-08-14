@@ -1,6 +1,6 @@
 services:
   traefik:
-    image: traefik:v3.0
+    image: traefik:v3.7.10
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
@@ -13,8 +13,6 @@ services:
       - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
       - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
       - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
-    environment:
-      - DOCKER_API_VERSION=3.7.10
     ports:
       - "80:80"
       - "443:443"

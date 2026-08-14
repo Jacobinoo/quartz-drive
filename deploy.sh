@@ -15,10 +15,14 @@ echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
 echo "📦 Pulling latest image..."
 docker compose -f docker-compose.prod.yml pull quartz-server
 
-# 2. Find the ID of the currently running old API container
+# 2. Ensure infrastructure (Traefik & Valkey) is running
+echo "🏗️ Ensuring Traefik and Valkey are running..."
+docker compose -f docker-compose.prod.yml up -d traefik valkey
+
+# 3. Find the ID of the currently running old API container
 OLD_SERVER_ID=$(docker compose -f docker-compose.prod.yml ps -q quartz-server || true)
 
-# 3. Start a new API container alongside the old one
+# 4. Start a new API container alongside the old one
 echo "🌱 Starting new quartz-server container..."
 docker compose -f docker-compose.prod.yml up -d --scale quartz-server=2 --no-recreate quartz-server
 

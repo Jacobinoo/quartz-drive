@@ -48,4 +48,5 @@ services:
       - "traefik.http.routers.quartz.rule=Host(`${DOMAIN_NAME}`)"
       - "traefik.http.routers.quartz.entrypoints=websecure"
       - "traefik.http.routers.quartz.tls.certresolver=myresolver"
+      - "traefik.http.services.quartz.loadbalancer.server.port=8080"
     restart: unless-stopped

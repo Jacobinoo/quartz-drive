@@ -12,7 +12,15 @@ RUN make build-prod
 # Stage 2: Runtime
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user for security
+RUN useradd -m -s /bin/false quartz
+
 WORKDIR /app
 COPY --from=builder /app/build/quartz-account /usr/local/bin/quartz-account
 COPY --from=builder /app/internal/bindings/opaque_rust/target/release/libopaque_rust.so /usr/lib/
+
+# Switch to the non-root user before running the app
+USER quartz
+
 CMD ["quartz-account"]

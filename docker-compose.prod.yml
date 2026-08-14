@@ -17,16 +17,31 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      # Allows Traefik to listen to Docker events to route traffic
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      # Persists SSL certificates so you don't hit rate limits
       - "./letsencrypt:/letsencrypt"
     restart: unless-stopped
 
-  quartz-api:
-    image: ${DOCKERHUB_USERNAME}/quartz-api:latest
+  valkey:
+    image: valkey/valkey:9.1.1-alpine
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 3s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  quartz-server:
+    image: ${DOCKERHUB_USERNAME}/quartz-server:latest
     env_file:
       - .env.production
+    depends_on:
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/up"]
+      interval: 3s
+      timeout: 5s
+      retries: 5
     labels:
       - "traefik.enable=true"
       # Securely loads the domain from .env.production

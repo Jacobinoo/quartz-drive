@@ -23,7 +23,7 @@ func initSweepLogger() {
 	if sweepLog != nil {
 		return
 	}
-	f, err := os.OpenFile("sweeps.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	f, err := os.OpenFile("/tmp/sweeps.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		log.Printf("Failed to open sweeps.log: %v", err)
 		sweepLog = log.New(os.Stdout, "\nSWEEP: ", log.Ldate|log.Ltime|log.Lshortfile)

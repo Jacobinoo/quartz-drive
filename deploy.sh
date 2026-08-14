@@ -34,23 +34,28 @@ if [ -z "$OLD_SERVER_ID" ]; then
     NEW_SERVER_ID=$ALL_SERVER_IDS
 fi
 
-echo "🔍 Monitoring health of new quartz-server ($NEW_SERVER_ID)..."
-
-# 4. The Smart 60-second Health Loop
 TIMEOUT=60
 SUCCESS=false
 
-for ((i=1; i<=TIMEOUT; i++)); do
-    SERVER_HEALTH=$(docker inspect -f '{{.State.Health.Status}}' "$NEW_SERVER_ID" 2>/dev/null || echo "error")
-    
-    echo "   [$i/$TIMEOUT] quartz-server: $SERVER_HEALTH"
-    
-    if [ "$SERVER_HEALTH" = "healthy" ]; then
-        SUCCESS=true
-        break
-    fi
-    sleep 1
-done
+if [ -z "$NEW_SERVER_ID" ]; then
+    echo "❌ ERROR: New container crashed instantly before Docker could register it!"
+    # Keep SUCCESS=false to trigger rollback
+else
+    echo "🔍 Monitoring health of new quartz-server ($NEW_SERVER_ID)..."
+
+    # 4. The Smart 60-second Health Loop
+    for ((i=1; i<=TIMEOUT; i++)); do
+        SERVER_HEALTH=$(docker inspect -f '{{.State.Health.Status}}' "$NEW_SERVER_ID" 2>/dev/null || echo "error")
+        
+        echo "   [$i/$TIMEOUT] quartz-server: $SERVER_HEALTH"
+        
+        if [ "$SERVER_HEALTH" = "healthy" ]; then
+            SUCCESS=true
+            break
+        fi
+        sleep 1
+    done
+fi
 
 # 5. Success / Rollback Logic
 if [ "$SUCCESS" = true ]; then

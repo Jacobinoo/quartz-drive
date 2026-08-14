@@ -21,7 +21,7 @@ import (
 func fullURL(r *http.Request) string {
 	builder := strings.Builder{}
 
-	if r.TLS != nil {
+	if r.Header.Get("X-Forwarded-Proto") == "https" || r.TLS != nil {
 		builder.WriteString("https://")
 	} else {
 		builder.WriteString("http://")

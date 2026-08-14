@@ -27,6 +27,6 @@ jobs:
           context: .
           file: Dockerfile.prod
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/quartz-api:latest
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/quartz-server:latest
           # Build for your VM's architecture
           platforms: linux/amd64

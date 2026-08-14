@@ -41,6 +41,6 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             cd QuartzAccountGo
-            git pull origin main
+            git pull https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git main
             chmod +x deploy.sh
             ./deploy.sh

@@ -1,9 +1,12 @@
 name: Build and Push to Docker Hub
-
 on:
   push:
     branches:
       - master
+    # Skip triggering on changes that don't affect the build
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
 
 jobs:
   build:
@@ -29,7 +32,11 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/quartz-server:latest
           platforms: linux/amd64
-          # Enable GitHub Actions Cache for Docker layers to speed up builds
+          # GitHub Actions cache for Docker layers.
+          # mode=max is required here (not the default mode=min) because this
+          # is a multi-stage build: mode=min only caches layers that make it
+          # into the final image, which would skip the builder-stage
+          # go mod download / cargo build layers entirely.
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

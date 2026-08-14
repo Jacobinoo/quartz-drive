@@ -28,8 +28,10 @@ jobs:
           file: Dockerfile.prod
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/quartz-server:latest
-          # Build for your VM's architecture
           platforms: linux/amd64
+          # Enable GitHub Actions Cache for Docker layers to speed up builds
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Trigger Server Deployment
         uses: appleboy/ssh-action@v1.0.3

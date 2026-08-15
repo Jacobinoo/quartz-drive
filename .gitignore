@@ -13,3 +13,4 @@ build/
 internal/bindings/opaque_rust/target/
 
 weed-data/
+.idea

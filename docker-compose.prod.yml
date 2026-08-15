@@ -19,6 +19,12 @@ services:
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "./letsencrypt:/letsencrypt"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 32M
     restart: unless-stopped
 
   valkey:
@@ -28,6 +34,12 @@ services:
       interval: 3s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+        reservations:
+          memory: 16M
     restart: unless-stopped
 
   quartz-server:
@@ -49,4 +61,10 @@ services:
       - "traefik.http.routers.quartz.entrypoints=websecure"
       - "traefik.http.routers.quartz.tls.certresolver=myresolver"
       - "traefik.http.services.quartz.loadbalancer.server.port=8080"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 32M
     restart: unless-stopped

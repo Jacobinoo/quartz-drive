@@ -115,7 +115,7 @@ func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) {
 			ID:         id,
 			UploadID:   uploadID,
 			ChunkIndex: i,
-			ObjectKey:  fmt.Sprintf("authors/%s/uploads/%s/nodes/%s/chunk_%d", user.ID.String(), uploadID.String(), nodeID.String(), i),
+			ObjectKey:  fmt.Sprintf("%s/authors/%s/uploads/%s/chunk_%d", nodeID.String(), user.ID.String(), uploadID.String(), i),
 			Status:     model.ChunkUploadStatusPending,
 		})
 	}

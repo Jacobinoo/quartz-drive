@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"quartz/config"
 	"strconv"
 	"time"
@@ -15,27 +16,46 @@ import (
 )
 
 type S3Service struct {
-	client *minio.Client
-	bucket string
+	client           *minio.Client
+	devPresignClient *minio.Client //nil in production
+	bucket           string
 }
 
 var _ StorageService = (*S3Service)(nil)
 
 func NewS3Service() (*S3Service, error) {
-	endpoint := config.Cfg.S3.Endpoint               //"localhost:8333"
-	accessKeyID := config.Cfg.S3.AccessKeyID         //"SILKW41POES3ATP3DL99"
-	secretAccessKey := config.Cfg.S3.SecretAccessKey //"/luBJXPD30oZz5Sjt9Uei2H/6yqg4yLVfahjHlhD"
+	endpoint := config.Cfg.S3.Endpoint               //"...:8333"
+	accessKeyID := config.Cfg.S3.AccessKeyID         //"any"
+	secretAccessKey := config.Cfg.S3.SecretAccessKey //"any"
 
 	customTransport := http.DefaultTransport.(*http.Transport).Clone()
 	customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: config.Cfg.S3.InsecureSkipVerify}
+
+	region := ""
+	if config.Cfg.Env == "development" {
+		region = "us-east-1" // Prevents ?location= network calls in local dev
+	}
 
 	minioClient, err := minio.New(endpoint, &minio.Options{
 		Creds:     credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
 		Secure:    config.Cfg.S3.Secure,
 		Transport: customTransport,
+		Region:    region,
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	var devPresignClient *minio.Client = nil
+	if config.Cfg.Env == "development" {
+		devPresignClient = minioClient
+		// Presigning is purely a mathematical operation (offline), this is a fake client for local development.
+		// Initialize a client with the public endpoint so the v4 Signature uses the correct Host header.
+		devPresignClient, _ = minio.New("localhost:8333", &minio.Options{
+			Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
+			Secure: config.Cfg.S3.Secure,
+			Region: region,
+		})
 	}
 
 	bucketName := config.Cfg.S3.BucketName
@@ -62,8 +82,9 @@ func NewS3Service() (*S3Service, error) {
 	}
 
 	return &S3Service{
-		client: minioClient,
-		bucket: bucketName,
+		client:           minioClient,
+		devPresignClient: devPresignClient,
+		bucket:           bucketName,
 	}, nil
 }
 
@@ -75,6 +96,23 @@ func (s *S3Service) GenerateUploadUrl(ctx context.Context, objectKey string, exp
 	extraHeaders.Set("x-amz-checksum-sha256", chunkHash)
 
 	log.Printf("Generating presigned url for object %s signed with Content-Length %d and checksum sha256 %s", objectKey, expectedSize, chunkHash)
+
+	var presignedURL *url.URL
+	if config.Cfg.Env == "development" {
+		presignedURL, err := s.devPresignClient.PresignHeader(
+			ctx,
+			http.MethodPut,
+			s.bucket,
+			objectKey,
+			expiry,
+			nil,
+			extraHeaders,
+		)
+		if err != nil {
+			return "", fmt.Errorf("failed to generate presigned upload URL for object %s: %w", objectKey, err)
+		}
+		return presignedURL.String(), nil
+	}
 
 	presignedURL, err := s.client.PresignHeader(
 		ctx,
@@ -98,10 +136,11 @@ func (s *S3Service) GenerateDownloadUrls(ctx context.Context, objectKeys []strin
 	expiry := time.Minute * 10 // Safe expiry for downloads
 
 	for i, objectKey := range objectKeys {
-		presignedURL, err := s.client.PresignedGetObject(ctx, s.bucket, objectKey, expiry, nil)
+		presignedURL, err := s.devPresignClient.PresignedGetObject(ctx, s.bucket, objectKey, expiry, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate GET URL for chunk %d: %w", i, err)
 		}
+
 		urls = append(urls, presignedURL.String())
 	}
 

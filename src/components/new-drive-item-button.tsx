@@ -32,6 +32,7 @@ import { createEncryptedFolderPayload } from "@/crypto/folder";
 import { customFetch } from "@/lib/api";
 import { addSingleSearchItem } from "@/lib/SearchIndexStore"
 import { UUID } from "crypto"
+import { quantumSeal } from "@/crypto/kem";
 
 export function NewDriveItemButton(){
   const addToQueue = useUploadStore(s => s.addToQueue);
@@ -75,7 +76,7 @@ export function NewDriveItemButton(){
 
           // 4. Wrap the fileKey (Asymmetric Box Seal)
           // Only someone with the accountPrivKey can open this box to retrieve the fileKey!
-          const encryptedNodePassphrase = sodium.crypto_box_seal(fileKey, currentFolder.publicKey);
+          const encryptedNodePassphrase = await quantumSeal(fileKey, currentFolder.publicKey);
 
           const metadata = {
                           mimeType: file.type || "application/octet-stream",
@@ -94,7 +95,7 @@ export function NewDriveItemButton(){
                           fileKey
                       );
 
-          const nodeKeyPair = sodium.crypto_box_keypair();
+          const nodeKeyPair = sodium.crypto_kem_keypair();
           const nodePublicKey = sodium.to_base64(nodeKeyPair.publicKey);
 
           const rawNodePrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);

@@ -1,5 +1,6 @@
 import { getSodium } from "@/lib/crypto/sodium";
 import { getAccountSigningPrivateKey } from "@/lib/authStore";
+import { quantumSeal } from "./kem";
 
 export async function createEncryptedFolderPayload(
     folderName: string,
@@ -15,7 +16,7 @@ export async function createEncryptedFolderPayload(
     if (!accountSigningPrivKey) throw new Error("Missing signing key");
 
     // 2. Generate brand new keys specifically for this new folder
-    const nodeKeyPair = sodium.crypto_box_keypair();
+    const nodeKeyPair = sodium.crypto_kem_keypair();
     const nodePassphrase = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES);
     const nodePrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
 
@@ -30,7 +31,7 @@ export async function createEncryptedFolderPayload(
 
     // 4. Wrap the new Folder's Passphrase using the PARENT Folder's Public Key!
     // (This is the Parent-Child hierarchy link)
-    const encryptedNodePassphrase = sodium.crypto_box_seal(
+    const encryptedNodePassphrase = await quantumSeal(
         nodePassphrase,
         parentFolderPublicKey
     );

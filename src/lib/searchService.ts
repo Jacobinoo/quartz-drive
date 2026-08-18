@@ -5,6 +5,7 @@ import { customFetch } from "./api";
 import { getAccountEncryptionPrivateKey, getAccountSigningPrivateKey } from "./authStore";
 
 import { FolderKey, useDriveStore } from "@/lib/driveStore";
+import { quantumSealOpen } from "@/crypto/kem";
 
 export async function buildE2EESearchIndex(): Promise<void> {
     const res = await customFetch(`${config.apiUrl}/v1/files/all`, {
@@ -44,9 +45,8 @@ export async function buildE2EESearchIndex(): Promise<void> {
                     const parentKeys = folderKeys[f.parentNodeId];
 
                     // A. Decrypt the folder's Passphrase using the Parent's Public & Private key
-                    const folderPassphrase = sodium.crypto_box_seal_open(
+                    const folderPassphrase = await quantumSealOpen(
                         sodium.from_base64(f.encryptedNodePassphrase),
-                        parentKeys.publicKey,
                         parentKeys.privateKey
                     );
 
@@ -147,9 +147,8 @@ export async function resolvePathAndNavigate(targetNodeId: string) {
 
         try {
             // A. Decrypt Folder Passphrase
-            const folderPassphrase = sodium.crypto_box_seal_open(
+            const folderPassphrase = await quantumSealOpen(
                 sodium.from_base64(f.encryptedNodePassphrase),
-                parentKeys.publicKey,
                 parentKeys.privateKey
             );
             // B. Decrypt Folder Private Key

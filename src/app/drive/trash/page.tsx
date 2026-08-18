@@ -9,6 +9,7 @@ import { FileIcon, FolderIcon, RefreshCw, Trash, Loader2 } from "lucide-react";
 import { customFetch } from "@/lib/api";
 import { getAccountEncryptionPrivateKey } from "@/lib/authStore";
 import { initializeDriveKeys } from "@/crypto/drive";
+import { quantumSealOpen } from "@/crypto/kem";
 
 interface TrashedItem {
   nodeId: string;
@@ -179,9 +180,8 @@ export default function TrashPage() {
 
       try {
         // Unwrap passphrase using parent's keypair
-        const nodePassphrase: Uint8Array = sodium.crypto_box_seal_open(
+        const nodePassphrase: Uint8Array = await quantumSealOpen(
           sodium.from_base64(entry.encryptedNodePassphrase),
-          currentKey!.publicKey,
           currentKey!.privateKey
         );
 

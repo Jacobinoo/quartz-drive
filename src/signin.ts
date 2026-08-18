@@ -239,7 +239,7 @@ export async function signIn(email: string, password: string) {
 
 //     // const accountPub = sodium.from_base64(loginAttestationData.accountPublicKey);
 
-//     // const unwrappedDriveKey = sodium.crypto_box_seal_open(
+//     // const unwrappedDriveKey = await quantumSealOpen(
 //     //     wrappedDriveKey,
 //     //     accountPub,
 //     //     privateAccountKey
@@ -250,10 +250,10 @@ export async function signIn(email: string, password: string) {
 //     //Unwrapped drive key in memory!
 //     // console.log(`Unwrapped Drive Key: ${unwrappedDriveKey}`);
 
-//     const deviceKeyPair = sodium.crypto_box_keypair();
+//     const deviceKeyPair = sodium.crypto_kem_keypair();
 //     const sessionKey = sodium.randombytes_buf(32) //256-bit symmetric key
 
-//     // const wrappedDriveKeyForDevice = sodium.crypto_box_seal(
+//     // const wrappedDriveKeyForDevice = await quantumSeal(
 //     //     unwrappedDriveKey,
 //     //     deviceKeyPair.publicKey
 //     // )

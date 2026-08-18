@@ -23,6 +23,7 @@ import { formatBytes } from "@/lib/utils/size";
 import { addSingleSearchItem, removeSearchItem } from "@/lib/SearchIndexStore";
 import { FilePreviewModal } from "./file-preview-modal";
 import { ShareModal } from "./share-modal";
+import { quantumSeal, quantumSealOpen } from "@/crypto/kem";
 
 export function FileList() {
     const currentFolder = useDriveStore(s => s.getCurrentFolder());
@@ -69,7 +70,7 @@ export function FileList() {
                     return;
                 }
 
-                const decryptedFiles = rawFiles.map((file: any) => {
+                const decryptedFiles = await Promise.all(rawFiles.map(async (file: any)  => {
                     try {
                         const ciphertext = sodium.from_base64(file.encryptedName);
                         const nonce = sodium.from_base64(file.nameNonce);
@@ -80,9 +81,9 @@ export function FileList() {
 
                       if (file.encryptedMetadata && file.type === 'FILE') {
                                   // First, unwrap the File Key
-                                  const fileKey = sodium.crypto_box_seal_open(
+                                  const fileKey = await quantumSealOpen(
                                       sodium.from_base64(file.encryptedNodePassphrase),
-                                      currentFolder!.publicKey, currentFolder!.privateKey
+                                     currentFolder!.privateKey
                                   );
 
                                   // Second, decrypt the JSON string
@@ -118,7 +119,7 @@ export function FileList() {
                     } catch (e) {
                         return { ...file, plaintextName: "Decryption Failed", signatureVerified: false };
                     }
-                });
+                }));
                 setFiles(decryptedFiles);
             } catch (err) {
                 console.error(err);
@@ -199,17 +200,17 @@ export function FileList() {
             const sodium = await getSodium();
 
             // 1. Unwrap the moving item's Passphrase using our CURRENT folder's private key
-            const fileKey = sodium.crypto_box_seal_open(
+            const fileKey = await quantumSealOpen(
                 sodium.from_base64(itemToMove.encryptedNodePassphrase),
-                currentFolder.publicKey,
+
                 currentFolder.privateKey
             );
 
             // 2. We need the TARGET folder's Public & Private keys!
             // First, unwrap the target folder's Passphrase (using current folder's private key)
-            const targetFolderPassphrase = sodium.crypto_box_seal_open(
+            const targetFolderPassphrase = await quantumSealOpen(
                 sodium.from_base64(targetFolder.encryptedNodePassphrase),
-                currentFolder.publicKey,
+                
                 currentFolder.privateKey
             );
 
@@ -222,7 +223,7 @@ export function FileList() {
             const targetPublicKey = sodium.from_base64(targetFolder.nodePublicKey);
 
             // 3. Re-wrap the moving item's Passphrase for the TARGET folder!
-            const newEncryptedNodePassphrase = sodium.crypto_box_seal(fileKey, targetPublicKey);
+            const newEncryptedNodePassphrase = await quantumSeal(fileKey, targetPublicKey);
 
             const accountSigningPrivKey = getAccountSigningPrivateKey();
             if (!accountSigningPrivKey) throw new Error("Missing signing key");
@@ -451,9 +452,9 @@ const handleDownload = async (file: any, withResult = false, onProgress?: (perce
         if (!currentFolder) throw new Error("Drive keys not initialized");
 
 
-        const fileKey = sodium.crypto_box_seal_open(
+        const fileKey = await quantumSealOpen(
             sodium.from_base64(file.encryptedNodePassphrase),
-            currentFolder.publicKey,
+            
             currentFolder.privateKey
         );
 
@@ -528,9 +529,9 @@ const handleFolderClick = async (folder: any) => {
             const currentFolder = useDriveStore.getState().getCurrentFolder();
             if (!currentFolder) return;
             // 1. Unwrap the Passphrase using the PARENT's Private Key
-            const nodePassphrase = sodium.crypto_box_seal_open(
+            const nodePassphrase = await quantumSealOpen(
                 sodium.from_base64(folder.encryptedNodePassphrase),
-                currentFolder.publicKey,
+                
                 currentFolder.privateKey
             );
             // 2. Decrypt the CHILD's Private Key using the Passphrase

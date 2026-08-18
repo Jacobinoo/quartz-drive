@@ -2,6 +2,7 @@ import { config } from "@/config/env";
 import { customFetch } from "./api";
 import { getSodium } from "./crypto/sodium";
 import { useDriveStore } from "./driveStore";
+import { quantumSeal, quantumSealOpen } from "@/crypto/kem";
 
 export async function shareFolderCryptographically(folderToShare: any, recipientEmail: string) {
     const sodium = await getSodium();
@@ -16,7 +17,7 @@ export async function shareFolderCryptographically(folderToShare: any, recipient
     const recipientAccountPubKey = sodium.from_base64(recipientData.accountEncryptionPublicKey);
 
     // 2. Generate a Brand New "Share Volume" KeyPair and Passphrase
-    const shareKeyPair = sodium.crypto_box_keypair();
+    const shareKeyPair = sodium.crypto_kem_keypair();
     const sharePassphrase = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES);
 
     // 3. Encrypt the Share Private Key using the Share Passphrase
@@ -30,23 +31,23 @@ export async function shareFolderCryptographically(folderToShare: any, recipient
     );
 
     // 4. Seal the Share Passphrase using Jane's Public Key! (Only Jane can open this box)
-    const encryptedSharePassphraseForOwner = sodium.crypto_box_seal(
+    const encryptedSharePassphraseForOwner = await quantumSeal(
         sharePassphrase,
         recipientAccountPubKey
     );
 
     // 5. We need to unlock the Target Folder's Passphrase first
     // It is currently sealed by the Parent Folder (our current view)
-    const folderPassphrase = sodium.crypto_box_seal_open(
+    const folderPassphrase = await quantumSealOpen(
         sodium.from_base64(folderToShare.encryptedNodePassphrase),
-        currentFolder.publicKey,
+        
         currentFolder.privateKey
     );
 
     if (!folderPassphrase) throw new Error("Failed to unseal folder passphrase to share it");
 
     // 6. Seal the Target Folder's Passphrase using the NEW Share Public Key
-    const encryptedTargetNodePassphrase = sodium.crypto_box_seal(
+    const encryptedTargetNodePassphrase = await quantumSeal(
         folderPassphrase,
         shareKeyPair.publicKey
     );

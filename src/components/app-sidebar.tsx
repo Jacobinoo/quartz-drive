@@ -35,6 +35,7 @@ import { customFetch } from "@/lib/api";
 import { formatBytes } from "@/lib/utils/size";
 import { getAccessToken, getAccountEncryptionPrivateKey } from "@/lib/authStore";
 import Link from 'next/link'
+import { quantumSealOpen } from "@/crypto/kem";
 
 function StorageQuota() {
     const [used, setUsed] = useState(0);
@@ -164,9 +165,8 @@ function DynamicFolderTree({ pathStack }: { pathStack: FolderKey[] }) {
               );
 
               // 2. Decrypt Node Passphrase
-              const nodePassphrase = sodium.crypto_box_seal_open(
-                  sodium.from_base64(file.encryptedNodePassphrase),
-                  folder.publicKey, folder.privateKey
+              const nodePassphrase = await quantumSealOpen(
+                  sodium.from_base64(file.encryptedNodePassphrase), folder.privateKey
               );
 
               // 3. Decrypt Node Private Key
@@ -283,9 +283,8 @@ function SharedVolumesTree() {
 
                     for (const vol of rawVolumes) {
                         try {
-                            const sharePassphrase = sodium.crypto_box_seal_open(
-                                sodium.from_base64(vol.encryptedSharePassphraseForOwner),
-                                accountPubKey, accountPrivKey
+                            const sharePassphrase = await quantumSealOpen(
+                                sodium.from_base64(vol.encryptedSharePassphraseForOwner), accountPrivKey
                             );
 
                             const sharePrivKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
@@ -295,9 +294,8 @@ function SharedVolumesTree() {
                             );
                             const sharePubKey = sodium.crypto_scalarmult_base(sharePrivKey);
 
-                            const rootNodePassphrase = sodium.crypto_box_seal_open(
-                                sodium.from_base64(vol.encryptedRootNodePassphrase),
-                                sharePubKey, sharePrivKey
+                            const rootNodePassphrase = await quantumSealOpen(
+                                sodium.from_base64(vol.encryptedRootNodePassphrase), sharePrivKey
                             );
 
                             const rootNodePrivKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(

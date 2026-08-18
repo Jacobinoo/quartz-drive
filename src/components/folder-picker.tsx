@@ -11,6 +11,7 @@ import { FolderKey, useDriveStore } from "@/lib/driveStore";
 import { getAccountSigningPrivateKey } from "@/lib/authStore";
 import { customFetch } from "@/lib/api";
 import { fetchFiles } from "@/crypto/files";
+import { quantumSeal, quantumSealOpen } from "@/crypto/kem";
 
 // 1. Recursive Folder Node (Decrypts children on the fly!)
 function PickerNode({ folder, selectedId, onSelect }: { folder: FolderKey, selectedId: string | null, onSelect: (f: FolderKey) => void }) {
@@ -31,9 +32,9 @@ function PickerNode({ folder, selectedId, onSelect }: { folder: FolderKey, selec
 
         for (const file of rawFiles) {
             if (file.type === 'FOLDER') {
-                const nodePassphrase = sodium.crypto_box_seal_open(
+                const nodePassphrase = await quantumSealOpen(
                     sodium.from_base64(file.encryptedNodePassphrase),
-                    folder.publicKey, folder.privateKey
+                     folder.privateKey
                 );
                 const childPrivKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
                     null, sodium.from_base64(file.wrappedNodeKey), sodium.from_string("FolderNode"),
@@ -91,12 +92,12 @@ export function FolderPickerModal({ itemToMove, onClose }: { itemToMove: any, on
             const sodium = await getSodium();
 
             // 1. Unwrap Passphrase using CURRENT folder's keys
-            const fileKey = sodium.crypto_box_seal_open(
+            const fileKey = await quantumSealOpen(
                 sodium.from_base64(itemToMove.encryptedNodePassphrase),
-                currentFolder.publicKey, currentFolder.privateKey
+                 currentFolder.privateKey
             );
 
-            const newEncryptedNodePassphrase = sodium.crypto_box_seal(fileKey, selectedFolder.publicKey);
+            const newEncryptedNodePassphrase = await quantumSeal(fileKey, selectedFolder.publicKey);
 
             const accountSigningPrivKey = getAccountSigningPrivateKey();
             if (!accountSigningPrivKey) throw new Error("Missing signing key");

@@ -7,6 +7,7 @@ import {
 import M3ServerPayload from "@/KeyRegisterMaterial";
 import {Base64String} from "@/UtilTypes";
 import {getSodium} from "@/lib/crypto/sodium";
+import { quantumSeal } from "./crypto/kem";
 
 async function registerKeyMaterial(email: string, exportKey: string): Promise<KeyRegisterMaterial> {
     const sodium = await getSodium();
@@ -33,7 +34,7 @@ async function registerKeyMaterial(email: string, exportKey: string): Promise<Ke
     const masterSalt = sodium.randombytes_buf(sodium.crypto_pwhash_SALTBYTES);
 
     // Layer 1 - Account Identity
-    const accountEncryptionKeyPair = sodium.crypto_box_keypair();
+    const accountEncryptionKeyPair = sodium.crypto_kem_keypair();
     const accountSigningKeyPair = sodium.crypto_sign_keypair();
 
     const accountSigningPrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
@@ -89,7 +90,7 @@ async function registerKeyMaterial(email: string, exportKey: string): Promise<Ke
     const sessionNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
 
     // Layer 3 - Default Share
-    const shareKeyPair = sodium.crypto_box_keypair();
+    const shareKeyPair = sodium.crypto_kem_keypair();
     const sharePassphrase = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES);
 
     const sharePrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
@@ -102,7 +103,7 @@ async function registerKeyMaterial(email: string, exportKey: string): Promise<Ke
     );
 
 
-    const encryptedSharePassphrase = sodium.crypto_box_seal(
+    const encryptedSharePassphrase = await quantumSeal(
         sharePassphrase,
         accountEncryptionKeyPair.publicKey,
     );
@@ -113,7 +114,7 @@ async function registerKeyMaterial(email: string, exportKey: string): Promise<Ke
 
 
     // Layer 4 - Root Node (My Drive)
-    const rootNodeKeyPair = sodium.crypto_box_keypair();
+    const rootNodeKeyPair = sodium.crypto_kem_keypair();
     const rootNodePassphrase = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES);
 
     const rootNodePrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
@@ -125,7 +126,7 @@ async function registerKeyMaterial(email: string, exportKey: string): Promise<Ke
         rootNodePassphrase
     );
 
-    const encryptedRootNodePassphrase = sodium.crypto_box_seal(
+    const encryptedRootNodePassphrase = await quantumSeal(
         rootNodePassphrase,
         shareKeyPair.publicKey
     );

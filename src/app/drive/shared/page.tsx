@@ -11,6 +11,7 @@ import { getSodium } from "@/lib/crypto/sodium";
 import { getAccessToken, getAccountEncryptionPrivateKey } from "@/lib/authStore";
 import { useDriveStore } from "@/lib/driveStore";
 import { FolderIcon } from "lucide-react";
+import { quantumSealOpen } from "@/crypto/kem";
 
 export default function SharedWithMePage() {
     const [volumes, setVolumes] = useState<any[]>([]);
@@ -41,9 +42,8 @@ export default function SharedWithMePage() {
                 for (const vol of rawVolumes) {
                     try {
                         // LAYER 1: Unwrap Share Passphrase
-                        const sharePassphrase = sodium.crypto_box_seal_open(
+                        const sharePassphrase = await quantumSealOpen(
                             sodium.from_base64(vol.encryptedSharePassphraseForOwner),
-                            accountPubKey,
                             accountPrivKey
                         );
 
@@ -57,9 +57,8 @@ export default function SharedWithMePage() {
                         const sharePubKey = sodium.crypto_scalarmult_base(sharePrivKey);
 
                         // LAYER 3: Unwrap Target Folder Passphrase
-                        const rootNodePassphrase = sodium.crypto_box_seal_open(
+                        const rootNodePassphrase = await quantumSealOpen(
                             sodium.from_base64(vol.encryptedRootNodePassphrase),
-                            sharePubKey,
                             sharePrivKey
                         );
 

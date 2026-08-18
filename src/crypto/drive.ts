@@ -3,6 +3,7 @@ import { customFetch } from "@/lib/api";
 import { getSodium } from "@/lib/crypto/sodium";
 import { getAccessToken, getAccountEncryptionPrivateKey } from "@/lib/authStore";
 import { useDriveStore } from "@/lib/driveStore";
+import { quantumSealOpen } from "./kem";
 
 export async function initializeDriveKeys() {
     // Skip if already initialized
@@ -23,9 +24,8 @@ export async function initializeDriveKeys() {
         if (!accountPubKey) throw new Error("Not authenticated");
 
         // 3. LAYER 1: Unwrap the Share Passphrase
-        const sharePassphrase = sodium.crypto_box_seal_open(
+        const sharePassphrase = await quantumSealOpen(
             sodium.from_base64(rootData.encryptedSharePassphraseForOwner),
-            accountPubKey,
             accountPrivKey
         );
 
@@ -49,9 +49,8 @@ export async function initializeDriveKeys() {
 
         // 5. LAYER 3: Unwrap the Root Node Passphrase
         const sharePubKey = sodium.crypto_scalarmult_base(sharePrivKey);
-        const rootNodePassphrase = sodium.crypto_box_seal_open(
+        const rootNodePassphrase = await quantumSealOpen(
             sodium.from_base64(rootData.encryptedRootNodePassphrase),
-            sharePubKey,
             sharePrivKey
         );
 
@@ -75,7 +74,7 @@ export async function initializeDriveKeys() {
         };
         const store = useDriveStore.getState();
         store.setMyDriveRoot(rootFolderNode);
-        
+
         // Only set the active breadcrumb route to My Drive if the user hasn't already navigated somewhere else!
         if (store.breadcrumbs.length === 0) {
             store.setRootFolder(rootFolderNode);

@@ -29,6 +29,7 @@ import { customFetch } from "@/lib/api";
 import { SearchBar } from "@/components/search-bar";
 import { getAccessToken } from "@/lib/authStore";
 import { Users } from "lucide-react";
+import { quantumSeal, quantumSealOpen } from "@/crypto/kem";
 
 export default function DriveHomePage() {
   const router = useRouter();
@@ -58,17 +59,18 @@ export default function DriveHomePage() {
           const sodium = await getSodium();
 
           // 1. Unwrap the moving item's Passphrase using CURRENT folder
-          const fileKey = sodium.crypto_box_seal_open(
+          const fileKey = await quantumSealOpen(
               sodium.from_base64(draggedItem.encryptedNodePassphrase),
-              currentFolder.publicKey, currentFolder.privateKey
+              currentFolder.publicKey
           );
+
 
           // 2. We ALREADY HAVE the target folder's keys from the Breadcrumb!
           const targetPublicKey = targetFolder.publicKey;
           const targetPrivateKey = targetFolder.privateKey;
 
           // 3. Re-wrap
-          const newEncryptedNodePassphrase = sodium.crypto_box_seal(fileKey, targetPublicKey);
+          const newEncryptedNodePassphrase = await quantumSeal(fileKey, targetPublicKey);
 
           const accountSigningPrivKey = getAccountSigningPrivateKey();
           if (!accountSigningPrivKey) throw new Error("Missing signing key");

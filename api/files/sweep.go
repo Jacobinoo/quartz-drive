@@ -297,6 +297,7 @@ func (h *Handler) SweepReconciliation(ctx context.Context) {
 }
 
 func (h *Handler) wipeTrashedLinks(ctx context.Context, links []model.Link) {
+	initSweepLogger()
 	sweepLog.Printf("Starting Async S3 Wipe for %d trashed items...", len(links))
 
 	// Track which S3 object keys have already been deleted and accounted for in

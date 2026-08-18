@@ -8,13 +8,16 @@
           "secretKey": "any"
         }
       ],
-      "actions": [
-        "Read",
-        "Write",
-        "List",
-        "Tagging",
-        "Admin"
-      ]
+      "actions": ["Read", "Write", "Admin"]
+    }
+  ],
+  "cors": [
+    {
+      "AllowedOrigins": ["*"],
+      "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+      "AllowedHeaders": ["*"],
+      "ExposeHeaders": ["ETag"],
+      "MaxAgeSeconds": 3600
     }
   ]
 }

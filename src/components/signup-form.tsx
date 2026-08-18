@@ -92,7 +92,7 @@ export function SignupForm({
                         setRecoveryPhrase(res.recoveryPhrase);
                       })
                       .catch((err: Error) => {
-                        console.error(`Error occured on sign up: ${err.message}}`);
+                        console.error(`Error occured on sign up: ${err.message}`);
                       })
                 }}>Create Account</Button>
                 <FieldDescription className="text-center">

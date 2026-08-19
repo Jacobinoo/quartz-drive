@@ -15,7 +15,9 @@ import (
 	"quartz/api/signout"
 	"quartz/api/signup"
 	"quartz/config"
+	"quartz/internal/middleware"
 	"quartz/pkg/database"
+	"quartz/pkg/logger"
 	"quartz/pkg/storage"
 
 	"encoding/base64"
@@ -24,10 +26,13 @@ import (
 	"syscall"
 	"time"
 
+	sentryhttp "github.com/getsentry/sentry-go/http"
 	"gorm.io/gorm"
 )
 
 func Run() {
+	logger.InitLogger(config.Cfg.App.Env)
+
 	// grpcClient, conn := initGrpcClient()
 	// defer conn.Close()
 
@@ -62,9 +67,12 @@ func Run() {
 
 	router := initRouter(state)
 
+	finalHandler := middleware.RequestIDMiddleware(router)
+	sentryHandler := sentryhttp.New(sentryhttp.Options{})
+
 	server := &http.Server{
 		Addr:    config.Cfg.Host + ":" + config.Cfg.Port,
-		Handler: router,
+		Handler: sentryHandler.Handle(finalHandler),
 	}
 
 	// Start server in a goroutine
@@ -175,7 +183,11 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 		Description: "Quartz API Server",
 	}
 
-	json.NewEncoder(w).Encode(&response) //this is public on GET /
+	err := json.NewEncoder(w).Encode(&response)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	} //this is public on GET /
 }
 
 func healthHandler(state *ServerState) http.HandlerFunc {
@@ -213,7 +225,6 @@ func healthHandler(state *ServerState) http.HandlerFunc {
 }
 
 func upHandler(w http.ResponseWriter, r *http.Request) {
-
 	w.WriteHeader(http.StatusOK)
 	return
 }

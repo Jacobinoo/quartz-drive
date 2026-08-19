@@ -135,8 +135,13 @@ func (s *S3Service) GenerateDownloadUrls(ctx context.Context, objectKeys []strin
 	var urls []string
 	expiry := time.Minute * 10 // Safe expiry for downloads
 
+	var clientToUse *minio.Client = s.client
+	if config.Cfg.Env == "development" && s.devPresignClient != nil {
+		clientToUse = s.devPresignClient
+	}
+
 	for i, objectKey := range objectKeys {
-		presignedURL, err := s.devPresignClient.PresignedGetObject(ctx, s.bucket, objectKey, expiry, nil)
+		presignedURL, err := clientToUse.PresignedGetObject(ctx, s.bucket, objectKey, expiry, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate GET URL for chunk %d: %w", i, err)
 		}

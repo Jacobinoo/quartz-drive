@@ -69,6 +69,7 @@ type (
 		Version     string `env:"APP_VERSION,required"`
 		FrontendURL string `env:"FRONTEND_URL,required"`
 		HealthToken string `env:"HEALTH_TOKEN,required"`
+		SentryDSN   string `env:"SENTRY_DSN,required"`
 	}
 
 	DB struct {

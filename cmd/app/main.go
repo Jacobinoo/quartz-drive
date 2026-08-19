@@ -1,11 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"quartz/config"
 	"quartz/internal/app"
+	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/joho/godotenv"
 )
 
@@ -30,5 +33,20 @@ func main() {
 	}
 
 	config.Cfg.Init()
+
+	if config.Cfg.App.SentryDSN != "" {
+		err := sentry.Init(sentry.ClientOptions{
+			Dsn:              config.Cfg.App.SentryDSN,
+			Environment:      config.Cfg.App.Env,
+			Release:          config.Cfg.App.Version,
+			TracesSampleRate: 1.0,
+		})
+		if err != nil {
+			log.Fatalf("sentry.Init: %s", err)
+		}
+		defer sentry.Flush(2 * time.Second)
+		fmt.Println("Sentry initialized successfully.")
+	}
+
 	app.Run()
 }

@@ -22,13 +22,36 @@ type ErrorResponse struct {
 
 func Wrap(h APIHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		reqID, _ := ctx.Value(middleware.RequestIDKey).(string)
+
+		// NEW: Catch panics, push to the sentryhttp context hub, and return JSON!
+		defer func() {
+			if rec := recover(); rec != nil {
+				err := fmt.Errorf("panic: %v", rec)
+				logger.ErrorContext(ctx, "PANIC RECOVERED", err)
+
+				if hub := sentry.GetHubFromContext(ctx); hub != nil {
+					hub.WithScope(func(scope *sentry.Scope) {
+						scope.SetTag("request_id", reqID)
+						hub.Recover(rec)
+					})
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(ErrorResponse{
+					Code:      apperrors.CodeInternal,
+					Message:   "An internal server error occurred",
+					RequestID: reqID,
+				})
+			}
+		}()
+
 		err := h(w, r)
 		if err == nil {
 			return // Success! Handler wrote its own response.
 		}
-
-		ctx := r.Context()
-		reqID, _ := ctx.Value(middleware.RequestIDKey).(string)
 
 		var appErr *apperrors.AppError
 
@@ -37,7 +60,7 @@ func Wrap(h APIHandler) http.HandlerFunc {
 			// Only push to Sentry and terminal logs if it's an actual 5xx Server Error
 			if appErr.Status >= 500 {
 				logger.ErrorContext(ctx, "Internal Server Error", appErr.Err)
-				if hub := sentry.CurrentHub(); hub != nil {
+				if hub := sentry.GetHubFromContext(ctx); hub != nil {
 					hub.WithScope(func(scope *sentry.Scope) {
 						scope.SetTag("request_id", reqID)
 						hub.CaptureException(appErr.Err) // Capture the true underlying DB/System error!
@@ -58,7 +81,7 @@ func Wrap(h APIHandler) http.HandlerFunc {
 
 		// 2. If it's a completely unhandled, raw Go error
 		logger.ErrorContext(ctx, "Unhandled Raw Error", err)
-		if hub := sentry.CurrentHub(); hub != nil {
+		if hub := sentry.GetHubFromContext(ctx); hub != nil {
 			hub.WithScope(func(scope *sentry.Scope) {
 				scope.SetTag("request_id", reqID)
 				hub.CaptureException(err)

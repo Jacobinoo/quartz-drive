@@ -10,6 +10,7 @@ import (
 type M1 struct {
 	Email               string `json:"email"`
 	RegistrationRequest string `json:"registrationRequest"`
+	Token               string `json:"token"`
 }
 
 // OPAQUE Message M2
@@ -86,6 +87,7 @@ type NodeDTO struct {
 
 // OPAQUE Message M3
 type M3 struct {
+	Token string   `json:"token"`
 	User  UserDTO  `json:"user"`
 	Drive DriveDTO `json:"drive"`
 }

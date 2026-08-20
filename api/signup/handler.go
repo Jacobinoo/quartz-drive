@@ -3,12 +3,15 @@ package signup
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"quartz/config"
 	"quartz/internal/bindings"
 	"quartz/internal/dto"
 	"quartz/internal/model"
+	apperrors "quartz/pkg/app-errors"
+	"quartz/pkg/captcha"
 
 	// pb "quartz/proto"
 
@@ -29,26 +32,41 @@ func NewHandler(db *gorm.DB, redisClient *redis.Client, opaqueSetup []byte) *Han
 }
 
 // Signup: (opaque receive m1 & send m2)
-func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	var m1 dto.M1
 	if err := json.NewDecoder(r.Body).Decode(&m1); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid request", err)
+	}
+
+	cfip := r.Header.Get("CF-Connecting-IP")
+	if cfip == "" {
+		cfip = r.Header.Get("X-Forwarded-For")
+	}
+	if cfip == "" {
+		cfip = r.Header.Get("X-Real-IP")
+	}
+
+	success, errors, err := captcha.VerifyCaptchaToken(m1.Token, cfip)
+	if err != nil {
+		fmt.Print(errors)
+		return apperrors.NewBadRequest("invalid token", err)
+	}
+	if !success {
+		fmt.Print(errors)
+		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
 	credID := uuid.New()
 
 	regReqBytes, err := base64.RawURLEncoding.DecodeString(m1.RegistrationRequest)
 	if err != nil {
-		http.Error(w, "invalid base64 in registration request", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid base64 in registration request", err)
 	}
 
 	regResponse, err := bindings.StartRegistration(
@@ -77,33 +95,51 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("user wants to register, waiting for m3, registration request %s", m1.RegistrationRequest)
 
-	json.NewEncoder(w).Encode(registrationResponse)
+	err = json.NewEncoder(w).Encode(registrationResponse)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+	return nil
 }
 
-func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	var m3 dto.M3
 
 	if err := json.NewDecoder(r.Body).Decode(&m3); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid request", err)
+	}
+
+	cfip := r.Header.Get("CF-Connecting-IP")
+	if cfip == "" {
+		cfip = r.Header.Get("X-Forwarded-For")
+	}
+	if cfip == "" {
+		cfip = r.Header.Get("X-Real-IP")
+	}
+
+	success, errors, err := captcha.VerifyCaptchaToken(m3.Token, cfip)
+	if err != nil {
+		fmt.Print(errors)
+		return apperrors.NewBadRequest("invalid token", err)
+	}
+	if !success {
+		fmt.Print(errors)
+		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
 	uuidString := m3.User.APAKE.RegistrationNonce
 	credID, uuidParseErr := uuid.Parse(uuidString)
 	if uuidParseErr != nil {
-		http.Error(w, "invalid user identifier in nonce", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid user identifier in nonce", uuidParseErr)
 	}
 
 	regRecordBytes, err := base64.RawURLEncoding.DecodeString(m3.User.APAKE.RegistrationRecord)
 	if err != nil {
-		http.Error(w, "invalid base64 in registration record", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid base64 in registration record", err)
 	}
 
 	passwordFileRecord, err := bindings.FinishRegistration(
@@ -112,8 +148,7 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		log.Printf("bindings FinishRegistration call failed: %v", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(err)
 	} else {
 		log.Println("bindings FinishRegistration call succeeded")
 	}
@@ -197,44 +232,47 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) {
 
 		if err := tx.Create(&storedUser).Error; err != nil {
 			// registrationSessions.Delete(m3.RegistrationNonce)
-			http.Error(w, "email registered already", http.StatusConflict)
-			return err
+			//http.Error(w, "email registered already", http.StatusConflict)
+			return apperrors.NewInternal(err)
 		}
 
 		if err := tx.Create(&storedUserKeyStore).Error; err != nil {
-			http.Error(w, "cannot register keys", http.StatusConflict)
-			return err
+			//http.Error(w, "cannot register keys", http.StatusConflict)
+			return apperrors.NewInternal(err)
 		}
 
 		if err := tx.Create(&storedNode).Error; err != nil {
-			http.Error(w, "cannot register keys", http.StatusConflict)
-			return err
+			//http.Error(w, "cannot register keys", http.StatusConflict)
+			return apperrors.NewInternal(err)
 		}
 
 		if err := tx.Create(&storedLink).Error; err != nil {
-			http.Error(w, "cannot register keys", http.StatusConflict)
-			return err
+			//http.Error(w, "cannot register keys", http.StatusConflict)
+			return apperrors.NewInternal(err)
 		}
 
 		if err := tx.Create(&storedShare).Error; err != nil {
-			http.Error(w, "cannot register keys", http.StatusConflict)
-			return err
+			//http.Error(w, "cannot register keys", http.StatusConflict)
+			return apperrors.NewInternal(err)
 		}
 
 		if err := tx.Create(&storedShareMember).Error; err != nil {
-			http.Error(w, "cannot register keys", http.StatusConflict)
-			return err
+			//http.Error(w, "cannot register keys", http.StatusConflict)
+			return apperrors.NewInternal(err)
 		}
 
 		return nil
 	})
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(err)
 	}
 
 	w.WriteHeader(http.StatusCreated)
 
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	err = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+	return nil
 }

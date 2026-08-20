@@ -79,7 +79,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewInternal(err)
 	}
 
-	magicLink := fmt.Sprintf("%s/reset-password?token=%s&email=%s", config.Cfg.App.FrontendURL, tokenStr, req.Email)
+	magicLink := fmt.Sprintf("%s/reset-password?token=%s", config.Cfg.App.FrontendURL, tokenStr)
 
 	// Send email using Resend
 	if err := email.SendPasswordReset(r.Context(), req.Email, magicLink); err != nil {
@@ -103,7 +103,6 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 }
 
 type VerifyCodeRequest struct {
-	Email string `json:"email"`
 	Token string `json:"token"`
 }
 
@@ -122,24 +121,13 @@ func (h *Handler) VerifyResetCode(w http.ResponseWriter, r *http.Request) error 
 		return apperrors.NewBadRequest("Request body is invalid", err)
 	}
 
-	var user model.User
-	err := h.db.Where("email = ?", req.Email).First(&user).Error
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return apperrors.NewInternal(err)
-	}
-	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
-		// Don't leak whether user exists, respond with a fake error (token invalid instead of email not found)
-		log.Printf("VerifyCodeRequest: invalid token or email, failing with a fake error")
-		return apperrors.NewBadRequest("invalid or expired token", err)
-	}
-
 	var token model.PasswordResetToken
-	if err := h.db.Where("user_id = ? AND token = ? AND expires_at > ?", user.ID, req.Token, time.Now()).First(&token).Error; err != nil {
+	if err := h.db.Where("token = ? AND expires_at > ?", req.Token, time.Now()).First(&token).Error; err != nil {
 		return apperrors.NewBadRequest("invalid or expired token", err)
 	}
 
 	var keyStore model.UserKeyStore
-	if err := h.db.Where("user_id = ?", user.ID).First(&keyStore).Error; err != nil {
+	if err := h.db.Where("user_id = ?", token.UserID).First(&keyStore).Error; err != nil {
 		return apperrors.NewInternal(err)
 	}
 
@@ -158,7 +146,7 @@ func (h *Handler) VerifyResetCode(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	w.WriteHeader(http.StatusOK)
-	err = json.NewEncoder(w).Encode(res)
+	err := json.NewEncoder(w).Encode(res)
 	if err != nil {
 		return apperrors.NewInternal(err)
 	}

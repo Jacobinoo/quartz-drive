@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"quartz/internal/bindings"
 	"quartz/internal/dto"
 	"quartz/internal/model"
+	apperrors "quartz/pkg/app-errors"
 	"time"
 
 	"github.com/resend/resend-go/v2"
@@ -35,31 +37,36 @@ type ForgotPasswordRequest struct {
 	Email string `json:"email"`
 }
 
-func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	var req ForgotPasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("Request body is invalid", err)
 	}
 
 	var user model.User
-	if err := h.db.Where("email = ?", req.Email).First(&user).Error; err != nil {
-		// Don't leak whether user exists
+	err := h.db.Where("email = ?", req.Email).First(&user).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return apperrors.NewInternal(err)
+	}
+	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
+		// Don't leak whether user exists, we won't send an email either way
+		log.Printf("ForgotPasswordRequest: email not found, silently failing")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-		return
+		err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		if err != nil {
+			return apperrors.NewInternal(err)
+		}
+		return nil
 	}
 
 	// Generate secure token
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
-		http.Error(w, "failed to generate token", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(err)
 	}
 	tokenStr := fmt.Sprintf("%x", tokenBytes)
 
@@ -70,8 +77,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.db.Create(&token).Error; err != nil {
-		http.Error(w, "failed to create token", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(err)
 	}
 
 	// Send email using Resend
@@ -79,14 +85,22 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 
 	magicLink := fmt.Sprintf("%s/reset-password?token=%s&email=%s", config.Cfg.App.FrontendURL, tokenStr, req.Email)
 
+	from := fmt.Sprintf("%s <%s>", config.Cfg.Email.UpdatesFromSenderName, config.Cfg.Email.UpdatesVerifiedDomain)
+
 	params := &resend.SendEmailRequest{
-		From:    "Quartz <noreply@resend.dev>", // Replace with verified domain in production
+		From:    from,
 		To:      []string{req.Email},
 		Subject: "Quartz Account Recovery",
 		Html:    fmt.Sprintf("<p>Click the link below to recover your Quartz account:</p><p><a href=\"%s\">Recover Account</a></p><p>This link expires in 15 minutes.</p>", magicLink),
 	}
 
-	_, err := client.Emails.Send(params)
+	//should this be sent asynchronously? are we blocking the request?
+	// TODO: support idempotency keys to avoid duplicates
+	opt := &resend.SendEmailOptions{
+		//IdempotencyKey: "",
+	}
+	// TODO: is r.Context() here correct?
+	_, err = client.Emails.SendWithOptions(r.Context(), params, opt)
 	if err != nil {
 		log.Printf("Failed to send email: %v", err)
 		// For local testing without a verified domain/key, we print the link
@@ -94,7 +108,11 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	err = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+	return nil
 }
 
 type VerifyCodeRequest struct {
@@ -107,34 +125,35 @@ type VerifyCodeResponse struct {
 	RecoveryKeys dto.KeysDTO `json:"recoveryKeys"`
 }
 
-func (h *Handler) VerifyResetCode(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) VerifyResetCode(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	var req VerifyCodeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("Request body is invalid", err)
 	}
 
 	var user model.User
-	if err := h.db.Where("email = ?", req.Email).First(&user).Error; err != nil {
-		http.Error(w, "invalid token or email", http.StatusBadRequest)
-		return
+	err := h.db.Where("email = ?", req.Email).First(&user).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return apperrors.NewInternal(err)
+	}
+	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
+		// Don't leak whether user exists, respond with a fake error (token invalid instead of email not found)
+		log.Printf("VerifyCodeRequest: invalid token or email, failing with a fake error")
+		return apperrors.NewBadRequest("invalid or expired token", err)
 	}
 
 	var token model.PasswordResetToken
 	if err := h.db.Where("user_id = ? AND token = ? AND expires_at > ?", user.ID, req.Token, time.Now()).First(&token).Error; err != nil {
-		http.Error(w, "invalid or expired token", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid or expired token", err)
 	}
 
 	var keyStore model.UserKeyStore
 	if err := h.db.Where("user_id = ?", user.ID).First(&keyStore).Error; err != nil {
-		http.Error(w, "user keystore not found", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(err)
 	}
 
 	res := VerifyCodeResponse{
@@ -152,7 +171,11 @@ func (h *Handler) VerifyResetCode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(res)
+	err = json.NewEncoder(w).Encode(res)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+	return nil
 }
 
 type ResetM1 struct {
@@ -161,34 +184,29 @@ type ResetM1 struct {
 	RegistrationRequest string `json:"registrationRequest"`
 }
 
-func (h *Handler) ResetPasswordM1(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ResetPasswordM1(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	var m1 ResetM1
 	if err := json.NewDecoder(r.Body).Decode(&m1); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("Request body is invalid", err)
 	}
 
 	var user model.User
 	if err := h.db.Where("email = ?", m1.Email).First(&user).Error; err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	var token model.PasswordResetToken
 	if err := h.db.Where("user_id = ? AND token = ? AND expires_at > ?", user.ID, m1.Token, time.Now()).First(&token).Error; err != nil {
-		http.Error(w, "invalid or expired token", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid or expired token", err)
 	}
 
 	regReqBytes, err := base64.RawURLEncoding.DecodeString(m1.RegistrationRequest)
 	if err != nil {
-		http.Error(w, "invalid base64 in registration request", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid base64 in registration request", err)
 	}
 
 	// We reuse the existing user ID as the credential ID
@@ -197,26 +215,27 @@ func (h *Handler) ResetPasswordM1(w http.ResponseWriter, r *http.Request) {
 		regReqBytes,
 		[]byte(user.ID.String()),
 	)
-
 	if err != nil {
-		http.Error(w, "registration failed", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("registration failed", err)
 	}
 
 	// Store the new nonce temporarily in redis
 	newNonce := uuid.New().String()
 	err = h.redis.Set(context.Background(), "reset:nonce:"+newNonce, user.ID.String(), 15*time.Minute).Err()
 	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(err)
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(dto.M2{
+	err = json.NewEncoder(w).Encode(dto.M2{
 		Status:               "ok",
 		RegistrationResponse: base64.RawURLEncoding.EncodeToString(regResponse),
 		Nonce:                newNonce,
 	})
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+	return nil
 }
 
 type ResetM3 struct {
@@ -225,41 +244,35 @@ type ResetM3 struct {
 	User  dto.UserDTO `json:"user"`
 }
 
-func (h *Handler) ResetPasswordM3(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ResetPasswordM3(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("Provided method is not allowed")
 	}
 
 	var m3 ResetM3
 	if err := json.NewDecoder(r.Body).Decode(&m3); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("Provided request body is invalid", err)
 	}
 
 	var user model.User
 	if err := h.db.Where("email = ?", m3.Email).First(&user).Error; err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	var token model.PasswordResetToken
 	if err := h.db.Where("user_id = ? AND token = ? AND expires_at > ?", user.ID, m3.Token, time.Now()).First(&token).Error; err != nil {
-		http.Error(w, "invalid or expired token", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid or expired token", err)
 	}
 
 	// Verify the nonce
 	storedUserID, err := h.redis.Get(context.Background(), "reset:nonce:"+m3.User.APAKE.RegistrationNonce).Result()
 	if err != nil || storedUserID != user.ID.String() {
-		http.Error(w, "invalid registration nonce", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid registration nonce", err)
 	}
 
 	regRecordBytes, err := base64.RawURLEncoding.DecodeString(m3.User.APAKE.RegistrationRecord)
 	if err != nil {
-		http.Error(w, "invalid base64 in registration record", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid base64 in registration record", err)
 	}
 
 	passwordFileRecord, err := bindings.FinishRegistration(
@@ -267,8 +280,7 @@ func (h *Handler) ResetPasswordM3(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(err)
 	}
 
 	err = h.db.Transaction(func(tx *gorm.DB) error {
@@ -306,13 +318,16 @@ func (h *Handler) ResetPasswordM3(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(err)
 	}
 
 	// Clean up redis
 	h.redis.Del(context.Background(), "reset:nonce:"+m3.User.APAKE.RegistrationNonce)
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	err = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+	return nil
 }

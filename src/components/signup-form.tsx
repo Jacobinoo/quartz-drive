@@ -19,6 +19,8 @@ import { Input } from "@/components/ui/input"
 import {useRouter} from "next/navigation";
 import {FormEvent, useState} from "react";
 import {signUp} from "@/signup";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
+import { config } from "@/config/env";
 
 export function SignupForm({
   className,
@@ -83,6 +85,10 @@ export function SignupForm({
                     required
                     onChange={(e) => setPassword(e.target.value)} />
               </Field>
+              <HCaptcha
+                sitekey={config.captchaSitekey}
+                onVerify={(token,ekey) => handleVerificationSuccess(token, ekey)}
+              />
               <Field>
                 <Button type="submit" onClick={(e) => {
                   e.preventDefault();
@@ -109,4 +115,8 @@ export function SignupForm({
       </FieldDescription>
     </div>
   )
+}
+
+function handleVerificationSuccess(token: string, ekey: string) {
+  
 }

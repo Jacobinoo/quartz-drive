@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@hcaptcha/react-hcaptcha": "^2.1.0",
     "@serenity-kit/opaque": "^1.1.0",
     "axios": "^1.13.6",
     "bip39": "^3.1.0",

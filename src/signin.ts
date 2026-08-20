@@ -8,8 +8,8 @@ import { setAccountPrivateKeys, setAuthState } from './lib/authStore';
 import { saveDevicePrivateKey } from './DeviceKeyStore';
 import { customFetch } from './lib/api';
 
-export async function signIn(email: string, password: string) {
-    if (!email || !password) throw new Error("Email and password required");
+export async function signIn(email: string, password: string, token: string) {
+    if (!email || !password || !token) throw new Error("Email, password and bot verification success required");
 
     const sodium = await getSodium();
     await opaque.ready;
@@ -20,7 +20,8 @@ export async function signIn(email: string, password: string) {
 
     const m1 = {
         email: email,
-        loginRequest: startLoginRequest
+      loginRequest: startLoginRequest,
+        token: token
     }
 
     // send opaque m1 and fetch m2 from response
@@ -132,7 +133,7 @@ export async function signIn(email: string, password: string) {
     );
   console.log("session priv key:", loginAttestationData.sessionPrivateKey)
     const kdfSalt = sodium.from_base64(loginAttestationData.masterKdfSalt);
-        
+
         // 1. Derive master key from OPAQUE exportKey via fast KDF
         // We first hash the exportKey to exactly 32 bytes
         const exportKeyBytes = typeof exportKey === "string" ? sodium.from_string(exportKey) : exportKey;

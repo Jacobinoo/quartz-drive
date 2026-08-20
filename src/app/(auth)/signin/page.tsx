@@ -1,6 +1,6 @@
 "use client";
 
-import {Folder} from "lucide-react"
+import { Folder } from "lucide-react"
 
 import { LoginForm } from "@/components/login-form"
 

@@ -18,7 +18,12 @@ import {
 import { Input } from "@/components/ui/input"
 import {useRouter} from "next/navigation";
 import {useState} from "react";
-import {signIn} from "@/signin";
+import { signIn } from "@/signin";
+import { Turnstile } from '@marsidev/react-turnstile'
+import type { TurnstileInstance } from '@marsidev/react-turnstile'
+import { useRef } from 'react'
+import { config } from "@/config/env";
+
 
 export function LoginForm({
   className,
@@ -28,6 +33,7 @@ export function LoginForm({
 
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
+  const turnstileRef = useRef<TurnstileInstance | null>(null)
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
@@ -68,16 +74,29 @@ export function LoginForm({
                        onChange={(e)=> setPassword(e.target.value)}
                 />
               </Field>
+              <Turnstile
+                ref={turnstileRef}
+                siteKey={config.turnstileSitekey}
+              />
               <Field>
                 <Button type="submit" onClick={(e)=> {
                   e.preventDefault()
-                  signIn(email, password)
+
+                  const token = turnstileRef.current?.getResponse()
+                  if (!token) {
+                    throw new Error("turnstile verification error")
+                  }
+
+                  signIn(email, password, token)
                       .then(() => {
                         console.log("Sign in successful");
                         router.push("/drive");
                       })
                       .catch((err: Error) => {
                         console.error(`Error occured on sign in: ${err.message}`);
+                      })
+                      .finally(() => {
+                        turnstileRef.current?.reset() // Reset after submission
                       })
                 }}>Login</Button>
                 <FieldDescription className="text-center">

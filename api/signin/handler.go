@@ -13,6 +13,8 @@ import (
 	"quartz/internal/bindings"
 	"quartz/internal/dto"
 	"quartz/internal/model"
+	apperrors "quartz/pkg/app-errors"
+	"quartz/pkg/captcha"
 	"quartz/pkg/dpop"
 	"quartz/pkg/token"
 
@@ -35,37 +37,51 @@ func NewHandler(db *gorm.DB, redisClient *redis.Client, opaqueSetup []byte) *Han
 	return &Handler{db: db, redis: redisClient, opaqueSetup: opaqueSetup}
 }
 
-func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	var m1 dto.M1Login
 	if err := json.NewDecoder(r.Body).Decode(&m1); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid request", err)
+	}
+
+	cfip := r.Header.Get("CF-Connecting-IP")
+	if cfip == "" {
+		cfip = r.Header.Get("X-Forwarded-For")
+	}
+	if cfip == "" {
+		cfip = r.Header.Get("X-Real-IP")
+	}
+
+	success, errors, err := captcha.VerifyTurnstileToken(m1.Token, cfip)
+	if err != nil {
+		fmt.Print(errors)
+		return apperrors.NewBadRequest("invalid token", err)
+	}
+	if !success {
+		fmt.Print(errors)
+		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
 	var userRegistrationRecord dto.UserRegistrationRecord
 	if err := h.db.Where("email = ?", m1.Email).First(&userRegistrationRecord).Error; err != nil {
-		http.Error(w, "user not found", http.StatusNotFound)
-		return
+		return apperrors.NewNotFound("user not found", err)
 	}
 
 	regRecordBytes, err := base64.RawURLEncoding.DecodeString(userRegistrationRecord.RegistrationRecord)
 	if err != nil {
 		fmt.Print(err)
-		http.Error(w, "invalid registration record in database", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(err)
 	}
 
 	loginReqBytes, err := base64.RawURLEncoding.DecodeString(m1.LoginRequest)
 	if err != nil {
-		http.Error(w, "invalid base64 in login request", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid base64 in login request", err)
 	}
 
 	log.Printf("DEBUG: opaqueSetup len=%d", len(h.opaqueSetup))
@@ -112,39 +128,35 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	err = json.NewEncoder(w).Encode(m2)
 	if err != nil {
-		log.Fatalln(err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+		log.Print(err)
+		return apperrors.NewInternal(err)
 	}
+	return nil
 }
 
-func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	dpopHeader := r.Header.Get("DPoP")
 	thumbprint, err := dpop.ValidateDpopProof(dpopHeader, r)
 	if err != nil {
 		log.Printf("invalid dpop proof, err: %v", err)
-		http.Error(w, "invalid_dpop_proof", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid dpop proof", err)
 	}
 
 	var m3 dto.M3Login
 	if err := json.NewDecoder(r.Body).Decode(&m3); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	// Fetch from Redis
 	nonceJSON, err := h.redis.Get(context.Background(), "login:nonce:"+m3.Nonce).Result()
 	if err != nil {
-		http.Error(w, "invalid or expired nonce", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid or expired nonce", err)
 	}
 
 	var nonceData map[string]string
@@ -156,7 +168,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) {
 	finishLoginReqBytes, err := base64.RawURLEncoding.DecodeString(m3.FinishLoginRequest)
 	if err != nil {
 		http.Error(w, "invalid base64 in finish login request", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid base64 in finish login request", err)
 	}
 
 	_, err = bindings.FinishLogin(
@@ -166,8 +178,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		log.Printf("bindings FinishLogin call failed: %v", err)
-		http.Error(w, "login failed", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("login failed", err)
 	}
 
 	fmt.Println("Established a new trusted session key.")
@@ -181,8 +192,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) {
 		First(&trustedUserInfo).Error
 
 	if err != nil {
-		http.Error(w, "user not found", http.StatusNotFound)
-		return
+		return apperrors.NewNotFound("user not found", err)
 	}
 
 	uaHeader := r.Header.Get("User-Agent")
@@ -244,8 +254,8 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		Path:     "/",
 		MaxAge:   int(maxAge.Seconds()),
-		Secure:   true,                  // change to true in production
-		SameSite: http.SameSiteNoneMode, // change to http.SameSiteStrictMode in production
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
 	})
 
 	http.SetCookie(w, &http.Cookie{
@@ -253,15 +263,14 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) {
 		Value:    refreshToken.Token,
 		HttpOnly: true,
 		Path:     "/",
-		Secure:   true,                  // change to true in production
-		SameSite: http.SameSiteNoneMode, // change to http.SameSiteStrictMode in production
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
 		Expires:  time.Now().Add(7 * 24 * time.Hour),
 	})
 
 	if err := h.db.Create(&refreshTokenEntry).Error; err != nil {
 		log.Printf("failed to store login data: %v", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(err)
 	}
 
 	var loginTrustAttestation = dto.LoginTrustAttestationConfirmedBody{
@@ -276,8 +285,8 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) {
 
 	err = json.NewEncoder(w).Encode(loginTrustAttestation)
 	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
 		// loginSessions.Delete(m3.Nonce)
-		return
+		return apperrors.NewInternal(err)
 	}
+	return nil
 }

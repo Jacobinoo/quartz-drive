@@ -167,7 +167,7 @@ async function registerKeyMaterial(email: string, exportKey: string): Promise<Ke
     };
 }
 
-export async function signUp(email: string, password: string, captchaToken string) {
+export async function signUp(email: string, password: string, captchaToken:string) {
     if (!email || !password || !captchaToken) throw new Error("Email, password and captcha required");
 
     await opaque.ready;

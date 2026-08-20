@@ -87,7 +87,6 @@ type NodeDTO struct {
 
 // OPAQUE Message M3
 type M3 struct {
-	Token string   `json:"token"`
 	User  UserDTO  `json:"user"`
 	Drive DriveDTO `json:"drive"`
 }

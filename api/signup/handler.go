@@ -113,24 +113,6 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
-	cfip := r.Header.Get("CF-Connecting-IP")
-	if cfip == "" {
-		cfip = r.Header.Get("X-Forwarded-For")
-	}
-	if cfip == "" {
-		cfip = r.Header.Get("X-Real-IP")
-	}
-
-	success, errors, err := captcha.VerifyCaptchaToken(m3.Token, cfip)
-	if err != nil {
-		fmt.Print(errors)
-		return apperrors.NewBadRequest("invalid token", err)
-	}
-	if !success {
-		fmt.Print(errors)
-		return apperrors.NewBadRequest("invalid token", nil)
-	}
-
 	uuidString := m3.User.APAKE.RegistrationNonce
 	credID, uuidParseErr := uuid.Parse(uuidString)
 	if uuidParseErr != nil {

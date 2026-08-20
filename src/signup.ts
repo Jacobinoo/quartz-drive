@@ -176,7 +176,7 @@ export async function signUp(email: string, password: string, captchaToken:strin
 
     const payload = {
         email,
-      registrationRequest: registrationRequest,
+        registrationRequest: registrationRequest,
         token: captchaToken
     };
 
@@ -214,7 +214,6 @@ export async function signUp(email: string, password: string, captchaToken:strin
     const km: KeyRegisterMaterial = await registerKeyMaterial(email, exportKey);
 
   const m3: M3ServerPayload = {
-      token: captchaToken,
         user: {
             email: email,
             aPAKE: {
@@ -264,11 +263,15 @@ export async function signUp(email: string, password: string, captchaToken:strin
         body: JSON.stringify(m3)
     });
 
-    const m3ResponseData = await m3Response.json();
+  const m3ResponseData = await m3Response.json();
 
-    console.log(m3ResponseData)
+  if (m3Response.status != 200) {
+    throw new Error("Could not sign up.")
+  }
 
-    return {
-        recoveryPhrase: km.recoveryPhrase
-    }
+  console.log(m3ResponseData)
+
+  return {
+    recoveryPhrase: km.recoveryPhrase
+  }
 }

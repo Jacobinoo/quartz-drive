@@ -13,10 +13,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const publicPaths = ["/signin", "/signup", "/forgot-password", "/reset-password"];
 
-  const [isBooting, setIsBooting] = useState(() => {
-    // If we start on a public auth page, do not show the session restoration loading screen!
-    return !publicPaths.includes(pathname);
-  });
+  const [isBooting, setIsBooting] = useState(true);
 
   const hasBooted = useRef(false);
 
@@ -24,24 +21,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isRateLimited, setIsRateLimited] = useState(false);
 
   useEffect(() => {
-    // 1. If we land on public auth pages, sanitize any leftover client state (cf / DPoP keys) immediately!
-    if (publicPaths.includes(pathname)) {
-      clearAuthState();
-      deleteDpopDatabase().catch((e) => console.warn("Could not wipe DPoP database:", e));
-      deleteDeviceKeys().catch((e) => console.warn("Could not wipe device keys DB:", e));
-      setIsBooting(false);
-      return;
-    }
-
     if (hasBooted.current) return;
     hasBooted.current = true;
 
-    // 2. Run the boot-up refresh!
     async function boot() {
       try {
         console.log("App booting... restoring session from secure cookie...");
         // This hits /v1/refresh and automatically populates your authStore in memory!
         await refreshSession();
+        
+        if (publicPaths.includes(pathname)) {
+           router.push("/drive");
+           return;
+        }
         setIsBooting(false);
       } catch (err: any) {
         if (err.message === "NETWORK_ERROR") {
@@ -56,9 +48,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsBooting(false);
           return;
         }
-        console.warn("Silent boot failed (cookie missing/expired). Wiping cookies and redirecting...");
-        await signOut();
-        router.push("/signin");
+        
+        console.warn("Silent boot failed (cookie missing/expired).");
+        
+        if (publicPaths.includes(pathname)) {
+            clearAuthState();
+            deleteDpopDatabase().catch(() => {});
+            deleteDeviceKeys().catch(() => {});
+            setIsBooting(false);
+        } else {
+            await signOut();
+            router.push("/signin");
+        }
       }
     }
 

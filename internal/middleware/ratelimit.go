@@ -13,6 +13,11 @@ import (
 
 // extractIP gets the true IP address even behind proxies
 func extractIP(r *http.Request) string {
+	// ALWAYS trust Cloudflare's IP header first
+	if cfIP := r.Header.Get("CF-Connecting-IP"); cfIP != "" {
+		return cfIP
+	}
+
 	xff := r.Header.Get("X-Forwarded-For")
 	if xff != "" {
 		ips := strings.Split(xff, ",")
@@ -42,18 +47,18 @@ func RateLimitIP(rdb *redis.Client, name string, requests int, per time.Duration
 		return func(w http.ResponseWriter, r *http.Request) {
 			ip := extractIP(r)
 			res, err := limiter.Allow(r.Context(), "rate:ip:"+name+":"+ip, limit)
-			
+
 			if err != nil {
 				// Fail open if Redis is temporarily unreachable
 				next.ServeHTTP(w, r)
 				return
 			}
-			
+
 			if res.Allowed == 0 {
 				http.Error(w, "429 Too Many Requests", http.StatusTooManyRequests)
 				return
 			}
-			
+
 			next.ServeHTTP(w, r)
 		}
 	}
@@ -77,24 +82,24 @@ func RateLimitUser(rdb *redis.Client, name string, requests int, per time.Durati
 				http.Error(w, "Missing Context Data", http.StatusInternalServerError)
 				return
 			}
-			
+
 			userID, ok := userIDVal.(uuid.UUID)
 			if !ok {
 				http.Error(w, "Invalid Context Data", http.StatusInternalServerError)
 				return
 			}
-			
+
 			res, err := limiter.Allow(r.Context(), "rate:user:"+name+":"+userID.String(), limit)
 			if err != nil {
 				next.ServeHTTP(w, r)
 				return
 			}
-			
+
 			if res.Allowed == 0 {
 				http.Error(w, "429 Too Many Requests", http.StatusTooManyRequests)
 				return
 			}
-			
+
 			next.ServeHTTP(w, r)
 		}
 	}

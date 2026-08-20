@@ -24,6 +24,7 @@ type (
 		JWT
 		CRYPTO
 		S3
+		Security
 		B2
 		Sweeper
 		Email
@@ -66,6 +67,11 @@ type (
 
 		SupportFromSenderName string `env:"EMAIL_SUPPORT_FROM_SENDER_NAME,required"`
 		SupportVerifiedDomain string `env:"EMAIL_SUPPORT_VERIFIED_DOMAIN,required"`
+	}
+
+	Security struct {
+		CaptchaSecret  string `env:"SECURITY_CAPTCHA_SECRET,required"`
+		CaptchaSiteKey string `env:"SECURITY_CAPTCHA_SITE_KEY,required"`
 	}
 
 	App struct {

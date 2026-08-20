@@ -103,8 +103,17 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 	_, err = client.Emails.SendWithOptions(r.Context(), params, opt)
 	if err != nil {
 		log.Printf("Failed to send email: %v", err)
-		// For local testing without a verified domain/key, we print the link
-		fmt.Printf("LOCAL DEV MAGIC LINK FOR %s: %s\n", req.Email, magicLink)
+		// For local testing without a verified domain, print the link
+		if config.Cfg.Env == "development" {
+			fmt.Printf("LOCAL DEV MAGIC LINK FOR %s: %s\n", req.Email, magicLink)
+			w.WriteHeader(http.StatusOK)
+			err = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+			if err != nil {
+				return apperrors.NewInternal(err)
+			}
+			return nil
+		}
+		return apperrors.NewInternal(err)
 	}
 
 	w.WriteHeader(http.StatusOK)

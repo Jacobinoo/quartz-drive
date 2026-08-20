@@ -29,7 +29,7 @@ export function SignupForm({
   const router = useRouter();
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
-  const [captchaCompleted, setCaptchaCompleted] = useState<boolean>(false)
+  const [captchaToken, setCaptchaToken] = useState<string|null>(null)
 
   const [recoveryPhrase, setRecoveryPhrase] = useState<string>("");
 
@@ -89,14 +89,14 @@ export function SignupForm({
               <HCaptcha
                 sitekey={config.captchaSitekey}
                 onVerify={(token, ekey) => {
-                  setCaptchaCompleted(true)
+                  setCaptchaToken(token)
                 }}
               />
               <Field>
                 <Button type="submit" onClick={(e) => {
                   e.preventDefault();
-                  if(!captchaCompleted) throw new Error("captcha not completed")
-                  signUp(email, password)
+                  if(captchaToken == null) throw new Error("captcha not completed")
+                  signUp(email, password, captchaToken)
                       .then((res) => {
                         console.log("Sign up successfully");
                         setRecoveryPhrase(res.recoveryPhrase);

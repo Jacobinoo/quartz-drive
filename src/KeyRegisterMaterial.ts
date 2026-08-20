@@ -51,6 +51,7 @@ type KeyRegisterMaterial = {
 }
 
 export default interface M3ServerPayload {
+  token: string,
     user: {
         email: string;
         aPAKE: {

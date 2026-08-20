@@ -167,8 +167,8 @@ async function registerKeyMaterial(email: string, exportKey: string): Promise<Ke
     };
 }
 
-export async function signUp(email: string, password: string) {
-    if (!email || !password) throw new Error("Email and password required");
+export async function signUp(email: string, password: string, captchaToken string) {
+    if (!email || !password || !captchaToken) throw new Error("Email, password and captcha required");
 
     await opaque.ready;
 
@@ -176,7 +176,8 @@ export async function signUp(email: string, password: string) {
 
     const payload = {
         email,
-        registrationRequest: registrationRequest,
+      registrationRequest: registrationRequest,
+        token: captchaToken
     };
 
     const response = await fetch(`${config.apiUrl}/v1/signup`, {
@@ -212,7 +213,8 @@ export async function signUp(email: string, password: string) {
 
     const km: KeyRegisterMaterial = await registerKeyMaterial(email, exportKey);
 
-    const m3: M3ServerPayload = {
+  const m3: M3ServerPayload = {
+      token: captchaToken,
         user: {
             email: email,
             aPAKE: {

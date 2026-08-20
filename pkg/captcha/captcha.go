@@ -38,7 +38,7 @@ func VerifyCaptchaToken(token, ip string) (bool, []string, error) {
 
 func VerifyTurnstileToken(token, ip string) (bool, []string, error) {
 	form := url.Values{
-		"secret":   {config.Cfg.Security.CaptchaSecret},
+		"secret":   {config.Cfg.Security.TurnstileSecret},
 		"response": {token},
 		"remoteip": {ip},
 	}

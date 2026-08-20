@@ -70,8 +70,10 @@ type (
 	}
 
 	Security struct {
-		CaptchaSecret  string `env:"SECURITY_CAPTCHA_SECRET,required"`
-		CaptchaSiteKey string `env:"SECURITY_CAPTCHA_SITE_KEY,required"`
+		CaptchaSecret    string `env:"SECURITY_CAPTCHA_SECRET,required"`
+		CaptchaSiteKey   string `env:"SECURITY_CAPTCHA_SITE_KEY,required"`
+		TurnstileSecret  string `env:"SECURITY_TURNSTILE_SECRET,required"`
+		TurnstileSiteKey string `env:"SECURITY_TURNSTILE_SITE_KEY,required"`
 	}
 
 	App struct {

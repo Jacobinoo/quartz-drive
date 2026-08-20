@@ -60,7 +60,12 @@ type (
 	}
 
 	Email struct {
-		Key string `env:"EMAIL_KEY,required"`
+		Key                   string `env:"EMAIL_KEY,required"`
+		UpdatesFromSenderName string `env:"EMAIL_UPDATES_FROM_SENDER_NAME,required"`
+		UpdatesVerifiedDomain string `env:"EMAIL_UPDATES_VERIFIED_DOMAIN,required"`
+
+		SupportFromSenderName string `env:"EMAIL_SUPPORT_FROM_SENDER_NAME,required"`
+		SupportVerifiedDomain string `env:"EMAIL_SUPPORT_VERIFIED_DOMAIN,required"`
 	}
 
 	App struct {

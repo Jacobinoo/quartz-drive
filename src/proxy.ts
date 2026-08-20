@@ -20,7 +20,7 @@ export function proxy(request: NextRequest) {
 
   const cspHeader = `
     default-src 'self';
-    script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://js.hcaptcha.com https://*.hcaptcha.com https://challenges.cloudflare.com ${isDev ? "'unsafe-eval'" : ""};
+    script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://js.hcaptcha.com https://*.hcaptcha.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com ${isDev ? "'unsafe-eval'" : ""};
     style-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com;
     img-src 'self' blob: data:;
     font-src 'self';
@@ -28,7 +28,7 @@ export function proxy(request: NextRequest) {
     connect-src ${connectSrc};
     base-uri 'self';
     form-action 'self';
-    frame-src 'self' https://*.hcaptcha.com https://hcaptcha.com https://challenges.cloudflare.com;
+    frame-src 'self' https://*.hcaptcha.com https://hcaptcha.com https://*.challenges.cloudflare.com https://challenges.cloudflare.com;
     frame-ancestors 'none';
     upgrade-insecure-requests;
   `

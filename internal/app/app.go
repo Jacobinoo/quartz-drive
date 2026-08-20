@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"quartz/api/account"
+	"quartz/api/dev"
 	"quartz/api/devices"
 	"quartz/api/files"
 	"quartz/api/keys"
@@ -119,6 +120,11 @@ func initRouter(state *ServerState) *http.ServeMux {
 	rootMux.HandleFunc("/", rootHandler)
 	rootMux.HandleFunc("/health", healthHandler(state))
 	rootMux.HandleFunc("/up", upHandler)
+
+	if config.Cfg.App.Env == "development" {
+		rootMux.HandleFunc("GET /dev/email-preview/password-reset", dev.PreviewPasswordReset)
+	}
+
 	rootMux.Handle("/v1/", http.StripPrefix("/v1", v1Mux))
 
 	return rootMux

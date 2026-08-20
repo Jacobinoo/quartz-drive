@@ -14,9 +14,8 @@ import (
 	"quartz/internal/dto"
 	"quartz/internal/model"
 	apperrors "quartz/pkg/app-errors"
+	"quartz/pkg/email"
 	"time"
-
-	"github.com/resend/resend-go/v2"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -80,40 +79,19 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewInternal(err)
 	}
 
-	// Send email using Resend
-	client := resend.NewClient(config.Cfg.Email.Key)
-
 	magicLink := fmt.Sprintf("%s/reset-password?token=%s&email=%s", config.Cfg.App.FrontendURL, tokenStr, req.Email)
 
-	from := fmt.Sprintf("%s <%s>", config.Cfg.Email.UpdatesFromSenderName, config.Cfg.Email.UpdatesVerifiedDomain)
-
-	params := &resend.SendEmailRequest{
-		From:    from,
-		To:      []string{req.Email},
-		Subject: "Quartz Account Recovery",
-		Html:    fmt.Sprintf("<p>Click the link below to recover your Quartz account:</p><p><a href=\"%s\">Recover Account</a></p><p>This link expires in 15 minutes.</p>", magicLink),
-	}
-
-	//should this be sent asynchronously? are we blocking the request?
-	// TODO: support idempotency keys to avoid duplicates
-	opt := &resend.SendEmailOptions{
-		//IdempotencyKey: "",
-	}
-	// TODO: is r.Context() here correct?
-	_, err = client.Emails.SendWithOptions(r.Context(), params, opt)
-	if err != nil {
+	// Send email using Resend
+	if err := email.SendPasswordReset(r.Context(), req.Email, magicLink); err != nil {
 		log.Printf("Failed to send email: %v", err)
-		// For local testing without a verified domain, print the link
+
+		// Fallback for local development if Resend isn't configured yet
 		if config.Cfg.Env == "development" {
 			fmt.Printf("LOCAL DEV MAGIC LINK FOR %s: %s\n", req.Email, magicLink)
-			w.WriteHeader(http.StatusOK)
-			err = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-			if err != nil {
-				return apperrors.NewInternal(err)
-			}
-			return nil
+			// Continue returning 200 OK so the dev can copy the link from the terminal
+		} else {
+			return apperrors.NewInternal(err)
 		}
-		return apperrors.NewInternal(err)
 	}
 
 	w.WriteHeader(http.StatusOK)

@@ -15,19 +15,20 @@ export function proxy(request: NextRequest) {
   ]
 
   const connectSrc = isDev
-    ? ["'self'", ...devOrigins, s3Endpoint].join(' ')
-    : ["'self'", apiOrigin, s3Endpoint].join(' ')
+    ? ["'self'", ...devOrigins, s3Endpoint, "https://*.hcaptcha.com"].join(' ')
+    : ["'self'", apiOrigin, s3Endpoint, "https://*.hcaptcha.com"].join(' ')
 
   const cspHeader = `
     default-src 'self';
-    script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' ${isDev ? "'unsafe-eval'" : ""};
-    style-src 'self' 'unsafe-inline';
+    script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://js.hcaptcha.com https://*.hcaptcha.com ${isDev ? "'unsafe-eval'" : ""};
+    style-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com;
     img-src 'self' blob: data:;
     font-src 'self';
     object-src 'none';
     connect-src ${connectSrc};
     base-uri 'self';
     form-action 'self';
+    frame-src 'self' https://*.hcaptcha.com https://hcaptcha.com;
     frame-ancestors 'none';
     upgrade-insecure-requests;
   `

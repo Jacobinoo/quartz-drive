@@ -2,6 +2,7 @@ package database
 
 import (
 	"log"
+	"os"
 	"quartz/config"
 	"quartz/internal/model"
 	"time"
@@ -14,14 +15,25 @@ import (
 func New() (db *gorm.DB, err error) {
 	dsn := config.Cfg.GetDSN()
 	for i := 1; i <= 3; i++ {
-		log.Printf("database is connecting... (attempt %d)", i)
+		log.Printf("database is co2nnecting... (attempt %d)", i)
 		logLevel := logger.Info
-		if config.Cfg.App.Env == "PROD" {
+		if config.Cfg.App.Env == "production" {
 			logLevel = logger.Error
 		}
 
+		gormLogger := logger.New(
+			log.New(os.Stdout, "\r\n", log.LstdFlags),
+			logger.Config{
+				SlowThreshold:             time.Second,
+				LogLevel:                  logLevel,
+				IgnoreRecordNotFoundError: true,
+				Colorful:                  false,
+				ParameterizedQueries:      true, // REDACT SENSITIVE VALUES
+			},
+		)
+
 		if db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
-			Logger:                 logger.Default.LogMode(logLevel),
+			Logger:                 gormLogger,
 			SkipDefaultTransaction: true,
 			TranslateError:         true,
 			PrepareStmt:            true,

@@ -10,9 +10,9 @@ import (
 	"net/http"
 	"quartz/config"
 	"quartz/internal/dto"
-	"quartz/internal/middleware"
 	"quartz/internal/model"
 	apperrors "quartz/pkg/app-errors"
+	"quartz/pkg/contextkeys"
 	"quartz/pkg/storage"
 	"time"
 
@@ -44,7 +44,7 @@ func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
-	userID := r.Context().Value(middleware.UserIDKey)
+	userID := r.Context().Value(contextkeys.UserIDKey)
 	if userID == nil {
 		return apperrors.NewUnauthorized("access token invalid", nil)
 	}
@@ -175,7 +175,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
-	userID := r.Context().Value(middleware.UserIDKey)
+	userID := r.Context().Value(contextkeys.UserIDKey)
 	if userID == nil {
 		log.Printf("access token invalid")
 		return apperrors.NewUnauthorized("access token invalid", nil)
@@ -282,7 +282,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
-	userID := r.Context().Value(middleware.UserIDKey)
+	userID := r.Context().Value(contextkeys.UserIDKey)
 	if userID == nil {
 		log.Printf("access token invalid")
 		return apperrors.NewUnauthorized("access token invalid", nil)
@@ -777,7 +777,7 @@ func (h *Handler) GetRootFolder(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
-	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
 	if !ok {
 		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
@@ -960,7 +960,7 @@ func (h *Handler) ListTrash(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
-	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
 	if !ok {
 		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
@@ -1023,7 +1023,7 @@ func (h *Handler) EmptyTrash(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// 1. Get the Authenticated User ID
-	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
 	if !ok {
 		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
@@ -1058,7 +1058,7 @@ func (h *Handler) GetQuota(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
-	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
 	if !ok {
 		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
@@ -1122,7 +1122,7 @@ func (h *Handler) GetAllFiles(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// 1. Get the current User ID from the Auth Middleware Context!
-	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
 	if !ok {
 		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
@@ -1192,7 +1192,7 @@ func (h *Handler) GetFilePath(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Verify the user is authenticated (ensure they own the nodes later!)
-	_, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	_, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
 	if !ok {
 		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
@@ -1257,7 +1257,7 @@ func (h *Handler) ShareFolder(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
-	authorID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	authorID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
 	if !ok {
 		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
@@ -1345,7 +1345,7 @@ func (h *Handler) GetSharedFolders(w http.ResponseWriter, r *http.Request) error
 		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
-	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
 	if !ok {
 		return apperrors.NewUnauthorized("unauthorized", nil)
 	}

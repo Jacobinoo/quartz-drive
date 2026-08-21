@@ -6,9 +6,9 @@ import (
 	"log"
 	"net/http"
 	"quartz/internal/dto"
-	"quartz/internal/middleware"
 	"quartz/internal/model"
 	apperrors "quartz/pkg/app-errors"
+	"quartz/pkg/contextkeys"
 	"quartz/pkg/dpop"
 	"strings"
 
@@ -30,7 +30,7 @@ func (h *Handler) RegisterDevice(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// 1. Get the current User ID from your Auth Middleware Context!
-	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
 	log.Printf("context2 %s", userID)
 	if !ok {
 		return apperrors.NewUnauthorized("unauthorized", nil)
@@ -67,7 +67,7 @@ func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
-	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
 	if !ok {
 		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
@@ -106,7 +106,7 @@ func (h *Handler) RevokeDevice(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
-	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
 	if !ok {
 		return apperrors.NewUnauthorized("unauthorized", nil)
 	}

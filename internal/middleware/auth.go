@@ -11,23 +11,17 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	apperrors "quartz/pkg/app-errors"
+	"quartz/pkg/contextkeys"
+	"quartz/pkg/httputils"
 )
 
-// AuthContextKey is a custom type to prevent context key collisions
-type AuthContextKey string
-
-const (
-	UserIDKey AuthContextKey = "userID"
-	EmailKey  AuthContextKey = "email"
-)
-
-func AccessTokenMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func AccessTokenMiddleware(next httputils.APIHandler) httputils.APIHandler {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// 1. Extract Token from Authorization Header
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" || !strings.HasPrefix(authHeader, "DPoP ") {
-			http.Error(w, "missing access token", http.StatusUnauthorized)
-			return
+			return apperrors.NewUnauthorized("missing access token", nil)
 		}
 		tokenString := strings.TrimPrefix(authHeader, "DPoP ")
 
@@ -48,35 +42,32 @@ func AccessTokenMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		})
 
 		if err != nil || !token.Valid {
-			http.Error(w, "invalid or expired access token", http.StatusUnauthorized)
-			return
+			return apperrors.NewUnauthorized("invalid or expired access token", err)
 		}
 
 		// 3. Extract the Claims
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
-			http.Error(w, "invalid token claims", http.StatusUnauthorized)
-			return
+			return apperrors.NewUnauthorized("invalid token claims", nil)
 		}
 
 		// Extract User ID ('sub')
 		userIDStr, _ := claims["sub"].(string)
 		userID, err := uuid.Parse(userIDStr)
 		if err != nil {
-			http.Error(w, "invalid user ID in token", http.StatusUnauthorized)
-			return
+			return apperrors.NewUnauthorized("invalid user ID in token", err)
 		}
 
 		// Extract Email ('email')
 		email, _ := claims["email"].(string)
 
 		// 4. Inject Data into Context
-		ctx := context.WithValue(r.Context(), UserIDKey, userID)
-		ctx = context.WithValue(ctx, EmailKey, email)
+		ctx := context.WithValue(r.Context(), contextkeys.UserIDKey, userID)
+		ctx = context.WithValue(ctx, contextkeys.EmailKey, email)
 
 		log.Printf("context %s %s", email, userID)
 
 		// Move to the next handler
-		next.ServeHTTP(w, r.WithContext(ctx))
+		return next(w, r.WithContext(ctx))
 	}
 }

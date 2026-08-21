@@ -12,5 +12,5 @@ import (
 
 func RegisterRoutes(mux *http.ServeMux, h *Handler, rdb *redis.Client) {
 	limitIP := middleware.RateLimitIP(rdb, "signout", config.Cfg.RateLimits.SignoutIPRate, time.Minute, config.Cfg.RateLimits.SignoutIPBurst)
-	mux.HandleFunc("/signout", middleware.CorsMiddleware(limitIP(httputils.Wrap(h.Signout))))
+	mux.HandleFunc("/signout", httputils.Wrap(middleware.CorsMiddleware(limitIP(h.Signout))))
 }

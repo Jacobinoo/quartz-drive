@@ -3,10 +3,11 @@ package middleware
 import (
 	"net/http"
 	"quartz/config"
+	"quartz/pkg/httputils"
 )
 
-func CorsMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func CorsMiddleware(next httputils.APIHandler) httputils.APIHandler {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// Allow your frontend origin
 		w.Header().Set("Access-Control-Allow-Origin", config.Cfg.FrontendURL)
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
@@ -16,9 +17,9 @@ func CorsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		// Handle preflight OPTIONS request
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
-			return
+			return nil
 		}
 
-		next.ServeHTTP(w, r)
+		return next(w, r)
 	}
 }

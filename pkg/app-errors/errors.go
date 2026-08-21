@@ -114,3 +114,12 @@ func NewConflict(msg string, err error) *AppError {
 		Err:     err,
 	}
 }
+
+func NewQuotaExceeded(msg string) *AppError {
+	return &AppError{
+		Code:    CodeQuotaExceeded,
+		Message: msg,
+		Status:  http.StatusTooManyRequests,
+		Err:     nil,
+	}
+}

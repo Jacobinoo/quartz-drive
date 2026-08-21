@@ -15,12 +15,14 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler, rdb *redis.Client) {
 	limitUser := middleware.RateLimitUser(rdb, "files", config.Cfg.RateLimits.FilesUserRate, time.Second, config.Cfg.RateLimits.FilesUserBurst)
 
 	wrap := func(handler httputils.APIHandler) http.HandlerFunc {
-		return middleware.CorsMiddleware(
-			limitIP(
-				middleware.DpopMiddleware(
-					middleware.AccessTokenMiddleware(
-						limitUser(
-							middleware.LastActivityTracker(h.db, httputils.Wrap(handler)),
+		return httputils.Wrap(
+			middleware.CorsMiddleware(
+				limitIP(
+					middleware.DpopMiddleware(
+						middleware.AccessTokenMiddleware(
+							limitUser(
+								middleware.LastActivityTracker(h.db, handler),
+							),
 						),
 					),
 				),

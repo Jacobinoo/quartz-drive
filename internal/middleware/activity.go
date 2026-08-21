@@ -9,13 +9,15 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"quartz/pkg/contextkeys"
+	"quartz/pkg/httputils"
 )
 
 // LastActivityTracker updates the last_active_at timestamp for the current session in the background
-func LastActivityTracker(db *gorm.DB, next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func LastActivityTracker(db *gorm.DB, next httputils.APIHandler) httputils.APIHandler {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// Extract UserID from context (set by AccessTokenMiddleware)
-		userID, ok := r.Context().Value(UserIDKey).(uuid.UUID)
+		userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
 		if ok {
 			// We also need the JKT to pinpoint exactly WHICH session is active
 			dpopHeader := strings.TrimSpace(r.Header.Get("DPoP"))
@@ -34,6 +36,6 @@ func LastActivityTracker(db *gorm.DB, next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 
-		next.ServeHTTP(w, r)
+		return next(w, r)
 	}
 }

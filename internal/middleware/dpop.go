@@ -5,44 +5,41 @@ import (
 	"net/http"
 	"strings"
 
+	apperrors "quartz/pkg/app-errors"
 	"quartz/pkg/dpop"
+	"quartz/pkg/httputils"
 	"quartz/pkg/token"
 )
 
-func DpopMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func DpopMiddleware(next httputils.APIHandler) httputils.APIHandler {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		authorizationHeader := strings.TrimSpace(r.Header.Get("Authorization"))
 		dpopHeader := strings.TrimSpace(r.Header.Get("DPoP"))
 
 		if authorizationHeader == "" || dpopHeader == "" {
-			http.Error(w, "no auth or dpop header", http.StatusBadRequest)
-			return
+			return apperrors.NewBadRequest("no auth or dpop header", nil)
 		}
 
 		accessToken, isDPoP := strings.CutPrefix(authorizationHeader, "DPoP ")
 		if !isDPoP {
-			http.Error(w, "is not dpop header", http.StatusBadRequest)
-			return
+			return apperrors.NewBadRequest("is not dpop header", nil)
 		}
 
 		jkt, err := token.ParseAndValidateDpopToken(accessToken)
 		if err != nil {
-			http.Error(w, "not valid dpop token", http.StatusUnauthorized)
-			return
+			return apperrors.NewUnauthorized("not valid dpop token", err)
 		}
 
 		jkt2, err := dpop.ValidateDpopProof(dpopHeader, r)
 		if err != nil {
 			log.Printf("%s", err)
-			http.Error(w, "not valid dpop proof", http.StatusUnauthorized)
-			return
+			return apperrors.NewUnauthorized("not valid dpop proof", err)
 		}
 
 		if jkt != jkt2 {
-			http.Error(w, "jkt not equals jkt2", http.StatusUnauthorized)
-			return
+			return apperrors.NewUnauthorized("jkt not equals jkt2", nil)
 		}
 
-		next.ServeHTTP(w, r)
+		return next(w, r)
 	}
 }

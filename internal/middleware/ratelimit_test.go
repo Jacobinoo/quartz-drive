@@ -12,6 +12,8 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"quartz/pkg/contextkeys"
+	"quartz/pkg/httputils"
 )
 
 func setupTestRedis(t *testing.T) *redis.Client {
@@ -31,9 +33,10 @@ func TestRateLimitIP_Strict(t *testing.T) {
 	// Strict limit: 5 requests per minute, burst of 2.
 	// This means we can only do 2 requests immediately. The 3rd should fail unless time passes.
 	middleware := RateLimitIP(rdb, "test", 5, time.Minute, 2)
-	handler := middleware(func(w http.ResponseWriter, r *http.Request) {
+	handler := httputils.Wrap(middleware(func(w http.ResponseWriter, r *http.Request) error {
 		w.WriteHeader(http.StatusOK)
-	})
+		return nil
+	}))
 
 	var successCount int32
 	var failCount int32
@@ -72,9 +75,10 @@ func TestRateLimitUser_Standard(t *testing.T) {
 	// Standard limit: 1 request per sec, burst 50.
 	// We use 1 req/sec to prevent the bucket from refilling while the test executes.
 	middleware := RateLimitUser(rdb, "test", 1, time.Second, 50)
-	handler := middleware(func(w http.ResponseWriter, r *http.Request) {
+	handler := httputils.Wrap(middleware(func(w http.ResponseWriter, r *http.Request) error {
 		w.WriteHeader(http.StatusOK)
-	})
+		return nil
+	}))
 
 	userID := uuid.New()
 	var successCount int32
@@ -87,7 +91,7 @@ func TestRateLimitUser_Standard(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			req := httptest.NewRequest("GET", "/", nil)
-			ctx := context.WithValue(req.Context(), UserIDKey, userID)
+			ctx := context.WithValue(req.Context(), contextkeys.UserIDKey, userID)
 			req = req.WithContext(ctx)
 
 			rr := httptest.NewRecorder()
@@ -119,9 +123,10 @@ func TestRateLimitStacked(t *testing.T) {
 	looseIP := RateLimitIP(rdb, "test", 300, time.Second, 100)
 	strictUser := RateLimitUser(rdb, "test", 1, time.Second, 50)
 
-	handler := looseIP(strictUser(func(w http.ResponseWriter, r *http.Request) {
+	handler := httputils.Wrap(looseIP(strictUser(func(w http.ResponseWriter, r *http.Request) error {
 		w.WriteHeader(http.StatusOK)
-	}))
+		return nil
+	})))
 
 	userID := uuid.New()
 	var successCount int32
@@ -135,7 +140,7 @@ func TestRateLimitStacked(t *testing.T) {
 			defer wg.Done()
 			req := httptest.NewRequest("GET", "/", nil)
 			req.Header.Set("X-Forwarded-For", "10.0.0.5")
-			ctx := context.WithValue(req.Context(), UserIDKey, userID)
+			ctx := context.WithValue(req.Context(), contextkeys.UserIDKey, userID)
 			req = req.WithContext(ctx)
 
 			rr := httptest.NewRecorder()

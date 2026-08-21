@@ -9,8 +9,8 @@ import (
 )
 
 func RegisterRoutes(mux *http.ServeMux, handler *Handler, rdb *redis.Client) {
-	mux.HandleFunc("/account/forgot-password", middleware.CorsMiddleware(httputils.Wrap(handler.ForgotPassword)))
-	mux.HandleFunc("/account/verify-reset-code", middleware.CorsMiddleware(httputils.Wrap(handler.VerifyResetCode)))
-	mux.HandleFunc("/account/reset-password/m1", middleware.CorsMiddleware(httputils.Wrap(handler.ResetPasswordM1)))
-	mux.HandleFunc("/account/reset-password/m3", middleware.CorsMiddleware(httputils.Wrap(handler.ResetPasswordM3)))
+	mux.HandleFunc("/account/forgot-password", httputils.Wrap(middleware.CorsMiddleware(handler.ForgotPassword)))
+	mux.HandleFunc("/account/verify-reset-code", httputils.Wrap(middleware.CorsMiddleware(handler.VerifyResetCode)))
+	mux.HandleFunc("/account/reset-password/m1", httputils.Wrap(middleware.CorsMiddleware(handler.ResetPasswordM1)))
+	mux.HandleFunc("/account/reset-password/m3", httputils.Wrap(middleware.CorsMiddleware(handler.ResetPasswordM3)))
 }

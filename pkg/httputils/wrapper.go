@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"quartz/internal/middleware"
 	"quartz/pkg/app-errors"
+	"quartz/pkg/contextkeys"
 	"quartz/pkg/logger"
 
 	"github.com/getsentry/sentry-go"
@@ -24,7 +24,7 @@ type ErrorResponse struct {
 func Wrap(h APIHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		reqID, _ := ctx.Value(middleware.RequestIDKey).(string)
+		reqID, _ := ctx.Value(contextkeys.RequestIDKey).(string)
 
 		// NEW: Catch panics, push to the sentryhttp context hub, and return JSON!
 		defer func() {

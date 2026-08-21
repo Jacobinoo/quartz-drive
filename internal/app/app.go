@@ -16,7 +16,6 @@ import (
 	"quartz/api/signout"
 	"quartz/api/signup"
 	"quartz/config"
-	"quartz/internal/middleware"
 	"quartz/pkg/database"
 	"quartz/pkg/httputils"
 	"quartz/pkg/logger"
@@ -69,7 +68,7 @@ func Run() {
 
 	router := initRouter(state)
 
-	finalHandler := middleware.RequestIDMiddleware(router)
+	finalHandler := httputils.RequestIDMiddleware(router)
 	sentryHandler := sentryhttp.New(sentryhttp.Options{})
 
 	server := &http.Server{

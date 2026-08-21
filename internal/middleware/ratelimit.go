@@ -9,6 +9,9 @@ import (
 	"github.com/go-redis/redis_rate/v10"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"quartz/pkg/app-errors"
+	"quartz/pkg/contextkeys"
+	"quartz/pkg/httputils"
 )
 
 // extractIP gets the true IP address even behind proxies
@@ -35,7 +38,7 @@ func extractIP(r *http.Request) string {
 }
 
 // RateLimitIP limits based on client IP address
-func RateLimitIP(rdb *redis.Client, name string, requests int, per time.Duration, burst int) func(http.HandlerFunc) http.HandlerFunc {
+func RateLimitIP(rdb *redis.Client, name string, requests int, per time.Duration, burst int) func(httputils.APIHandler) httputils.APIHandler {
 	limiter := redis_rate.NewLimiter(rdb)
 	limit := redis_rate.Limit{
 		Rate:   requests,
@@ -43,29 +46,27 @@ func RateLimitIP(rdb *redis.Client, name string, requests int, per time.Duration
 		Period: per,
 	}
 
-	return func(next http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
+	return func(next httputils.APIHandler) httputils.APIHandler {
+		return func(w http.ResponseWriter, r *http.Request) error {
 			ip := extractIP(r)
 			res, err := limiter.Allow(r.Context(), "rate:ip:"+name+":"+ip, limit)
 
 			if err != nil {
 				// Fail open if Redis is temporarily unreachable
-				next.ServeHTTP(w, r)
-				return
+				return next(w, r)
 			}
 
 			if res.Allowed == 0 {
-				http.Error(w, "429 Too Many Requests", http.StatusTooManyRequests)
-				return
+				return apperrors.NewQuotaExceeded("429 Too Many Requests")
 			}
 
-			next.ServeHTTP(w, r)
+			return next(w, r)
 		}
 	}
 }
 
 // RateLimitUser limits based on UserID from JWT context
-func RateLimitUser(rdb *redis.Client, name string, requests int, per time.Duration, burst int) func(http.HandlerFunc) http.HandlerFunc {
+func RateLimitUser(rdb *redis.Client, name string, requests int, per time.Duration, burst int) func(httputils.APIHandler) httputils.APIHandler {
 	limiter := redis_rate.NewLimiter(rdb)
 	limit := redis_rate.Limit{
 		Rate:   requests,
@@ -73,34 +74,30 @@ func RateLimitUser(rdb *redis.Client, name string, requests int, per time.Durati
 		Period: per,
 	}
 
-	return func(next http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
+	return func(next httputils.APIHandler) httputils.APIHandler {
+		return func(w http.ResponseWriter, r *http.Request) error {
 			// Extract UUID from context
-			userIDVal := r.Context().Value(UserIDKey)
+			userIDVal := r.Context().Value(contextkeys.UserIDKey)
 			if userIDVal == nil {
 				// Fallback if somehow placed before Auth middleware
-				http.Error(w, "Missing Context Data", http.StatusInternalServerError)
-				return
+				return apperrors.NewInternal(nil)
 			}
 
 			userID, ok := userIDVal.(uuid.UUID)
 			if !ok {
-				http.Error(w, "Invalid Context Data", http.StatusInternalServerError)
-				return
+				return apperrors.NewInternal(nil)
 			}
 
 			res, err := limiter.Allow(r.Context(), "rate:user:"+name+":"+userID.String(), limit)
 			if err != nil {
-				next.ServeHTTP(w, r)
-				return
+				return next(w, r)
 			}
 
 			if res.Allowed == 0 {
-				http.Error(w, "429 Too Many Requests", http.StatusTooManyRequests)
-				return
+				return apperrors.NewQuotaExceeded("429 Too Many Requests")
 			}
 
-			next.ServeHTTP(w, r)
+			return next(w, r)
 		}
 	}
 }

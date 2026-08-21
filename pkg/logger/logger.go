@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
-	"quartz/internal/middleware"
+	"quartz/pkg/contextkeys"
 )
 
 var Log *slog.Logger
@@ -27,7 +27,7 @@ func InitLogger(env string) {
 // ErrorContext securely logs an error to the terminal, automatically
 // extracting the RequestID from the context to tag the log entry.
 func ErrorContext(ctx context.Context, msg string, err error, args ...any) {
-	reqID, _ := ctx.Value(middleware.RequestIDKey).(string)
+	reqID, _ := ctx.Value(contextkeys.RequestIDKey).(string)
 
 	attrs := append([]any{
 		slog.String("request_id", reqID),

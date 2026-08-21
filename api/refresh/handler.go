@@ -7,9 +7,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"quartz/internal/model"
+	apperrors "quartz/pkg/app-errors"
 	"quartz/pkg/dpop"
 	"quartz/pkg/token"
 	"time"
@@ -25,34 +25,29 @@ func NewHandler(db *gorm.DB) *Handler {
 	return &Handler{db: db}
 }
 
-func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	refreshTokenCookie, err := r.Cookie("__Secure-Auth")
 	if err != nil || refreshTokenCookie.Value == "" {
-		http.Error(w, "unauthorized1", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized1", err)
 	}
 
 	csrfTokenHeader := r.Header.Get("X-Csrf-Token")
 	if csrfTokenHeader == "" {
-		http.Error(w, "unauthorized2", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized2", nil)
 	}
 
 	dpopProofHeader := r.Header.Get("DPoP")
 	if dpopProofHeader == "" {
-		http.Error(w, "unauthorized-dpop-proof-missing", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized-dpop-proof-missing", nil)
 	}
 
 	refreshTokenBytes, err := hex.DecodeString(refreshTokenCookie.Value)
 	if err != nil {
-		http.Error(w, "unauthorized3", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized3", err)
 	}
 
 	refreshTokenHashBytes := sha256.Sum256(refreshTokenBytes)
@@ -85,8 +80,8 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 			HttpOnly: true,
 			Path:     "/",
 			MaxAge:   int(-1),
-			Secure:   true,                  // change to true in production
-			SameSite: http.SameSiteNoneMode, // change to http.SameSiteStrictMode in production
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
 		})
 
 		http.SetCookie(w, &http.Cookie{
@@ -94,36 +89,31 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 			Value:    "",
 			HttpOnly: true,
 			Path:     "/",
-			Secure:   true,                  // change to true in production
-			SameSite: http.SameSiteNoneMode, // change to http.SameSiteStrictMode in production
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
 			Expires:  time.Unix(0, 0),
 		})
 
-		http.Error(w, "unauthorized-reuse-detection", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized-reuse-detection", nil)
 	}
 
 	if storedToken.TokenHash != refreshTokenHash {
 		fmt.Println("unauth4") // Debugging line
-		http.Error(w, "unauthorized4", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized4", nil)
 	}
 
 	providedJkt, err := dpop.ValidateDpopProof(dpopProofHeader, r)
 	if err != nil {
-		http.Error(w, "dpop proof validation failed, could not derive thumbprint", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("dpop proof validation failed, could not derive thumbprint", err)
 	}
 
 	if providedJkt != storedToken.DpopJKT {
-		http.Error(w, "dpop key mismatch - token theft detected!", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("dpop key mismatch - token theft detected!", nil)
 	}
 
 	csrfBytes, err := hex.DecodeString(csrfTokenHeader)
 	if err != nil {
-		http.Error(w, "invalid csrf hex", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("invalid csrf hex", err)
 	}
 
 	hashBytes := sha256.Sum256([]byte(csrfBytes))
@@ -139,13 +129,12 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 			Value:    "",
 			HttpOnly: true,
 			Path:     "/",
-			Secure:   true,                  // change to true in production
-			SameSite: http.SameSiteNoneMode, // change to http.SameSiteStrictMode in production
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
 			Expires:  time.Unix(0, 0),
 		})
 
-		http.Error(w, "unauthorized5", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized5", nil)
 	}
 
 	fingerprintBytes := make([]byte, 64)
@@ -157,8 +146,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	var user model.User
 	if err := h.db.Where("id = ?", storedToken.UserID).First(&user).Error; err != nil {
-		http.Error(w, "user not found", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("user not found", err)
 	}
 
 	newAccessToken, expTime := token.IssueAccessToken(fingerprintHash, storedToken.DpopJKT, storedToken.UserID.String(), user.Email)
@@ -191,9 +179,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		log.Printf("failed to rotate refresh token: %v", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to rotate refresh token: %w", err))
 	}
 
 	http.SetCookie(w, &http.Cookie{
@@ -202,8 +188,8 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		Path:     "/",
 		MaxAge:   int(maxAge.Seconds()),
-		Secure:   true,                  // change to true in production
-		SameSite: http.SameSiteNoneMode, // change to http.SameSiteStrictMode in production
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
 	})
 
 	http.SetCookie(w, &http.Cookie{
@@ -211,8 +197,8 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 		Value:    newRefreshToken.Token,
 		HttpOnly: true,
 		Path:     "/",
-		Secure:   true,                  // change to true in production
-		SameSite: http.SameSiteNoneMode, // change to http.SameSiteStrictMode in production
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
 		Expires:  time.Now().Add(7 * 24 * time.Hour),
 	})
 
@@ -225,8 +211,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	err = json.NewEncoder(w).Encode(refreshResponse)
 	if err != nil {
-		log.Fatalln(err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to encode json: %w", err))
 	}
+	return nil
 }

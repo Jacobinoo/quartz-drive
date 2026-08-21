@@ -1,14 +1,14 @@
 package dev
 
 import (
-	"fmt"
 	"net/http"
 	"quartz/config"
+	apperrors "quartz/pkg/app-errors"
 	"quartz/pkg/email"
 )
 
 // PreviewPasswordReset renders the raw HTML of the email directly to the browser
-func PreviewPasswordReset(w http.ResponseWriter, r *http.Request) {
+func PreviewPasswordReset(w http.ResponseWriter, r *http.Request) error {
 	// Dummy data for the visual preview
 	data := email.TemplateData{
 		Email:       "test-user@quartz.com",
@@ -18,11 +18,14 @@ func PreviewPasswordReset(w http.ResponseWriter, r *http.Request) {
 
 	html, err := email.RenderPasswordResetEmail(data)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to render template: %v", err), http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(err)
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(html))
+	_, err = w.Write([]byte(html))
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+	return nil
 }

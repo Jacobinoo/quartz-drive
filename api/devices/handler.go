@@ -2,11 +2,13 @@ package devices
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"quartz/internal/dto"
 	"quartz/internal/middleware"
 	"quartz/internal/model"
+	apperrors "quartz/pkg/app-errors"
 	"quartz/pkg/dpop"
 	"strings"
 
@@ -22,33 +24,29 @@ func NewHandler(db *gorm.DB) *Handler {
 	return &Handler{db: db}
 }
 
-func (h *Handler) RegisterDevice(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) RegisterDevice(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	// 1. Get the current User ID from your Auth Middleware Context!
 	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
 	log.Printf("context2 %s", userID)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
 
 	// 2. Decode the Payload
 	var req dto.RegisterDeviceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid json payload", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid json payload", err)
 	}
 
 	// 3. Find the most recent active session for this user
 	// (If you have a way to extract the exact Session ID from the JWT, use that instead of First!)
 	var session model.Session
 	if err := h.db.Where("user_id = ?", userID).Order("created_at desc").First(&session).Error; err != nil {
-		http.Error(w, "no active session found", http.StatusNotFound)
-		return
+		return apperrors.NewNotFound("no active session found", err)
 	}
 
 	// 4. Update the Session with the Ciphertext and Public Key!
@@ -56,25 +54,22 @@ func (h *Handler) RegisterDevice(w http.ResponseWriter, r *http.Request) {
 	session.WrappedAccountKeys = req.WrappedAccountKeys
 
 	if err := h.db.Save(&session).Error; err != nil {
-		log.Printf("Failed to register device keys: %v", err)
-		http.Error(w, "database error", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to register device keys: %w", err))
 	}
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "device_registered"})
+	return nil
 }
 
-func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
 
 	dpopHeader := strings.TrimSpace(r.Header.Get("DPoP"))
@@ -83,8 +78,7 @@ func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) {
 	var refreshTokens []model.GormRefreshToken
 	// Fetch all unrevoked refresh tokens and preload the associated session
 	if err := h.db.Preload("Session").Where("user_id = ? AND is_revoked = ?", userID, false).Find(&refreshTokens).Error; err != nil {
-		http.Error(w, "database error", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("database error: %w", err))
 	}
 
 	var devices []dto.DeviceResponse
@@ -104,31 +98,28 @@ func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(devices)
+	return nil
 }
 
-func (h *Handler) RevokeDevice(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) RevokeDevice(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodDelete {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
 
 	var req dto.RevokeDeviceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid json payload", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid json payload", err)
 	}
 
 	// First, verify this session belongs to the user
 	var token model.GormRefreshToken
 	if err := h.db.Where("user_id = ? AND session_id = ?", userID, req.SessionID).First(&token).Error; err != nil {
-		http.Error(w, "session not found", http.StatusNotFound)
-		return
+		return apperrors.NewNotFound("session not found", err)
 	}
 
 	err := h.db.Transaction(func(tx *gorm.DB) error {
@@ -144,12 +135,10 @@ func (h *Handler) RevokeDevice(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		log.Printf("failed to revoke device: %v", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to revoke device: %w", err))
 	}
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "device_revoked"})
+	return nil
 }
-

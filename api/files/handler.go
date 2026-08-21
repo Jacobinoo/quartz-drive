@@ -12,6 +12,7 @@ import (
 	"quartz/internal/dto"
 	"quartz/internal/middleware"
 	"quartz/internal/model"
+	apperrors "quartz/pkg/app-errors"
 	"quartz/pkg/storage"
 	"time"
 
@@ -31,74 +32,63 @@ func NewHandler(db *gorm.DB, storage storage.StorageService, rdb *redis.Client) 
 }
 
 // inits upload session and sends back upload & node id
-func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("This method is not supported")
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 
 	var uploadRequest dto.InitFileUploadRequest
 	if err := json.NewDecoder(r.Body).Decode(&uploadRequest); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	userID := r.Context().Value(middleware.UserIDKey)
 	if userID == nil {
-		http.Error(w, "access token invalid", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("access token invalid", nil)
 	}
 
 	if uploadRequest.TotalChunks <= 0 || uploadRequest.TotalFileSize <= 0 {
-		http.Error(w, "total chunks or total file size invalid", http.StatusUnprocessableEntity)
-		return
+		return apperrors.NewValidation("total chunks or total file size invalid", nil)
 	}
 
 	const maxChunkSize = 4 * 1024 * 1024 //4MB
 
 	parentUUID, err := uuid.Parse(uploadRequest.ParentNodeID)
 	if err != nil {
-		http.Error(w, "invalid parentNodeId uuid", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid parentNodeId uuid", nil)
 	}
 
 	var parentNode model.Node
 	if err := h.db.First(&parentNode, "id = ? AND owner_id = ?", parentUUID, userID).Error; err != nil {
-		http.Error(w, "parent folder not found", http.StatusNotFound)
-		return
+		return apperrors.NewNotFound("parent folder not found", nil)
 	}
 
 	var user model.User
 	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
-		http.Error(w, "user not found", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("user not found", nil)
 	}
 
 	if user.StorageUsed+uploadRequest.TotalFileSize > user.StorageQuota {
-		http.Error(w, "quota exceeded", http.StatusForbidden)
-		return
+		return apperrors.NewForbidden("", "quota exceeded", nil)
 	}
 
 	minPlausibleChunks := int(math.Ceil(float64(uploadRequest.TotalFileSize) / float64(maxChunkSize)))
 	if uploadRequest.TotalChunks < int64(minPlausibleChunks) {
-		http.Error(w, "totalChunks too low for declared file size", http.StatusUnprocessableEntity)
-		return
+		return apperrors.NewValidation("totalChunks too low for declared file size", nil)
 	}
 
 	const chunkCountSlack = 1.05 // 5% slack for per-chunk overhead
 	maxPlausibleChunks := int(math.Ceil(float64(minPlausibleChunks)*chunkCountSlack)) + 1
 	if uploadRequest.TotalChunks > int64(maxPlausibleChunks) {
-		http.Error(w, "totalChunks too high for declared file size", http.StatusUnprocessableEntity)
-		return
+		return apperrors.NewValidation("totalChunks too high for declared file size", nil)
 	}
 
 	nodeID, nErr := uuid.NewV7()
 	uploadID, uErr := uuid.NewV7()
 	if nErr != nil || uErr != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("internal server error"))
 	}
 	expiresAt := time.Now().UTC().Add(time.Duration(config.Cfg.Sweeper.UploadSessionExpiresHours) * time.Hour)
 
@@ -107,8 +97,7 @@ func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) {
 	for i := int64(0); i < uploadRequest.TotalChunks; i++ {
 		id, err := uuid.NewV7()
 		if err != nil {
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
+			return apperrors.NewInternal(fmt.Errorf("internal server error"))
 		}
 
 		chunkRows = append(chunkRows, model.UploadChunk{
@@ -156,8 +145,7 @@ func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		http.Error(w, "could not init an upload session", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("could not init an upload session"))
 	}
 
 	uploadResponse := InitFileUploadResponse{
@@ -168,16 +156,15 @@ func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) {
 
 	err = json.NewEncoder(w).Encode(uploadResponse)
 	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("internal server error"))
 	}
+	return nil
 }
 
 // validates chunk upload request and presigns an url for that chunk
-func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -185,15 +172,13 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	var uploadRequest dto.RequestChunkUploadRequest
 	if err := json.NewDecoder(r.Body).Decode(&uploadRequest); err != nil {
 		log.Printf("failed to decode RequestChunkUploadRequest")
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	userID := r.Context().Value(middleware.UserIDKey)
 	if userID == nil {
 		log.Printf("access token invalid")
-		http.Error(w, "access token invalid", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("access token invalid", nil)
 	}
 
 	const maxChunkSize = 4*1024*1024 + 64 // 4MiB + small margin for AEAD overhead/headers
@@ -209,70 +194,59 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	var user model.User
 	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
 		log.Printf("user not found")
-		http.Error(w, "user not found", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("user not found", nil)
 	}
 
 	var uploadSession model.Upload
 	if err := h.db.First(&uploadSession, "id = ?", uploadRequest.UploadID).Error; err != nil {
 		log.Printf("upload session not found")
-		http.Error(w, "upload session not found", http.StatusForbidden)
-		return
+		return apperrors.NewForbidden("", "upload session not found", nil)
 	}
 
 	if !time.Now().Before(uploadSession.ExpiresAt) {
 		log.Printf("upload session expired")
-		http.Error(w, "upload session not found", http.StatusForbidden)
-		return
+		return apperrors.NewForbidden("", "upload session not found", nil)
 	}
 
 	if uploadSession.Status != model.UploadStatusPending {
 		log.Printf("upload session is not pending (status: %s)", uploadSession.Status)
-		http.Error(w, "upload session is no longer active", http.StatusForbidden)
-		return
+		return apperrors.NewForbidden("", "upload session is no longer active", nil)
 	}
 
 	if user.ID != uploadSession.UserID {
 		log.Printf("user is not the owner of the upload session")
-		http.Error(w, "upload session not found", http.StatusForbidden)
-		return
+		return apperrors.NewForbidden("", "upload session not found", nil)
 	}
 
 	if uploadRequest.DeclaredSize <= 0 || uploadRequest.DeclaredSize > maxChunkSize {
 		log.Printf("declared chunk size out of allowed range")
-		http.Error(w, "declared chunk size out of allowed range", http.StatusUnprocessableEntity)
-		return
+		return apperrors.NewValidation("declared chunk size out of allowed range", nil)
 	}
 
 	if int64(uploadRequest.ChunkIndex) >= uploadSession.TotalChunks || uploadRequest.ChunkIndex < 0 {
 		log.Printf("requested chunk index out of allowed range")
-		http.Error(w, "requested chunk index out of allowed range", http.StatusForbidden)
-		return
+		return apperrors.NewForbidden("", "requested chunk index out of allowed range", nil)
 	}
 
 	if user.StorageUsed+uploadRequest.DeclaredSize > user.StorageQuota {
-		http.Error(w, "quota exceeded", http.StatusForbidden)
-		return
+		return apperrors.NewForbidden("", "quota exceeded", nil)
 	}
 
 	var chunkRow model.UploadChunk
 	if err := h.db.First(&chunkRow, "upload_id = ? AND chunk_index = ?", uploadRequest.UploadID, uploadRequest.ChunkIndex).Error; err != nil {
 		log.Printf("failed to find chunk row %s", err)
-		http.Error(w, "requested chunk not found", http.StatusForbidden)
-		return
+		return apperrors.NewForbidden("", "requested chunk not found", nil)
 	}
 
 	if chunkRow.Status != model.ChunkUploadStatusPending {
 		log.Printf("error: requested chunk %d status is %s", chunkRow.ChunkIndex, chunkRow.Status)
-		http.Error(w, "requested chunk not found", http.StatusForbidden)
-		return
+		return apperrors.NewForbidden("", "requested chunk not found", nil)
 	}
 
 	url, err := h.storage.GenerateUploadUrl(r.Context(), chunkRow.ObjectKey, expiry, uploadRequest.DeclaredSize, uploadRequest.ChunkHash)
 	if err != nil {
 		log.Printf("%v", err)
-		http.Error(w, "failed to generate presigned url", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to generate presigned url"))
 	}
 
 	chunkRow.GeneratedUrls++
@@ -281,8 +255,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 	result := h.db.Save(&chunkRow)
 	if result.Error != nil {
 		log.Printf("chunk row generated urls amount and declared size could not be saved: %v", err)
-		http.Error(w, "failed to generate presigned url", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to generate presigned url"))
 	}
 
 	uploadResponse := dto.RequestChunkUploadResponse{
@@ -291,15 +264,14 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	err = json.NewEncoder(w).Encode(uploadResponse)
 	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("internal server error"))
 	}
+	return nil
 }
 
-func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -307,15 +279,13 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 	var uploadRequest dto.FinishChunkUploadRequest
 	if err := json.NewDecoder(r.Body).Decode(&uploadRequest); err != nil {
 		log.Printf("failed to decode FinishChunkUploadRequest")
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	userID := r.Context().Value(middleware.UserIDKey)
 	if userID == nil {
 		log.Printf("access token invalid")
-		http.Error(w, "access token invalid", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("access token invalid", nil)
 	}
 
 	const maxChunkSize = 4*1024*1024 + 64 // 4MiB + small margin for AEAD overhead/headers
@@ -323,46 +293,39 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 	var user model.User
 	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
 		log.Printf("user not found")
-		http.Error(w, "user not found", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("user not found", nil)
 	}
 
 	var uploadSession model.Upload
 	if err := h.db.First(&uploadSession, "id = ?", uploadRequest.UploadID).Error; err != nil {
 		log.Printf("upload session not found")
-		http.Error(w, "upload session not found", http.StatusForbidden)
-		return
+		return apperrors.NewForbidden("", "upload session not found", nil)
 	}
 
 	if !time.Now().Before(uploadSession.ExpiresAt) {
 		log.Printf("upload session expired")
-		http.Error(w, "upload session not found", http.StatusForbidden)
-		return
+		return apperrors.NewForbidden("", "upload session not found", nil)
 	}
 
 	if user.ID != uploadSession.UserID {
 		log.Printf("user is not the owner of the upload session")
-		http.Error(w, "upload session not found", http.StatusForbidden)
-		return
+		return apperrors.NewForbidden("", "upload session not found", nil)
 	}
 
 	if int64(uploadRequest.ChunkIndex) >= uploadSession.TotalChunks || uploadRequest.ChunkIndex < 0 {
 		log.Printf("requested chunk index out of allowed range")
-		http.Error(w, "requested chunk index out of allowed range", http.StatusForbidden)
-		return
+		return apperrors.NewForbidden("", "requested chunk index out of allowed range", nil)
 	}
 
 	var chunkRow model.UploadChunk
 	if err := h.db.First(&chunkRow, "upload_id = ? AND chunk_index = ?", uploadRequest.UploadID, uploadRequest.ChunkIndex).Error; err != nil {
 		log.Printf("failed to find chunk row %s", err)
-		http.Error(w, "requested chunk not found", http.StatusForbidden)
-		return
+		return apperrors.NewForbidden("", "requested chunk not found", nil)
 	}
 
 	if chunkRow.Status != model.ChunkUploadStatusPending && chunkRow.Status != model.ChunkUploadStatusVerified {
 		log.Printf("error: requested chunk %d status is %s", chunkRow.ChunkIndex, chunkRow.Status)
-		http.Error(w, "requested chunk not found", http.StatusNotFound)
-		return
+		return apperrors.NewNotFound("requested chunk not found", nil)
 	}
 
 	// If it's already verified from a previous interrupted attempt, skip S3 validation and go straight to assembly check
@@ -370,8 +333,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 		size, etag, sha256, err := h.storage.GetChunkSize(r.Context(), chunkRow.ObjectKey)
 		if err != nil {
 			log.Printf("failed to get chunk size, etag and checksum: %v", err)
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
+			return apperrors.NewInternal(fmt.Errorf("internal server error"))
 		}
 
 		log.Printf("checksum is %s", sha256)
@@ -385,8 +347,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 					log.Printf("failed to delete (integrity check failed) chunk %s: %v", objectKey, delErr)
 				}
 			}(chunkRow.ObjectKey)
-			http.Error(w, "integrity check failed", http.StatusForbidden)
-			return
+			return apperrors.NewForbidden("", "integrity check failed", nil)
 		}
 
 		if size > maxChunkSize {
@@ -404,8 +365,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 			uploadSession.Status = model.UploadStatusFlaggedMalicious
 			h.db.Save(&uploadSession)
 
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
+			return apperrors.NewInternal(fmt.Errorf("internal server error"))
 		}
 
 		if etag != uploadRequest.Etag {
@@ -424,8 +384,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 			uploadSession.Status = model.UploadStatusFlaggedMalicious
 			h.db.Save(&uploadSession)
 
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
+			return apperrors.NewInternal(fmt.Errorf("internal server error"))
 		}
 
 		if size != chunkRow.DeclaredSize {
@@ -440,8 +399,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 		result := h.db.Save(&chunkRow)
 		if result.Error != nil {
 			log.Printf("chunk etag, size, timestamp, status could not be saved: %v", result.Error)
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
+			return apperrors.NewInternal(fmt.Errorf("internal server error"))
 		}
 	}
 
@@ -452,7 +410,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 
 	if verifiedCount != uploadSession.TotalChunks {
 		w.WriteHeader(http.StatusOK)
-		return
+		return nil
 	}
 
 	log.Print("upload session complete, all chunks verified, will mark upload as complete")
@@ -471,8 +429,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 	// For testing/MVP if not extracted yet, fetch the parent node's owner:
 	var parentNode model.Node
 	if err := h.db.First(&parentNode, "id = ? AND owner_id = ?", uploadSession.ParentNodeID, uploadSession.UserID).Error; err != nil {
-		http.Error(w, "parent folder not found", http.StatusNotFound)
-		return
+		return apperrors.NewNotFound("parent folder not found", nil)
 	}
 	ownerID := uploadSession.UserID
 
@@ -505,8 +462,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 	if err := h.db.Where("upload_id = ? AND status = ?", uploadSession.ID, model.ChunkUploadStatusVerified).
 		Order("chunk_index asc").Find(&verifiedChunks).Error; err != nil {
 		log.Printf("failed to fetch verified chunks: %v", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("internal server error"))
 	}
 
 	var trueTotalSize int64
@@ -560,18 +516,18 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 
 	if err != nil {
 		log.Printf("Failed to finish file upload in DB: %v", err)
-		http.Error(w, "database error while saving file metadata", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("database error while saving file metadata"))
 	}
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"status": "created", "nodeId": uploadSession.NodeID.String()})
+	return nil
 }
 
 // func (h *Handler) FinishUpload(w http.ResponseWriter, r *http.Request) {
 // 	if r.Method != http.MethodPost {
 // 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-// 		return
+// 		return nil
 // 	}
 
 // 	w.Header().Set("Content-Type", "application/json")
@@ -579,19 +535,19 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 // 	var req dto.FinishFileUploadRequest
 // 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 // 		http.Error(w, err.Error(), http.StatusBadRequest)
-// 		return
+// 		return nil
 // 	}
 
 // 	nodeUUID, err := uuid.Parse(req.NodeID)
 // 	if err != nil {
 // 		http.Error(w, "invalid nodeId uuid", http.StatusBadRequest)
-// 		return
+// 		return nil
 // 	}
 
 // 	parentUUID, err := uuid.Parse(req.ParentNodeID)
 // 	if err != nil {
 // 		http.Error(w, "invalid parentNodeId uuid", http.StatusBadRequest)
-// 		return
+// 		return nil
 // 	}
 
 // 	linkUUID := uuid.New()
@@ -601,7 +557,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 // 	var parentNode model.Node
 // 	if err := h.db.First(&parentNode, "id = ?", parentUUID).Error; err != nil {
 // 		http.Error(w, "parent folder not found", http.StatusNotFound)
-// 		return
+// 		return nil
 // 	}
 // 	ownerID := parentNode.OwnerID
 
@@ -655,7 +611,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 // 			size, _, _, err := h.storage.GetChunkSize(r.Context(), objectKey)
 // 			if err != nil {
 // 				errCh <- fmt.Errorf("chunk %d missing in S3: %v", chunkIndex, err)
-// 				return
+// 				return nil
 // 			}
 
 // 			mu.Lock()
@@ -678,7 +634,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 // 	if len(errCh) > 0 {
 // 		err := <-errCh
 // 		http.Error(w, err.Error(), http.StatusBadRequest)
-// 		return
+// 		return nil
 // 	}
 
 // 	// Overwrite the Node's size with the VERIFIED physical size!
@@ -703,17 +659,16 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 // 	if err != nil {
 // 		log.Printf("Failed to finish file upload in DB: %v", err)
 // 		http.Error(w, "database error while saving file metadata", http.StatusInternalServerError)
-// 		return
+// 		return nil
 // 	}
 
 // 	w.WriteHeader(http.StatusCreated)
 // 	json.NewEncoder(w).Encode(map[string]string{"status": "created", "nodeId": req.NodeID})
 // }
 
-func (h *Handler) Files(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Files(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	// TODO: For MVP, we will fetch the dummy parent folder we used during upload:
@@ -736,8 +691,7 @@ func (h *Handler) Files(w http.ResponseWriter, r *http.Request) {
 		Where("parent_node_id = ?", parentFolderID).
 		Find(&links).Error
 	if err != nil {
-		http.Error(w, "failed to fetch files", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to fetch files"))
 	}
 
 	var response []dto.FileListResponseItem
@@ -777,30 +731,27 @@ func (h *Handler) Files(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+	return nil
 }
 
-func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Download(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	nodeID := r.URL.Query().Get("nodeId")
 	if nodeID == "" {
-		http.Error(w, "missing nodeId", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("missing nodeId", nil)
 	}
 
 	// 1. Verify ownership/access here later. For MVP, we just fetch blocks:
 	var blocks []model.FileBlock
 	if err := h.db.Where("node_id = ?", nodeID).Order("index asc").Find(&blocks).Error; err != nil {
-		http.Error(w, "file blocks not found", http.StatusNotFound)
-		return
+		return apperrors.NewNotFound("file blocks not found", nil)
 	}
 
 	if len(blocks) == 0 {
-		http.Error(w, "no chunks found for this file", http.StatusNotFound)
-		return
+		return apperrors.NewNotFound("no chunks found for this file", nil)
 	}
 
 	// 2. Extract Object Keys and Generate URLs
@@ -811,26 +762,24 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 
 	urls, err := h.storage.GenerateDownloadUrls(r.Context(), objectKeys)
 	if err != nil {
-		http.Error(w, "failed to generate download links", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to generate download links"))
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"presignedUrls": urls,
 	})
+	return nil
 }
 
-func (h *Handler) GetRootFolder(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetRootFolder(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
 
 	var shareMember model.ShareMember
@@ -839,14 +788,12 @@ func (h *Handler) GetRootFolder(w http.ResponseWriter, r *http.Request) {
 		Where("share_members.user_id = ? AND shares.type = ?", userID, model.ShareTypeDefault).
 		First(&shareMember).Error
 	if err != nil {
-		http.Error(w, "share member not found", http.StatusNotFound)
-		return
+		return apperrors.NewNotFound("share member not found", nil)
 	}
 
 	var rootLink model.Link
 	if err := h.db.Preload("ChildNode").Where("id = ?", shareMember.Share.TargetLinkID).First(&rootLink).Error; err != nil {
-		http.Error(w, "root link not found", http.StatusNotFound)
-		return
+		return apperrors.NewNotFound("root link not found", nil)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -862,17 +809,16 @@ func (h *Handler) GetRootFolder(w http.ResponseWriter, r *http.Request) {
 		"nodePrivNonce":               rootLink.ChildNode.NodePrivNonce,
 		"encryptedRootNodePassphrase": rootLink.EncryptedNodePassphrase,
 	})
+	return nil
 }
 
-func (h *Handler) CreateFolder(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) CreateFolder(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 	var req dto.CreateFolderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid request body", nil)
 	}
 	nodeUUID := uuid.New()
 	linkUUID := uuid.New()
@@ -908,41 +854,38 @@ func (h *Handler) CreateFolder(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err != nil {
-		http.Error(w, "failed to create folder", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to create folder"))
 	}
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "nodeId": nodeUUID.String()})
+	return nil
 }
 
-func (h *Handler) TrashFile(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) TrashFile(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodDelete {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	nodeID := r.URL.Query().Get("nodeId")
 	parentFolderID := r.URL.Query().Get("parentFolderId")
 
 	if nodeID == "" || parentFolderID == "" {
-		http.Error(w, "missing parameters", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("missing parameters", nil)
 	}
 
 	// Soft Deletes the Link, instantly hiding it from the folder!
 	err := h.db.Where("child_node_id = ? AND parent_node_id = ?", nodeID, parentFolderID).Delete(&model.Link{}).Error
 	if err != nil {
-		http.Error(w, "failed to trash file", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to trash file"))
 	}
 
 	w.WriteHeader(http.StatusOK)
+	return nil
 }
 
-func (h *Handler) RestoreFile(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) RestoreFile(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	nodeID := r.URL.Query().Get("nodeId")
@@ -977,17 +920,16 @@ func (h *Handler) RestoreFile(w http.ResponseWriter, r *http.Request) {
 	err := h.db.Exec(query, parentFolderID, nodeID, parentFolderID).Error
 	if err != nil {
 		log.Printf("failed to restore file %s: %v", nodeID, err)
-		http.Error(w, "failed to restore file", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to restore file"))
 	}
 
 	w.WriteHeader(http.StatusOK)
+	return nil
 }
 
-func (h *Handler) RenameFile(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) RenameFile(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPatch {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	nodeID := r.URL.Query().Get("nodeId")
@@ -995,8 +937,7 @@ func (h *Handler) RenameFile(w http.ResponseWriter, r *http.Request) {
 
 	var req dto.RenameRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid body", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid body", nil)
 	}
 
 	err := h.db.Model(&model.Link{}).
@@ -1007,23 +948,21 @@ func (h *Handler) RenameFile(w http.ResponseWriter, r *http.Request) {
 		}).Error
 
 	if err != nil {
-		http.Error(w, "failed to update link", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to update link"))
 	}
 
 	w.WriteHeader(http.StatusOK)
+	return nil
 }
 
-func (h *Handler) ListTrash(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ListTrash(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
 
 	var links []model.Link
@@ -1035,8 +974,7 @@ func (h *Handler) ListTrash(w http.ResponseWriter, r *http.Request) {
 		Find(&links).Error
 
 	if err != nil {
-		http.Error(w, "failed to fetch trash", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to fetch trash"))
 	}
 
 	var response []dto.FileListResponseItem
@@ -1059,6 +997,7 @@ func (h *Handler) ListTrash(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+	return nil
 }
 
 func (h *Handler) getDescendantNodeIDs(parentFolderID string) ([]string, error) {
@@ -1078,17 +1017,15 @@ func (h *Handler) getDescendantNodeIDs(parentFolderID string) ([]string, error) 
 	return nodeIDs, nil
 }
 
-func (h *Handler) EmptyTrash(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) EmptyTrash(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodDelete {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	// 1. Get the Authenticated User ID
 	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
 
 	var trashedLinks []model.Link
@@ -1102,36 +1039,33 @@ func (h *Handler) EmptyTrash(w http.ResponseWriter, r *http.Request) {
 		Find(&trashedLinks).Error
 
 	if err != nil {
-		http.Error(w, "failed to query trash", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to query trash"))
 	}
 
 	if len(trashedLinks) == 0 {
 		w.WriteHeader(http.StatusOK)
-		return
+		return nil
 	}
 
 	go h.wipeTrashedLinks(context.Background(), trashedLinks)
 
 	w.WriteHeader(http.StatusAccepted)
+	return nil
 }
 
-func (h *Handler) GetQuota(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetQuota(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
 
 	var user model.User
 	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
-		http.Error(w, "user not found", http.StatusNotFound)
-		return
+		return apperrors.NewNotFound("user not found", nil)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1139,18 +1073,17 @@ func (h *Handler) GetQuota(w http.ResponseWriter, r *http.Request) {
 		"usedBytes": user.StorageUsed,
 		"maxBytes":  user.StorageQuota,
 	})
+	return nil
 }
 
-func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPatch {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	var req dto.MoveFileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid request", nil)
 	}
 
 	// 1. Validate UUIDs
@@ -1158,15 +1091,13 @@ func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) {
 	oldParentUUID, err2 := uuid.Parse(req.OldParentFolderID)
 	newParentUUID, err3 := uuid.Parse(req.NewParentFolderID)
 	if err1 != nil || err2 != nil || err3 != nil {
-		http.Error(w, "invalid UUIDs", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("invalid UUIDs", nil)
 	}
 
 	// 2. Find the exact Link connecting the File to the Old Folder
 	var link model.Link
 	if err := h.db.Where("child_node_id = ? AND parent_node_id = ?", nodeUUID, oldParentUUID).First(&link).Error; err != nil {
-		http.Error(w, "file not found in the specified source folder", http.StatusNotFound)
-		return
+		return apperrors.NewNotFound("file not found in the specified source folder", nil)
 	}
 
 	// 3. Cryptographic Re-link! Update the parent and overwrite all crypto fields
@@ -1178,24 +1109,22 @@ func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) {
 
 	// 4. Save the new Link to the database
 	if err := h.db.Save(&link).Error; err != nil {
-		http.Error(w, "failed to move file", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to move file"))
 	}
 
 	w.WriteHeader(http.StatusOK)
+	return nil
 }
 
-func (h *Handler) GetAllFiles(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetAllFiles(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	// 1. Get the current User ID from the Auth Middleware Context!
 	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
 
 	var links []model.Link
@@ -1209,8 +1138,7 @@ func (h *Handler) GetAllFiles(w http.ResponseWriter, r *http.Request) {
 		Find(&links).Error
 
 	if err != nil {
-		http.Error(w, "failed to fetch files for search index", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to fetch files for search index"))
 	}
 
 	var response []dto.FileListResponseItem
@@ -1243,32 +1171,30 @@ func (h *Handler) GetAllFiles(w http.ResponseWriter, r *http.Request) {
 			CreatedAt:         link.CreatedAt,
 			EncryptedMetadata: link.ChildNode.EncryptedMetadata,
 			MetadataNonce:     link.ChildNode.MetadataNonce,
-			
+
 			AuthorEmail:            link.Author.Email,
 			AuthorSigningPublicKey: link.Author.KeyStore.AccountSigningPublicKey,
 		})
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+	return nil
 }
 
-func (h *Handler) GetFilePath(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetFilePath(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	nodeID := r.URL.Query().Get("nodeId")
 	if nodeID == "" {
-		http.Error(w, "missing nodeId", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("missing nodeId", nil)
 	}
 
 	// Verify the user is authenticated (ensure they own the nodes later!)
 	_, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
 
 	var response []dto.FileListResponseItem
@@ -1318,24 +1244,22 @@ func (h *Handler) GetFilePath(w http.ResponseWriter, r *http.Request) {
 
 	err := h.db.Raw(query, nodeID).Scan(&response).Error
 	if err != nil {
-		http.Error(w, "failed to resolve cryptographic path", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to resolve cryptographic path"))
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+	return nil
 }
 
-func (h *Handler) ShareFolder(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ShareFolder(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	authorID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
 
 	var req struct {
@@ -1358,8 +1282,7 @@ func (h *Handler) ShareFolder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
+		return apperrors.NewBadRequest("bad request", nil)
 	}
 
 	targetNodeUUID := uuid.MustParse(req.TargetNodeID)
@@ -1410,23 +1333,21 @@ func (h *Handler) ShareFolder(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if err != nil {
-		http.Error(w, "failed to execute share transaction", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to execute share transaction"))
 	}
 
 	w.WriteHeader(http.StatusCreated)
+	return nil
 }
 
-func (h *Handler) GetSharedFolders(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) GetSharedFolders(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	userID, ok := r.Context().Value(middleware.UserIDKey).(uuid.UUID)
 	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
+		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
 
 	// 1. Fetch all SHARED ShareMembers for this user
@@ -1437,8 +1358,7 @@ func (h *Handler) GetSharedFolders(w http.ResponseWriter, r *http.Request) {
 		Find(&shareMembers).Error
 
 	if err != nil {
-		http.Error(w, "failed to query shares", http.StatusInternalServerError)
-		return
+		return apperrors.NewInternal(fmt.Errorf("failed to query shares"))
 	}
 
 	var response []map[string]string
@@ -1470,4 +1390,5 @@ func (h *Handler) GetSharedFolders(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+	return nil
 }

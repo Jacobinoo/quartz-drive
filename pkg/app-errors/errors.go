@@ -35,6 +35,7 @@ const (
 	CodeQuotaExceeded    = "QUOTA_EXCEEDED"
 	CodeBadRequest       = "BAD_REQUEST"
 	CodeMethodNotAllowed = "METHOD_NOT_ALLOWED"
+	CodeConflict         = "CONFLICT"
 )
 
 // --- Helper Constructors ---
@@ -95,11 +96,21 @@ func NewBadRequest(msg string, err error) *AppError {
 		Err:     err,
 	}
 }
+
 func NewMethodNotAllowed(msg string) *AppError {
 	return &AppError{
 		Code:    CodeMethodNotAllowed,
 		Message: msg,
 		Status:  http.StatusMethodNotAllowed,
 		Err:     nil,
+	}
+}
+
+func NewConflict(msg string, err error) *AppError {
+	return &AppError{
+		Code:    CodeConflict,
+		Message: msg,
+		Status:  http.StatusConflict,
+		Err:     err,
 	}
 }

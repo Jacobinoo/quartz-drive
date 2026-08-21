@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"quartz/internal/model"
+	apperrors "quartz/pkg/app-errors"
 
 	"gorm.io/gorm"
 )
@@ -20,10 +21,9 @@ func NewHandler(db *gorm.DB) *Handler {
 	return &Handler{db: db}
 }
 
-func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
 	// 1. Always send headers to destroy browser cookies immediately!
@@ -34,7 +34,7 @@ func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		Secure:   true,
-		SameSite: http.SameSiteNoneMode,
+		SameSite: http.SameSiteLaxMode,
 		Expires:  time.Unix(0, 0),
 	})
 
@@ -45,7 +45,7 @@ func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		Secure:   true,
-		SameSite: http.SameSiteNoneMode,
+		SameSite: http.SameSiteLaxMode,
 		Expires:  time.Unix(0, 0),
 	})
 
@@ -53,7 +53,7 @@ func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) {
 	if csrfTokenHeader == "" {
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-		return
+		return nil
 	}
 
 	// 2. Read cookie to revoke the session in the database
@@ -62,7 +62,7 @@ func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) {
 		// Even if cookie is missing, we still return 200 OK because cookies were wiped above
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-		return
+		return nil
 	}
 
 	tokenBytes, err := hex.DecodeString(cookie.Value)
@@ -83,4 +83,5 @@ func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	return nil
 }

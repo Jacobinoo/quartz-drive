@@ -73,6 +73,8 @@ services:
 
   fluent-bit:
     image: cr.fluentbit.io/fluent/fluent-bit:latest
+    env_file:
+      - .env.production
     volumes:
       - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
       - ./parsers_custom.conf:/fluent-bit/etc/parsers_custom.conf:ro

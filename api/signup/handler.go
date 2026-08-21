@@ -214,33 +214,27 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 
 		if err := tx.Create(&storedUser).Error; err != nil {
 			// registrationSessions.Delete(m3.RegistrationNonce)
-			//http.Error(w, "email registered already", http.StatusConflict)
-			return apperrors.NewInternal(err)
+			return apperrors.NewConflict("email registered already", err)
 		}
 
 		if err := tx.Create(&storedUserKeyStore).Error; err != nil {
-			//http.Error(w, "cannot register keys", http.StatusConflict)
-			return apperrors.NewInternal(err)
+			return apperrors.NewConflict("cannot register keys", err)
 		}
 
 		if err := tx.Create(&storedNode).Error; err != nil {
-			//http.Error(w, "cannot register keys", http.StatusConflict)
-			return apperrors.NewInternal(err)
+			return apperrors.NewConflict("cannot register node", err)
 		}
 
 		if err := tx.Create(&storedLink).Error; err != nil {
-			//http.Error(w, "cannot register keys", http.StatusConflict)
-			return apperrors.NewInternal(err)
+			return apperrors.NewConflict("cannot register link", err)
 		}
 
 		if err := tx.Create(&storedShare).Error; err != nil {
-			//http.Error(w, "cannot register keys", http.StatusConflict)
-			return apperrors.NewInternal(err)
+			return apperrors.NewConflict("cannot register share", err)
 		}
 
 		if err := tx.Create(&storedShareMember).Error; err != nil {
-			//http.Error(w, "cannot register keys", http.StatusConflict)
-			return apperrors.NewInternal(err)
+			return apperrors.NewConflict("cannot register share member", err)
 		}
 
 		return nil

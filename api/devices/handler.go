@@ -58,7 +58,10 @@ func (h *Handler) RegisterDevice(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "device_registered"})
+	err := json.NewEncoder(w).Encode(map[string]string{"status": "device_registered"})
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 	return nil
 }
 
@@ -97,7 +100,10 @@ func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(devices)
+	err := json.NewEncoder(w).Encode(devices)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 	return nil
 }
 
@@ -139,6 +145,9 @@ func (h *Handler) RevokeDevice(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "device_revoked"})
+	err = json.NewEncoder(w).Encode(map[string]string{"status": "device_revoked"})
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 	return nil
 }

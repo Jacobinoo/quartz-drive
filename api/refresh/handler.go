@@ -138,7 +138,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	fingerprintBytes := make([]byte, 64)
-	rand.Read(fingerprintBytes)
+	_, _ = rand.Read(fingerprintBytes)
 	fingerprint := hex.EncodeToString(fingerprintBytes)
 
 	fingerprintHashBytes := sha256.Sum256(fingerprintBytes)

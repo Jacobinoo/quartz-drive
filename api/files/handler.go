@@ -520,7 +520,10 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"status": "created", "nodeId": uploadSession.NodeID.String()})
+	err = json.NewEncoder(w).Encode(map[string]string{"status": "created", "nodeId": uploadSession.NodeID.String()})
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 	return nil
 }
 
@@ -730,7 +733,10 @@ func (h *Handler) Files(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	err = json.NewEncoder(w).Encode(response)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 	return nil
 }
 
@@ -766,9 +772,12 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	err = json.NewEncoder(w).Encode(map[string]interface{}{
 		"presignedUrls": urls,
 	})
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 	return nil
 }
 
@@ -797,7 +806,7 @@ func (h *Handler) GetRootFolder(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	err = json.NewEncoder(w).Encode(map[string]string{
 		"sharePublicKey":                   shareMember.Share.SharePublicKey,
 		"wrappedSharePrivateKey":           shareMember.Share.WrappedSharePrivateKey,
 		"sharePrivNonce":                   shareMember.Share.SharePrivNonce,
@@ -809,6 +818,9 @@ func (h *Handler) GetRootFolder(w http.ResponseWriter, r *http.Request) error {
 		"nodePrivNonce":               rootLink.ChildNode.NodePrivNonce,
 		"encryptedRootNodePassphrase": rootLink.EncryptedNodePassphrase,
 	})
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 	return nil
 }
 
@@ -857,7 +869,10 @@ func (h *Handler) CreateFolder(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewInternal(fmt.Errorf("failed to create folder"))
 	}
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "nodeId": nodeUUID.String()})
+	err = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "nodeId": nodeUUID.String()})
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 	return nil
 }
 
@@ -996,7 +1011,10 @@ func (h *Handler) ListTrash(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	err = json.NewEncoder(w).Encode(response)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 	return nil
 }
 
@@ -1069,10 +1087,13 @@ func (h *Handler) GetQuota(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"usedBytes": user.StorageUsed,
 		"maxBytes":  user.StorageQuota,
 	})
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 	return nil
 }
 
@@ -1177,7 +1198,10 @@ func (h *Handler) GetAllFiles(w http.ResponseWriter, r *http.Request) error {
 		})
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	err = json.NewEncoder(w).Encode(response)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 	return nil
 }
 
@@ -1248,7 +1272,10 @@ func (h *Handler) GetFilePath(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	err = json.NewEncoder(w).Encode(response)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 	return nil
 }
 
@@ -1389,6 +1416,9 @@ func (h *Handler) GetSharedFolders(w http.ResponseWriter, r *http.Request) error
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	err = json.NewEncoder(w).Encode(response)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 	return nil
 }

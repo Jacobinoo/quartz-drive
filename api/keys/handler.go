@@ -40,9 +40,12 @@ func (h *Handler) GetUserKeys(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	err := json.NewEncoder(w).Encode(map[string]string{
 		"userId":                     user.ID.String(),
 		"accountEncryptionPublicKey": keyStore.AccountEncryptionPublicKey,
 	})
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 	return nil
 }

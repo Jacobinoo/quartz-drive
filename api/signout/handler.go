@@ -52,7 +52,10 @@ func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) error {
 	csrfTokenHeader := r.Header.Get("X-Csrf-Token")
 	if csrfTokenHeader == "" {
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		if err != nil {
+			return apperrors.NewInternal(err)
+		}
 		return nil
 	}
 
@@ -61,7 +64,10 @@ func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) error {
 	if err != nil || cookie.Value == "" {
 		// Even if cookie is missing, we still return 200 OK because cookies were wiped above
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		if err != nil {
+			return apperrors.NewInternal(err)
+		}
 		return nil
 	}
 
@@ -82,6 +88,9 @@ func (h *Handler) Signout(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	err = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 	return nil
 }

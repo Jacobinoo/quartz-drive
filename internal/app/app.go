@@ -239,7 +239,7 @@ func initV1Mux(state *ServerState) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	accountHandler := account.NewHandler(state.DB, state.Redis, state.OpaqueSetup)
-	account.RegisterRoutes(mux, accountHandler, state.Redis)
+	account.RegisterRoutes(mux, accountHandler)
 
 	signinHandler := signin.NewHandler(state.DB, state.Redis, state.OpaqueSetup)
 	signin.RegisterRoutes(mux, signinHandler, state.Redis)

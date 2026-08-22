@@ -3,22 +3,45 @@ import * as opaque from '@serenity-kit/opaque'
 import { Base64String } from "@/UtilTypes";
 import { getSodium } from "@/lib/crypto/sodium";
 
-export async function resetPassword(token: string, recoveryPhrase: string, newPassword: string) {
+export type VerifyResponse = {
+  email: string,
+  recoveryKeys: {
+ 			masterKdfSalt: string,
+			accountEncryptionPublicKey:string,
+			accountSigningPublicKey:    string,
+
+			recoveryEncAccountEncryptionPrivateKey: string,
+			recoveryAccountEncryptionKeyNonce:  string,
+			recoveryEncAccountSigningPrivateKey:   string,
+			recoveryAccountSigningKeyNonce:          string,
+  }
+}
+
+export async function verifyToken(token: string): Promise<VerifyResponse> {
+  // Verify token and get recovery keys
+  const verifyResponse = await fetch(`${config.apiUrl}/v1/account/verify-reset-code`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token })
+  });
+
+  if (!verifyResponse.ok) {
+      throw new Error("Invalid or expired reset link");
+  }
+
+  const { recoveryKeys, email } = await verifyResponse.json();
+
+  let verifyRes: VerifyResponse = {
+    email, recoveryKeys
+  }
+
+  return verifyRes
+}
+
+export async function resetPassword(verifyResponse: VerifyResponse, token: string, recoveryPhrase: string, newPassword: string) {
     const sodium = await getSodium();
 
-    // 1. Verify token and get recovery keys
-    const verifyResponse = await fetch(`${config.apiUrl}/v1/account/verify-reset-code`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token })
-    });
-
-    if (!verifyResponse.ok) {
-        throw new Error("Invalid or expired reset link");
-    }
-
-    const { recoveryKeys, email } = await verifyResponse.json();
-    const oldMasterSalt = sodium.from_base64(recoveryKeys.masterKdfSalt);
+    const oldMasterSalt = sodium.from_base64(verifyResponse.recoveryKeys.masterKdfSalt);
 
     // 2. Derive the recovery key using the phrase and old master salt
     const derivedRecoveryKey = sodium.crypto_pwhash(
@@ -37,17 +60,17 @@ export async function resetPassword(token: string, recoveryPhrase: string, newPa
     try {
         accountSigningPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
             null,
-            sodium.from_base64(recoveryKeys.recoveryEncAccountSigningPrivateKey),
-            sodium.from_string(email.toLowerCase()+"_sign"),
-            sodium.from_base64(recoveryKeys.recoveryAccountSigningKeyNonce),
+            sodium.from_base64(verifyResponse.recoveryKeys.recoveryEncAccountSigningPrivateKey),
+            sodium.from_string(verifyResponse.email.toLowerCase()+"_sign"),
+            sodium.from_base64(verifyResponse.recoveryKeys.recoveryAccountSigningKeyNonce),
             derivedRecoveryKey
         );
 
         accountEncryptionPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
             null,
-            sodium.from_base64(recoveryKeys.recoveryEncAccountEncryptionPrivateKey),
-            sodium.from_string(email.toLowerCase()+"_encrypt"),
-            sodium.from_base64(recoveryKeys.recoveryAccountEncryptionKeyNonce),
+            sodium.from_base64(verifyResponse.recoveryKeys.recoveryEncAccountEncryptionPrivateKey),
+            sodium.from_string(verifyResponse.email.toLowerCase()+"_encrypt"),
+            sodium.from_base64(verifyResponse.recoveryKeys.recoveryAccountEncryptionKeyNonce),
             derivedRecoveryKey
         );
     } catch (e) {
@@ -103,7 +126,7 @@ export async function resetPassword(token: string, recoveryPhrase: string, newPa
     const newAccountSigningPrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
     const newEncryptedAccountSigningPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
         accountSigningPrivateKey,
-        sodium.from_string(email.toLowerCase()+"_sign"),
+        sodium.from_string(verifyResponse.email.toLowerCase()+"_sign"),
         null,
         newAccountSigningPrivNonce,
         newDerivedMasterKey
@@ -112,7 +135,7 @@ export async function resetPassword(token: string, recoveryPhrase: string, newPa
     const newAccountEncryptionPrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
     const newEncryptedAccountEncryptionPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
         accountEncryptionPrivateKey,
-        sodium.from_string(email.toLowerCase()+"_encrypt"),
+        sodium.from_string(verifyResponse.email.toLowerCase()+"_encrypt"),
         null,
         newAccountEncryptionPrivNonce,
         newDerivedMasterKey
@@ -131,7 +154,7 @@ export async function resetPassword(token: string, recoveryPhrase: string, newPa
     const newRecoveryAccountSigningPrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
     const newRecoveryEncryptedAccountSigningPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
         accountSigningPrivateKey,
-        sodium.from_string(email.toLowerCase()+"_sign"),
+        sodium.from_string(verifyResponse.email.toLowerCase()+"_sign"),
         null,
         newRecoveryAccountSigningPrivNonce,
         newDerivedRecoveryKey
@@ -140,7 +163,7 @@ export async function resetPassword(token: string, recoveryPhrase: string, newPa
     const newRecoveryAccountEncryptionPrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
     const newRecoveryEncryptedAccountEncryptionPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
         accountEncryptionPrivateKey,
-        sodium.from_string(email.toLowerCase()+"_encrypt"),
+        sodium.from_string(verifyResponse.email.toLowerCase()+"_encrypt"),
         null,
         newRecoveryAccountEncryptionPrivNonce,
         newDerivedRecoveryKey
@@ -157,11 +180,11 @@ export async function resetPassword(token: string, recoveryPhrase: string, newPa
             keys: {
                 masterKdfSalt: sodium.to_base64(newMasterSalt),
 
-                accountEncryptionPublicKey: recoveryKeys.accountEncryptionPublicKey,
+                accountEncryptionPublicKey: verifyResponse.recoveryKeys.accountEncryptionPublicKey,
                 encAccountEncryptionPrivateKey: sodium.to_base64(newEncryptedAccountEncryptionPrivateKey),
                 accountEncryptionKeyNonce: sodium.to_base64(newAccountEncryptionPrivNonce),
 
-                accountSigningPublicKey: recoveryKeys.accountSigningPublicKey,
+                accountSigningPublicKey: verifyResponse.recoveryKeys.accountSigningPublicKey,
                 encAccountSigningPrivateKey: sodium.to_base64(newEncryptedAccountSigningPrivateKey),
                 accountSigningKeyNonce: sodium.to_base64(newAccountSigningPrivNonce),
 

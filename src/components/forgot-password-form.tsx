@@ -1,7 +1,6 @@
 "use client";
 import { config } from "@/config/env";
 
-
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,7 +18,9 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {useRouter} from "next/navigation";
-import {useState} from "react";
+import {useState, useRef} from "react";
+import { Turnstile } from '@marsidev/react-turnstile'
+import type { TurnstileInstance } from '@marsidev/react-turnstile'
 
 export function ForgotPasswordForm({
   className,
@@ -29,6 +30,8 @@ export function ForgotPasswordForm({
   const [email, setEmail] = useState<string>("");
   const [submitted, setSubmitted] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
+  const [countdown, setCountdown] = useState<number>(0);
+  const turnstileRef = useRef<TurnstileInstance | null>(null)
 
   if (submitted) {
     return (
@@ -43,6 +46,18 @@ export function ForgotPasswordForm({
           <CardContent className="flex flex-col gap-4">
             <Button onClick={() => router.push("/signin")}>
                 Return to sign in
+            </Button>
+            <Button 
+                variant="outline" 
+                disabled={countdown > 0} 
+                onClick={() => {
+                    if (countdown === 0) {
+                        setSubmitted(false);
+                        turnstileRef.current?.reset();
+                    }
+                }}
+            >
+                {countdown > 0 ? `Retry in ${countdown}s` : "Didn't receive it? Try again"}
             </Button>
           </CardContent>
         </Card>
@@ -72,29 +87,56 @@ export function ForgotPasswordForm({
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </Field>
+              
+              <Field>
+                  <Turnstile
+                    ref={turnstileRef}
+                    siteKey={config.turnstileSitekey}
+                  />
+              </Field>
+
               {error && <div className="text-red-500 text-sm text-center">{error}</div>}
               <Field>
                 <Button type="submit" onClick={(e) => {
                   e.preventDefault();
                   setError("");
+
+                  const turnstileToken = turnstileRef.current?.getResponse()
+                  if (!turnstileToken) {
+                    setError("Please complete the security check.");
+                    return;
+                  }
+
                   fetch(`${config.apiUrl}/v1/account/forgot-password`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email })
+                    body: JSON.stringify({ email, turnstileToken })
                   })
                   .then((res) => {
                     if (res.ok) {
                         setSubmitted(true);
+                        setCountdown(60);
+                        const interval = setInterval(() => {
+                            setCountdown((prev) => {
+                                if (prev <= 1) {
+                                    clearInterval(interval);
+                                    return 0;
+                                }
+                                return prev - 1;
+                            });
+                        }, 1000);
                     } else {
                         setError("Failed to send reset link.");
+                        turnstileRef.current?.reset();
                     }
                   })
                   .catch((err: Error) => {
                     setError("Failed to connect to server.");
+                    turnstileRef.current?.reset();
                   })
                 }}>Send Recovery Link</Button>
                 <FieldDescription className="text-center">
-                  Remember your password? <a href="#" onClick={()=>{router.push('/signin')}}>Sign in</a>
+                  Remember your password? <a href="#" onClick={(e)=>{e.preventDefault(); router.push('/signin')}}>Sign in</a>
                 </FieldDescription>
               </Field>
             </FieldGroup>

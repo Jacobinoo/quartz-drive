@@ -47,6 +47,8 @@ services:
 
   quartz-server:
     image: ${DOCKERHUB_USERNAME}/quartz-server:latest
+    logging:
+      driver: gcplogs
     env_file:
       - .env.production
     depends_on:

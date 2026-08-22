@@ -112,11 +112,15 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return apperrors.NewInternal(err)
 	}
-	tokenStr := fmt.Sprintf("%x", tokenBytes)
+
+	tokenString := fmt.Sprintf("%x", tokenBytes)
+
+	tokenHashBytes := sha256.Sum256([]byte(tokenString))
+	tokenHash := fmt.Sprintf("%x", tokenHashBytes)
 
 	token := model.PasswordResetToken{
 		UserID:    user.ID,
-		Token:     tokenStr,
+		TokenHash: tokenHash,
 		ExpiresAt: time.Now().Add(15 * time.Minute),
 	}
 
@@ -124,7 +128,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewInternal(err)
 	}
 
-	magicLink := fmt.Sprintf("%s/reset-password?token=%s", config.Cfg.App.FrontendURL, tokenStr)
+	magicLink := fmt.Sprintf("%s/reset-password?token=%s", config.Cfg.App.FrontendURL, tokenString)
 
 	// Send email using Resend
 	if err := email.SendPasswordReset(r.Context(), req.Email, magicLink); err != nil {
@@ -166,8 +170,11 @@ func (h *Handler) VerifyResetCode(w http.ResponseWriter, r *http.Request) error 
 		return apperrors.NewBadRequest("Request body is invalid", err)
 	}
 
+	tokenHashBytes := sha256.Sum256([]byte(req.Token))
+	tokenHash := fmt.Sprintf("%x", tokenHashBytes)
+
 	var token model.PasswordResetToken
-	if err := h.db.Where("token = ? AND expires_at > ?", req.Token, time.Now()).First(&token).Error; err != nil {
+	if err := h.db.Where("token_hash = ? AND expires_at > ?", tokenHash, time.Now()).First(&token).Error; err != nil {
 		return apperrors.NewBadRequest("invalid or expired token", err)
 	}
 

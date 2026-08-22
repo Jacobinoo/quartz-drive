@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"quartz/config"
 	"quartz/internal/bindings"
@@ -51,6 +52,11 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 	var req ForgotPasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return apperrors.NewBadRequest("Request body is invalid", err)
+	}
+
+	if req.TurnstileToken == "" {
+		slog.Debug("no turnstile token in request body")
+		return apperrors.NewBadRequest("no turntile token in request", fmt.Errorf("no turnstile token in request"))
 	}
 
 	cfip := r.Header.Get("CF-Connecting-IP")
@@ -157,6 +163,7 @@ type VerifyCodeRequest struct {
 
 type VerifyCodeResponse struct {
 	Status       string      `json:"status"`
+	Email        string      `json:"email"`
 	RecoveryKeys dto.KeysDTO `json:"recoveryKeys"`
 }
 
@@ -174,7 +181,7 @@ func (h *Handler) VerifyResetCode(w http.ResponseWriter, r *http.Request) error 
 	tokenHash := fmt.Sprintf("%x", tokenHashBytes)
 
 	var token model.PasswordResetToken
-	if err := h.db.Where("token_hash = ? AND expires_at > ?", tokenHash, time.Now()).First(&token).Error; err != nil {
+	if err := h.db.Preload("User").Where("token_hash = ? AND expires_at > ?", tokenHash, time.Now()).First(&token).Error; err != nil {
 		return apperrors.NewBadRequest("invalid or expired token", err)
 	}
 
@@ -185,6 +192,7 @@ func (h *Handler) VerifyResetCode(w http.ResponseWriter, r *http.Request) error 
 
 	res := VerifyCodeResponse{
 		Status: "ok",
+		Email:  token.User.Email,
 		RecoveryKeys: dto.KeysDTO{
 			MasterKdfSalt:              keyStore.MasterKdfSalt,
 			AccountEncryptionPublicKey: keyStore.AccountEncryptionPublicKey,

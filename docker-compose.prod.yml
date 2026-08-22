@@ -74,18 +74,18 @@ services:
           memory: 32M
     restart: unless-stopped
 
-  fluent-bit:
-    image: cr.fluentbit.io/fluent/fluent-bit:latest
-    env_file:
-      - .env.production
-    volumes:
-      - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
-      - ./parsers_custom.conf:/fluent-bit/etc/parsers_custom.conf:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-    deploy:
-      resources:
-        limits:
-          memory: 32M
-        reservations:
-          memory: 16M
-    restart: unless-stopped
+#  fluent-bit:
+#    image: cr.fluentbit.io/fluent/fluent-bit:latest
+#    env_file:
+#      - .env.production
+#    volumes:
+#      - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+#      - ./parsers_custom.conf:/fluent-bit/etc/parsers_custom.conf:ro
+#      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+#    deploy:
+#      resources:
+#        limits:
+#          memory: 32M
+#        reservations:
+#          memory: 16M
+#    restart: unless-stopped

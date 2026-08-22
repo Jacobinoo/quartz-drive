@@ -214,7 +214,6 @@ func (h *Handler) VerifyResetCode(w http.ResponseWriter, r *http.Request) error 
 }
 
 type ResetM1 struct {
-	Email               string `json:"email"`
 	Token               string `json:"token"`
 	RegistrationRequest string `json:"registrationRequest"`
 }
@@ -229,13 +228,11 @@ func (h *Handler) ResetPasswordM1(w http.ResponseWriter, r *http.Request) error 
 		return apperrors.NewBadRequest("Request body is invalid", err)
 	}
 
-	var user model.User
-	if err := h.db.Where("email = ?", m1.Email).First(&user).Error; err != nil {
-		return apperrors.NewBadRequest("invalid request", err)
-	}
+	tokenHashBytes := sha256.Sum256([]byte(m1.Token))
+	tokenHash := fmt.Sprintf("%x", tokenHashBytes)
 
 	var token model.PasswordResetToken
-	if err := h.db.Where("user_id = ? AND token = ? AND expires_at > ?", user.ID, m1.Token, time.Now()).First(&token).Error; err != nil {
+	if err := h.db.Preload("User").Where("token_hash = ? AND expires_at > ?", tokenHash, time.Now()).First(&token).Error; err != nil {
 		return apperrors.NewBadRequest("invalid or expired token", err)
 	}
 
@@ -248,7 +245,7 @@ func (h *Handler) ResetPasswordM1(w http.ResponseWriter, r *http.Request) error 
 	regResponse, err := bindings.StartRegistration(
 		h.opaqueSetup,
 		regReqBytes,
-		[]byte(user.ID.String()),
+		[]byte(token.User.ID.String()),
 	)
 	if err != nil {
 		return apperrors.NewBadRequest("registration failed", err)
@@ -256,7 +253,7 @@ func (h *Handler) ResetPasswordM1(w http.ResponseWriter, r *http.Request) error 
 
 	// Store the new nonce temporarily in redis
 	newNonce := uuid.New().String()
-	encryptedNonceData, err := crypto.EncryptRedisPayload([]byte(user.ID.String()))
+	encryptedNonceData, err := crypto.EncryptRedisPayload([]byte(token.User.ID.String()))
 	if err != nil {
 		return apperrors.NewInternal(err)
 	}
@@ -279,7 +276,6 @@ func (h *Handler) ResetPasswordM1(w http.ResponseWriter, r *http.Request) error 
 }
 
 type ResetM3 struct {
-	Email string      `json:"email"`
 	Token string      `json:"token"`
 	User  dto.UserDTO `json:"user"`
 }
@@ -294,13 +290,11 @@ func (h *Handler) ResetPasswordM3(w http.ResponseWriter, r *http.Request) error 
 		return apperrors.NewBadRequest("Provided request body is invalid", err)
 	}
 
-	var user model.User
-	if err := h.db.Where("email = ?", m3.Email).First(&user).Error; err != nil {
-		return apperrors.NewBadRequest("invalid request", err)
-	}
+	tokenHashBytes := sha256.Sum256([]byte(m3.Token))
+	tokenHash := fmt.Sprintf("%x", tokenHashBytes)
 
 	var token model.PasswordResetToken
-	if err := h.db.Where("user_id = ? AND token = ? AND expires_at > ?", user.ID, m3.Token, time.Now()).First(&token).Error; err != nil {
+	if err := h.db.Preload("User").Where("token_hash = ? AND expires_at > ?", tokenHash, time.Now()).First(&token).Error; err != nil {
 		return apperrors.NewBadRequest("invalid or expired token", err)
 	}
 
@@ -311,7 +305,7 @@ func (h *Handler) ResetPasswordM3(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	storedUserIDBytes, err := crypto.DecryptRedisPayload(storedEncryptedUserID)
-	if err != nil || string(storedUserIDBytes) != user.ID.String() {
+	if err != nil || string(storedUserIDBytes) != token.User.ID.String() {
 		return apperrors.NewBadRequest("invalid registration nonce", err)
 	}
 
@@ -330,7 +324,7 @@ func (h *Handler) ResetPasswordM3(w http.ResponseWriter, r *http.Request) error 
 
 	err = h.db.Transaction(func(tx *gorm.DB) error {
 		// Update user registration record
-		if err := tx.Model(&user).Updates(map[string]interface{}{
+		if err := tx.Model(&token.User).Updates(map[string]interface{}{
 			"registration_record": base64.RawURLEncoding.EncodeToString(passwordFileRecord),
 			"registration_nonce":  m3.User.APAKE.RegistrationNonce,
 		}).Error; err != nil {
@@ -339,7 +333,7 @@ func (h *Handler) ResetPasswordM3(w http.ResponseWriter, r *http.Request) error 
 
 		// Update keystore with newly encrypted standard keys
 		// Recovery keys remain the same (unless frontend re-encrypts them too)
-		if err := tx.Model(&model.UserKeyStore{}).Where("user_id = ?", user.ID).Updates(map[string]interface{}{
+		if err := tx.Model(&model.UserKeyStore{}).Where("user_id = ?", token.User.ID).Updates(map[string]interface{}{
 			"master_kdf_salt":                          m3.User.Keys.MasterKdfSalt,
 			"encrypted_account_encryption_private_key": m3.User.Keys.EncryptedAccountEncryptionPrivateKey,
 			"account_encryption_key_nonce":             m3.User.Keys.AccountEncryptionKeyNonce,

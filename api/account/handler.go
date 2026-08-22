@@ -14,9 +14,15 @@ import (
 	"quartz/internal/dto"
 	"quartz/internal/model"
 	apperrors "quartz/pkg/app-errors"
+	"quartz/pkg/captcha"
+	"quartz/pkg/crypto"
 	"quartz/pkg/email"
 	"time"
 
+	"crypto/sha256"
+	"encoding/hex"
+
+	"github.com/go-redis/redis_rate/v10"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
@@ -33,7 +39,8 @@ func NewHandler(db *gorm.DB, redisClient *redis.Client, opaqueSetup []byte) *Han
 }
 
 type ForgotPasswordRequest struct {
-	Email string `json:"email"`
+	Email          string `json:"email"`
+	TurnstileToken string `json:"turnstileToken"`
 }
 
 func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
@@ -46,8 +53,49 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("Request body is invalid", err)
 	}
 
+	cfip := r.Header.Get("CF-Connecting-IP")
+	if cfip == "" {
+		cfip = r.Header.Get("X-Forwarded-For")
+	}
+	if cfip == "" {
+		cfip = r.Header.Get("X-Real-IP")
+	}
+
+	success, errorsList, err := captcha.VerifyTurnstileToken(req.TurnstileToken, cfip)
+	if err != nil {
+		log.Printf("Turnstile verification failed: %v", err)
+		return apperrors.NewBadRequest("invalid turnstile token", err)
+	}
+	if !success {
+		log.Printf("Turnstile verification failed: %v", errorsList)
+		return apperrors.NewBadRequest("invalid turnstile token", nil)
+	}
+
+	emailHashBytes := sha256.Sum256([]byte(req.Email))
+	emailHash := hex.EncodeToString(emailHashBytes[:])
+
+	limiter := redis_rate.NewLimiter(h.redis)
+
+	// 3 per 24 hours
+	res24h, err := limiter.Allow(r.Context(), "password_reset:24h:"+emailHash, redis_rate.Limit{Rate: 3, Burst: 3, Period: 24 * time.Hour})
+	if err == nil && res24h.Allowed == 0 {
+		log.Printf("Rate limit (24h) exceeded for forgot password: %s", req.Email)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		return nil
+	}
+
+	// 1 per 1 minute
+	res1m, err := limiter.Allow(r.Context(), "password_reset:1m:"+emailHash, redis_rate.Limit{Rate: 1, Burst: 1, Period: time.Minute})
+	if err == nil && res1m.Allowed == 0 {
+		log.Printf("Rate limit (1m) exceeded for forgot password: %s", req.Email)
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		return nil
+	}
+
 	var user model.User
-	err := h.db.Where("email = ?", req.Email).First(&user).Error
+	err = h.db.Where("email = ?", req.Email).First(&user).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return apperrors.NewInternal(err)
 	}
@@ -55,10 +103,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 		// Don't leak whether user exists, we won't send an email either way
 		log.Printf("ForgotPasswordRequest: email not found, silently failing")
 		w.WriteHeader(http.StatusOK)
-		err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-		if err != nil {
-			return apperrors.NewInternal(err)
-		}
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 		return nil
 	}
 
@@ -196,7 +241,12 @@ func (h *Handler) ResetPasswordM1(w http.ResponseWriter, r *http.Request) error 
 
 	// Store the new nonce temporarily in redis
 	newNonce := uuid.New().String()
-	err = h.redis.Set(context.Background(), "reset:nonce:"+newNonce, user.ID.String(), 15*time.Minute).Err()
+	encryptedNonceData, err := crypto.EncryptRedisPayload([]byte(user.ID.String()))
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	err = h.redis.Set(context.Background(), "reset:nonce:"+newNonce, encryptedNonceData, 15*time.Minute).Err()
 	if err != nil {
 		return apperrors.NewInternal(err)
 	}
@@ -240,8 +290,13 @@ func (h *Handler) ResetPasswordM3(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	// Verify the nonce
-	storedUserID, err := h.redis.Get(context.Background(), "reset:nonce:"+m3.User.APAKE.RegistrationNonce).Result()
-	if err != nil || storedUserID != user.ID.String() {
+	storedEncryptedUserID, err := h.redis.Get(context.Background(), "reset:nonce:"+m3.User.APAKE.RegistrationNonce).Result()
+	if err != nil {
+		return apperrors.NewBadRequest("invalid registration nonce", err)
+	}
+
+	storedUserIDBytes, err := crypto.DecryptRedisPayload(storedEncryptedUserID)
+	if err != nil || string(storedUserIDBytes) != user.ID.String() {
 		return apperrors.NewBadRequest("invalid registration nonce", err)
 	}
 

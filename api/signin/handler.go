@@ -13,8 +13,9 @@ import (
 	"quartz/internal/bindings"
 	"quartz/internal/dto"
 	"quartz/internal/model"
-	apperrors "quartz/pkg/app-errors"
+	"quartz/pkg/app-errors"
 	"quartz/pkg/captcha"
+	"quartz/pkg/crypto"
 	"quartz/pkg/dpop"
 	"quartz/pkg/token"
 
@@ -110,7 +111,14 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 			"email":            m1.Email,
 		}
 		nonceJSON, _ := json.Marshal(nonceData)
-		h.redis.Set(context.Background(), "login:nonce:"+nonce, nonceJSON, 30*time.Second)
+
+		encryptedJSON, err := crypto.EncryptRedisPayload(nonceJSON)
+		if err != nil {
+			log.Printf("failed to encrypt login nonce: %v", err)
+			return apperrors.NewInternal(err)
+		}
+
+		h.redis.Set(context.Background(), "login:nonce:"+nonce, encryptedJSON, 30*time.Second)
 
 		m2 = dto.M2Login{
 			Status:        "ok",
@@ -154,13 +162,18 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Fetch from Redis
-	nonceJSON, err := h.redis.Get(context.Background(), "login:nonce:"+m3.Nonce).Result()
+	encryptedNonceJSON, err := h.redis.Get(context.Background(), "login:nonce:"+m3.Nonce).Result()
 	if err != nil {
 		return apperrors.NewBadRequest("invalid or expired nonce", err)
 	}
 
+	nonceJSONBytes, err := crypto.DecryptRedisPayload(encryptedNonceJSON)
+	if err != nil {
+		return apperrors.NewBadRequest("failed to decrypt nonce data", err)
+	}
+
 	var nonceData map[string]string
-	json.Unmarshal([]byte(nonceJSON), &nonceData)
+	json.Unmarshal(nonceJSONBytes, &nonceData)
 
 	serverLoginState, _ := base64.RawURLEncoding.DecodeString(nonceData["serverLoginState"])
 	email := nonceData["email"]

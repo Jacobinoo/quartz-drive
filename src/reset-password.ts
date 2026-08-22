@@ -3,21 +3,21 @@ import * as opaque from '@serenity-kit/opaque'
 import { Base64String } from "@/UtilTypes";
 import { getSodium } from "@/lib/crypto/sodium";
 
-export async function resetPassword(email: string, token: string, recoveryPhrase: string, newPassword: string) {
+export async function resetPassword(token: string, recoveryPhrase: string, newPassword: string) {
     const sodium = await getSodium();
 
     // 1. Verify token and get recovery keys
     const verifyResponse = await fetch(`${config.apiUrl}/v1/account/verify-reset-code`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, token })
+        body: JSON.stringify({ token })
     });
 
     if (!verifyResponse.ok) {
         throw new Error("Invalid or expired reset link");
     }
 
-    const { recoveryKeys } = await verifyResponse.json();
+    const { recoveryKeys, email } = await verifyResponse.json();
     const oldMasterSalt = sodium.from_base64(recoveryKeys.masterKdfSalt);
 
     // 2. Derive the recovery key using the phrase and old master salt
@@ -61,7 +61,7 @@ export async function resetPassword(email: string, token: string, recoveryPhrase
     const m1Response = await fetch(`${config.apiUrl}/v1/account/reset-password/m1`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, token, registrationRequest })
+        body: JSON.stringify({ token, registrationRequest })
     });
 
     if (!m1Response.ok) {
@@ -148,10 +148,8 @@ export async function resetPassword(email: string, token: string, recoveryPhrase
 
     // 7. Send M3 payload (With the newly encrypted Recovery Keys so they match the new salt!)
     const m3 = {
-        email,
         token,
         user: {
-            email,
             aPAKE: {
                 registrationRecord: registrationRecord,
                 registrationNonce: nonce,

@@ -26,9 +26,8 @@ export function ResetPasswordForm({
 }: React.ComponentProps<"div">) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+
   const token = searchParams.get("token") || "";
-  const email = searchParams.get("email") || "";
 
   const [recoveryPhrase, setRecoveryPhrase] = useState<string>("");
   const [newPassword, setNewPassword] = useState<string>("");
@@ -36,7 +35,7 @@ export function ResetPasswordForm({
   const [loading, setLoading] = useState<boolean>(false);
   const [success, setSuccess] = useState<boolean>(false);
 
-  if (!token || !email) {
+  if (!token) {
     return (
         <div className={cn("flex flex-col gap-6", className)} {...props}>
             <Card>
@@ -82,7 +81,7 @@ export function ResetPasswordForm({
         <CardHeader className="text-center">
           <CardTitle className="text-xl">Recover Account</CardTitle>
           <CardDescription>
-            Enter your 12-word recovery phrase and a new password for {email}.
+            Enter your 12-word recovery phrase and a new password.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -112,8 +111,8 @@ export function ResetPasswordForm({
                   e.preventDefault();
                   setError("");
                   setLoading(true);
-                  
-                  resetPassword(email, token, recoveryPhrase, newPassword)
+
+                  resetPassword(token, recoveryPhrase, newPassword)
                       .then(() => {
                         setSuccess(true);
                         setLoading(false);

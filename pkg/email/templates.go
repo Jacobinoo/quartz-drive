@@ -13,7 +13,7 @@ type TemplateData struct {
 	FrontendURL string
 }
 
-// The Base Layout (Contains Header, Footer, and the {{template "content"}} injection point)
+// The Base Layout (Contains Header, Footer, and the {{template "content"}} injection point + additional footer text {{template "footerAdditionalText"}} injection point)
 const baseLayoutHTML = `
 <!DOCTYPE html>
 <html>
@@ -42,7 +42,7 @@ const baseLayoutHTML = `
         <tr>
             <td align="center" style="padding: 0 20px 40px 20px;">
                 <p style="color: #6b7280; font-size: 12px; margin: 0 0 10px 0; text-align: center;">
-                    This email was sent automatically. If you didn't request this action, please ignore it and your account will remain secure.
+					{{template "footerAdditionalText" .}}
                 </p>
                 <p style="color: #6b7280; font-size: 12px; margin: 0; text-align: center;">
                     &copy; 2026 Quartz Drive. 
@@ -56,7 +56,7 @@ const baseLayoutHTML = `
 </html>
 `
 
-const passwordResetHTML = `
+const PasswordResetHTML = `
 {{define "content"}}
 <h2 style="color: #111827; margin: 0 0 20px 0; font-size: 20px; font-weight: 600;">Reset your password</h2>
 <p style="color: #374151; margin: 0 0 24px 0; font-size: 16px; line-height: 24px;">
@@ -80,17 +80,57 @@ const passwordResetHTML = `
 {{end}}
 `
 
-// RenderPasswordResetEmail parses the layout and injects the content
-func RenderPasswordResetEmail(data TemplateData) (string, error) {
+const PasswordResetFooterHTML = `
+{{define "footerAdditionalText"}}
+This email was sent automatically. If you didn't request this action, please ignore it and your account will remain secure.
+{{end}}`
+
+const SignupVerificationFooterHTML = `
+{{define "footerAdditionalText"}}
+This email was sent automatically because you created a Quartz Drive account.<br>If you didn't request this action, please ignore it, and the account assigned to your email will be deleted.
+{{end}}
+`
+
+const SignupVerificationHTML = `
+{{define "content"}}
+<h2 style="color: #111827; margin: 0 0 20px 0; font-size: 20px; font-weight: 600;">Verify your email address</h2>
+<p style="color: #374151; margin: 0 0 24px 0; font-size: 16px; line-height: 24px;">
+    Your Quartz Drive account (<strong>{{.Email}}</strong>) is almost ready to use.<br>To continue to Quartz Drive, please verify your email address.
+</p>
+
+<!-- Fallback button wrapper required for Outlook -->
+<table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 32px;">
+    <tr>
+        <td align="center" bgcolor="#111827" style="border-radius: 6px;">
+            <a href="{{.ActionURL}}" style="display: inline-block; padding: 14px 28px; font-size: 16px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 6px; background-color: #111827; border: 1px solid #111827;">Verify your email address</a>
+        </td>
+    </tr>
+</table>
+
+<p style="color: #6b7280; margin: 0 0 8px 0; font-size: 13px;">Or copy and paste this link into your browser:</p>
+<p style="margin: 0; font-size: 13px; word-break: break-all;">
+    <a href="{{.ActionURL}}" style="color: #2563eb; text-decoration: underline;">{{.ActionURL}}</a>
+</p>
+<p style="color: #6b7280; margin: 24px 0 0 0; font-size: 13px;">For your security, this link will expire in 15 minutes, and the Quartz Drive account will be deleted.</p>
+{{end}}
+`
+
+// RenderEmail parses the layout and injects the content
+func RenderEmail(data TemplateData, html string, footerTextHtml string) (string, error) {
 	// Parse the base layout, then parse the child content into it
 	t, err := template.New("layout").Parse(baseLayoutHTML)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse layout: %w", err)
 	}
 
-	t, err = t.Parse(passwordResetHTML)
+	t, err = t.Parse(html)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse content: %w", err)
+	}
+
+	t, err = t.Parse(footerTextHtml)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse footer text: %w", err)
 	}
 
 	// Execute the template, passing our dynamic variables

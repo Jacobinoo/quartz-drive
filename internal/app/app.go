@@ -123,6 +123,7 @@ func initRouter(state *ServerState) *http.ServeMux {
 
 	if config.Cfg.App.Env == "development" {
 		rootMux.HandleFunc("GET /dev/email-preview/password-reset", httputils.Wrap(dev.PreviewPasswordReset))
+		rootMux.HandleFunc("GET /dev/email-preview/signup", httputils.Wrap(dev.PreviewSignupVerification))
 	}
 
 	rootMux.Handle("/v1/", http.StripPrefix("/v1", v1Mux))

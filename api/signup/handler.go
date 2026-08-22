@@ -1,10 +1,13 @@
 package signup
 
 import (
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"quartz/config"
 	"quartz/internal/bindings"
@@ -12,7 +15,6 @@ import (
 	"quartz/internal/model"
 	apperrors "quartz/pkg/app-errors"
 	"quartz/pkg/captcha"
-
 	// pb "quartz/proto"
 
 	"github.com/redis/go-redis/v9"
@@ -135,6 +137,46 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 		log.Println("bindings FinishRegistration call succeeded")
 	}
 
+	var user model.User
+	err = h.db.First(&user, "email = ?", m3.User.Email).Error
+
+	if err == nil {
+		slog.Debug("user already signed up, preventing enum attacks by faking status ok")
+		w.WriteHeader(http.StatusCreated)
+		err = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		if err != nil {
+			return apperrors.NewInternal(err)
+		}
+		return nil
+	}
+
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return apperrors.NewInternal(err)
+	}
+
+	slog.Debug("user by email not found, will sign up")
+
+	// Generate secure token
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return apperrors.NewInternal(err)
+	}
+	//tokenStr := fmt.Sprintf("%x", tokenBytes)
+
+	//magicLink := fmt.Sprintf("%s/verify-email#token=%s", config.Cfg.App.FrontendURL, tokenStr)
+
+	//if err := email.SendSignupVerification(r.Context(), m3.User.Email, magicLink); err != nil {
+	//	log.Printf("Failed to send email: %v", err)
+	//
+	//	// Fallback for local development if Resend isn't configured yet
+	//	if config.Cfg.Env == "development" {
+	//		fmt.Printf("LOCAL DEV MAGIC LINK FOR %s: %s\n", req.Email, magicLink)
+	//		// Continue returning 200 OK so the dev can copy the link from the terminal
+	//	} else {
+	//		return apperrors.NewInternal(err)
+	//	}
+	//}
+
 	m3.User.APAKE.RegistrationRecord = base64.RawURLEncoding.EncodeToString(passwordFileRecord)
 
 	err = h.db.Transaction(func(tx *gorm.DB) error {
@@ -241,7 +283,7 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	if err != nil {
-		return apperrors.NewInternal(err)
+		return err
 	}
 
 	w.WriteHeader(http.StatusCreated)

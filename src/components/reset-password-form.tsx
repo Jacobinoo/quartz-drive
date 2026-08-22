@@ -26,24 +26,61 @@ export function ResetPasswordForm({
 }: React.ComponentProps<"div">) {
   const router = useRouter();
   const searchParams = useSearchParams();
-
   const token = searchParams.get("token") || "";
 
   const [verifyResponse, setVerifyResponse] = useState<VerifyResponse | null>(null)
+  const [isVerifying, setIsVerifying] = useState<boolean>(true);
+  const [verifyError, setVerifyError] = useState<string>("");
+
   const [recoveryPhrase, setRecoveryPhrase] = useState<string>("");
   const [newPassword, setNewPassword] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [success, setSuccess] = useState<boolean>(false);
 
-  if (!token) {
+  useEffect(() => {
+    if (!token) {
+      setIsVerifying(false);
+      return;
+    }
+
+    verifyToken(token)
+      .then((d) => {
+        setVerifyResponse(d);
+        setIsVerifying(false);
+      })
+      .catch((err: Error) => {
+        setVerifyError(err.message || "Provided token is invalid.");
+        setIsVerifying(false);
+      });
+  }, [token]);
+
+  if (isVerifying) {
+    return (
+      <div className={cn("flex flex-col gap-6", className)} {...props}>
+        <Card>
+          <CardHeader className="text-center">
+            <CardTitle className="text-xl">Verifying Link...</CardTitle>
+            <CardDescription>
+              Please wait while we verify your password reset link.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex justify-center py-6">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!token || verifyError || !verifyResponse) {
     return (
         <div className={cn("flex flex-col gap-6", className)} {...props}>
             <Card>
                 <CardHeader className="text-center">
                     <CardTitle className="text-xl">Invalid Link</CardTitle>
                     <CardDescription>
-                        This password reset link is invalid or missing required parameters.
+                        {verifyError || "This password reset link is invalid or missing required parameters."}
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-4">
@@ -76,22 +113,24 @@ export function ResetPasswordForm({
       )
   }
 
-  useEffect(() => {
-    if (!token) return;
+  function submitForm(){
+    if (verifyResponse == null) {
+      throw new Error("verify response is null")
+    }
 
     setError("");
-    setLoading(true)
+    setLoading(true);
 
-    verifyToken(token)
-      .then((d) => {
-        setVerifyResponse(d);
-        setLoading(false);
-      })
-      .catch((err: Error) => {
-        setError(err.message || "Provided token is invalid.");
-        setLoading(false);
-      });
-  }, [token]);
+    resetPassword(verifyResponse, token, recoveryPhrase, newPassword)
+        .then(() => {
+          setSuccess(true);
+          setLoading(false);
+        })
+        .catch((err: Error) => {
+          setError(err.message)
+          setLoading(false);
+        })
+  }
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
@@ -103,7 +142,7 @@ export function ResetPasswordForm({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form action="#" method="POST">
+          <form action="#" method="POST" onSubmit={(e)=>e.preventDefault()}>
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="recoveryPhrase">Recovery Phrase (12 Words)</FieldLabel>
@@ -125,24 +164,7 @@ export function ResetPasswordForm({
               </Field>
               {error && <div className="text-red-500 text-sm text-center">{error}</div>}
               <Field>
-                <Button type="submit" disabled={loading} onClick={(e) => {
-                  e.preventDefault();
-
-                  if (verifyResponse == null) { return }
-
-                  setError("");
-                  setLoading(true);
-
-                  resetPassword(verifyResponse, token, recoveryPhrase, newPassword)
-                      .then(() => {
-                        setSuccess(true);
-                        setLoading(false);
-                      })
-                      .catch((err: Error) => {
-                        setError(err.message || "Failed to reset password. Check your recovery phrase.");
-                        setLoading(false);
-                      })
-                }}>
+                <Button type="submit" disabled={loading} onClick={(e) => submitForm()}>
                   {loading ? "Recovering..." : "Reset Password"}
                 </Button>
               </Field>

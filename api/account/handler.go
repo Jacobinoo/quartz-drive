@@ -134,7 +134,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewInternal(err)
 	}
 
-	magicLink := fmt.Sprintf("%s/reset-password?token=%s", config.Cfg.App.FrontendURL, tokenString)
+	magicLink := fmt.Sprintf("%s/reset-password#token=%s", config.Cfg.App.FrontendURL, tokenString)
 
 	// Send email using Resend
 	if err := email.SendPasswordReset(r.Context(), req.Email, magicLink); err != nil {

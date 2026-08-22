@@ -265,7 +265,7 @@ export async function signUp(email: string, password: string, captchaToken:strin
 
   const m3ResponseData = await m3Response.json();
 
-  if (m3Response.status != 200) {
+  if (m3Response.status < 200 && m3Response.status >= 300) {
     throw new Error("Could not sign up.")
   }
 

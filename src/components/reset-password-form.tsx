@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {useRouter, useSearchParams} from "next/navigation";
-import {useState} from "react";
+import {useState, useEffect} from "react";
 import {resetPassword, VerifyResponse, verifyToken} from "@/reset-password";
 
 export function ResetPasswordForm({
@@ -76,18 +76,22 @@ export function ResetPasswordForm({
       )
   }
 
-  setError("");
-  setLoading(true)
+  useEffect(() => {
+    if (!token) return;
 
-  verifyToken(token)
-    .then((d) => {
-      setVerifyResponse(d);
-      setLoading(false);
-    })
-    .catch((err: Error) => {
-      setError(err.message || "Provided token is invalid.");
-      setLoading(false);
-    })
+    setError("");
+    setLoading(true)
+
+    verifyToken(token)
+      .then((d) => {
+        setVerifyResponse(d);
+        setLoading(false);
+      })
+      .catch((err: Error) => {
+        setError(err.message || "Provided token is invalid.");
+        setLoading(false);
+      });
+  }, [token]);
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>

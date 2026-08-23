@@ -48,7 +48,7 @@ services:
   quartz-server:
     image: ${DOCKERHUB_USERNAME}/quartz-server:latest
     logging:
-      driver: gcplogs
+      driver: "nanoandrew4/ngcplogs:linux-amd64-v1.3.0"
     env_file:
       - .env.production
     depends_on:

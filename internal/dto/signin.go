@@ -53,7 +53,6 @@ func (TrustedUserInformation) TableName() string {
 type M1Login struct {
 	Email        string `json:"email"`
 	LoginRequest string `json:"loginRequest"`
-	Token        string `json:"token"`
 }
 
 type M3Login struct {

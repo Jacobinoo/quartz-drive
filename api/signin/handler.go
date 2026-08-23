@@ -7,19 +7,16 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"log"
+	"errors"
 	"log/slog"
 	"net/http"
 	"quartz/internal/bindings"
 	"quartz/internal/dto"
 	"quartz/internal/model"
 	"quartz/pkg/app-errors"
-	"quartz/pkg/captcha"
 	"quartz/pkg/crypto"
 	"quartz/pkg/dpop"
 	"quartz/pkg/token"
-	"strings"
-
 	// pb "quartz/proto"
 	"time"
 
@@ -48,36 +45,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 
 	var m1 dto.M1Login
 	if err := json.NewDecoder(r.Body).Decode(&m1); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
 		return apperrors.NewBadRequest("invalid request", err)
-	}
-
-	cfip := r.Header.Get("CF-Connecting-IP")
-	if cfip == "" {
-		cfip = r.Header.Get("X-Forwarded-For")
-	}
-	if cfip == "" {
-		cfip = r.Header.Get("X-Real-IP")
-	}
-
-	success, errors, err := captcha.VerifyTurnstileToken(m1.Token, cfip)
-	if err != nil {
-		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errors, ","), "error", err)
-		return apperrors.NewBadRequest("invalid token", err)
-	}
-	if !success {
-		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errors, ","), "error", err)
-		return apperrors.NewBadRequest("invalid token", nil)
-	}
-
-	var userRegistrationRecord dto.UserRegistrationRecord
-	if err := h.db.Where("email = ?", m1.Email).First(&userRegistrationRecord).Error; err != nil {
-		return apperrors.NewNotFound("user not found", err)
-	}
-
-	regRecordBytes, err := base64.RawURLEncoding.DecodeString(userRegistrationRecord.RegistrationRecord)
-	if err != nil {
-		return apperrors.NewInternal(err)
 	}
 
 	loginReqBytes, err := base64.RawURLEncoding.DecodeString(m1.LoginRequest)
@@ -85,10 +53,23 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid base64 in login request", err)
 	}
 
-	log.Printf("DEBUG: opaqueSetup len=%d", len(h.opaqueSetup))
-	log.Printf("DEBUG: regRecordBytes len=%d", len(regRecordBytes))
-	log.Printf("DEBUG: loginReqBytes len=%d", len(loginReqBytes))
-	log.Printf("DEBUG: credentialID len=%d", len(userRegistrationRecord.CredentialID.String()))
+	var userRegistrationRecord dto.UserRegistrationRecord
+	if err := h.db.Where("email = ?", m1.Email).First(&userRegistrationRecord).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewNotFound("user not found", err)
+		}
+		return apperrors.NewInternal(err)
+	}
+
+	regRecordBytes, err := base64.RawURLEncoding.DecodeString(userRegistrationRecord.RegistrationRecord)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	slog.Debug("DEBUG: opaqueSetup", "len", len(h.opaqueSetup))
+	slog.Debug("DEBUG: regRecordBytes", "len", len(regRecordBytes))
+	slog.Debug("DEBUG: loginReqBytes", "len", len(loginReqBytes))
+	slog.Debug("DEBUG: credentialID", "len", len(userRegistrationRecord.CredentialID.String()))
 
 	startLogRes, serverLoginState, err := bindings.StartLogin(
 		h.opaqueSetup,
@@ -102,7 +83,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 	if err == nil {
 		// Generate nonce
 		nonceBytes := make([]byte, 32)
-		rand.Read(nonceBytes)
+		_, _ = rand.Read(nonceBytes)
 		nonce := hex.EncodeToString(nonceBytes)
 
 		// Store in Redis
@@ -110,15 +91,20 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 			"serverLoginState": base64.RawURLEncoding.EncodeToString(serverLoginState),
 			"email":            m1.Email,
 		}
-		nonceJSON, _ := json.Marshal(nonceData)
-
-		encryptedJSON, err := crypto.EncryptRedisPayload(nonceJSON)
+		nonceJSON, err := json.Marshal(nonceData)
 		if err != nil {
-			log.Printf("failed to encrypt login nonce: %v", err)
 			return apperrors.NewInternal(err)
 		}
 
-		h.redis.Set(context.Background(), "login:nonce:"+nonce, encryptedJSON, 30*time.Second)
+		encryptedJSON, err := crypto.EncryptRedisPayload(nonceJSON)
+		if err != nil {
+			return apperrors.NewInternal(err)
+		}
+
+		set := h.redis.Set(context.Background(), "login:nonce:"+nonce, encryptedJSON, 30*time.Second)
+		if set.Err() != nil {
+			return apperrors.NewInternal(err)
+		}
 
 		m2 = dto.M2Login{
 			Status:        "ok",
@@ -126,7 +112,8 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 			Nonce:         nonce,
 		}
 	} else {
-		log.Printf("bindings StartLogin call failed: %v", err)
+		slog.DebugContext(r.Context(), "bindings StartLogin call failed: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
 		m2 = dto.M2Login{
 			Status:        "not_ok",
 			LoginResponse: "",
@@ -136,7 +123,6 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 
 	err = json.NewEncoder(w).Encode(m2)
 	if err != nil {
-		log.Print(err)
 		return apperrors.NewInternal(err)
 	}
 	return nil
@@ -152,7 +138,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 	dpopHeader := r.Header.Get("DPoP")
 	thumbprint, err := dpop.ValidateDpopProof(dpopHeader, r)
 	if err != nil {
-		log.Printf("invalid dpop proof, err: %v", err)
+		slog.InfoContext(r.Context(), "invalid dpop proof", "error", err)
 		return apperrors.NewBadRequest("invalid dpop proof", err)
 	}
 
@@ -164,16 +150,22 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 	// Fetch from Redis
 	encryptedNonceJSON, err := h.redis.Get(context.Background(), "login:nonce:"+m3.Nonce).Result()
 	if err != nil {
-		return apperrors.NewBadRequest("invalid or expired nonce", err)
+		if errors.Is(err, redis.Nil) {
+			return apperrors.NewBadRequest("invalid or expired nonce", err)
+		}
+		return apperrors.NewInternal(err)
 	}
 
 	nonceJSONBytes, err := crypto.DecryptRedisPayload(encryptedNonceJSON)
 	if err != nil {
-		return apperrors.NewBadRequest("failed to decrypt nonce data", err)
+		return apperrors.NewInternal(err)
 	}
 
 	var nonceData map[string]string
-	json.Unmarshal(nonceJSONBytes, &nonceData)
+	err = json.Unmarshal(nonceJSONBytes, &nonceData)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 
 	serverLoginState, _ := base64.RawURLEncoding.DecodeString(nonceData["serverLoginState"])
 	email := nonceData["email"]
@@ -190,7 +182,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 	)
 
 	if err != nil {
-		log.Printf("bindings FinishLogin call failed: %v", err)
+		slog.DebugContext(r.Context(), "bindings FinishLogin call failed: %v", err)
 		return apperrors.NewUnauthorized("login failed", err)
 	}
 
@@ -205,10 +197,16 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 		First(&trustedUserInfo).Error
 
 	if err != nil {
-		return apperrors.NewNotFound("user not found", err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewNotFound("user not found", err)
+		}
+		return apperrors.NewInternal(err)
 	}
 
 	uaHeader := r.Header.Get("User-Agent")
+	if uaHeader == "" {
+		return apperrors.NewBadRequest("invalid user agent", err)
+	}
 	ua := useragent.New(uaHeader)
 
 	name, _ := ua.Browser()
@@ -271,7 +269,6 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 	})
 
 	if err := h.db.Create(&refreshTokenEntry).Error; err != nil {
-		log.Printf("failed to store login data: %v", err)
 		return apperrors.NewInternal(err)
 	}
 

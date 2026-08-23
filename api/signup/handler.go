@@ -157,7 +157,7 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 	slog.Debug("user by email not found, will sign up")
 
 	// Generate secure token
-	tokenBytes := make([]byte, 32)
+	tokenBytes := make([]byte, 64)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return apperrors.NewInternal(err)
 	}

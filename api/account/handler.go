@@ -82,22 +82,23 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 
 	limiter := redis_rate.NewLimiter(h.redis)
 
-	// 3 per 24 hours
-	res24h, err := limiter.Allow(r.Context(), "password_reset:24h:"+emailHash, redis_rate.Limit{Rate: 3, Burst: 3, Period: 24 * time.Hour})
-	if err == nil && res24h.Allowed == 0 {
-		log.Printf("Rate limit (24h) exceeded for forgot password: %s", req.Email)
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-		return nil
-	}
-
 	// 1 per 1 minute
 	res1m, err := limiter.Allow(r.Context(), "password_reset:1m:"+emailHash, redis_rate.Limit{Rate: 1, Burst: 1, Period: time.Minute})
-	if err == nil && res1m.Allowed == 0 {
-		log.Printf("Rate limit (1m) exceeded for forgot password: %s", req.Email)
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-		return nil
+	if err != nil {
+		//if redis is down, we still allow the request, just without rate limit protection
+		slog.Error("rate limiter error", "err", err)
+	} else if res1m.Allowed == 0 {
+		slog.Debug("Rate limit (1m) exceeded for forgot password.")
+		return apperrors.NewRateLimited("You are being ratelimited. Try again in a minute.")
+	}
+
+	// 3 per 24 hours
+	res24h, err := limiter.Allow(r.Context(), "password_reset:24h:"+emailHash, redis_rate.Limit{Rate: 3, Burst: 3, Period: 24 * time.Hour})
+	if err != nil {
+		slog.Error("rate limiter error", "err", err)
+	} else if res24h.Allowed == 0 {
+		slog.Debug("Rate limit (1m) exceeded for forgot password.")
+		return apperrors.NewRateLimited("You are being ratelimited. Too many password reset attempts for this email.")
 	}
 
 	var user model.User
@@ -114,7 +115,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	// Generate secure token
-	tokenBytes := make([]byte, 32)
+	tokenBytes := make([]byte, 64)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return apperrors.NewInternal(err)
 	}

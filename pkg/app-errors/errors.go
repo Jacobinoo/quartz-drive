@@ -33,6 +33,7 @@ const (
 	CodeNotFound         = "NOT_FOUND"
 	CodeInternal         = "INTERNAL_ERROR"
 	CodeQuotaExceeded    = "QUOTA_EXCEEDED"
+	CodeRateLimited      = "RATE_LIMITED"
 	CodeBadRequest       = "BAD_REQUEST"
 	CodeMethodNotAllowed = "METHOD_NOT_ALLOWED"
 	CodeConflict         = "CONFLICT"
@@ -118,6 +119,15 @@ func NewConflict(msg string, err error) *AppError {
 func NewQuotaExceeded(msg string) *AppError {
 	return &AppError{
 		Code:    CodeQuotaExceeded,
+		Message: msg,
+		Status:  http.StatusTooManyRequests,
+		Err:     nil,
+	}
+}
+
+func NewRateLimited(msg string) *AppError {
+	return &AppError{
+		Code:    CodeRateLimited,
 		Message: msg,
 		Status:  http.StatusTooManyRequests,
 		Err:     nil,

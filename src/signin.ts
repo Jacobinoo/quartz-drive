@@ -21,14 +21,14 @@ export async function signIn(email: string, password: string, token: string) {
     const m1 = {
         email: email,
       loginRequest: startLoginRequest,
-        token: token
     }
 
     // send opaque m1 and fetch m2 from response
     const res = await fetch(`${config.apiUrl}/v1/signin`, {
         method: "POST",
         headers: {
-            "Content-Type": "application/json",
+          "Content-Type": "application/json",
+          "X-Verify-Token": token,
         },
         body: JSON.stringify(m1)
     });

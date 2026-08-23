@@ -44,12 +44,28 @@ func (h *ContextHandler) Handle(ctx context.Context, r slog.Record) error {
 func InitLogger(env string) {
 	var baseHandler slog.Handler
 
+	opts := slog.HandlerOptions{
+		Level: slog.LevelInfo,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			// Rename "level" to "severity" for GCP
+			if a.Key == slog.LevelKey {
+				a.Key = "severity"
+			}
+			// Rename "msg" to "message" for GCP
+			if a.Key == slog.MessageKey {
+				a.Key = "message"
+			}
+			return a
+		},
+	}
+
 	if env == "development" {
 		// Pretty text format for local development
-		baseHandler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
+		opts.Level = slog.LevelDebug
+		baseHandler = slog.NewTextHandler(os.Stdout, &opts)
 	} else {
 		// Pure JSON format for production (perfect for DataDog/Grafana/Prometheus)
-		baseHandler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+		baseHandler = slog.NewJSONHandler(os.Stdout, &opts)
 	}
 
 	// Wrap the base handler with our custom ContextHandler

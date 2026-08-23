@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -15,6 +14,8 @@ import (
 	"quartz/internal/model"
 	apperrors "quartz/pkg/app-errors"
 	"quartz/pkg/captcha"
+	"strings"
+
 	// pb "quartz/proto"
 
 	"github.com/redis/go-redis/v9"
@@ -56,11 +57,11 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) error {
 
 	success, errors, err := captcha.VerifyCaptchaToken(m1.Token, cfip)
 	if err != nil {
-		fmt.Print(errors)
+		slog.WarnContext(r.Context(), "signup captcha verification error", "error", err, "errors", strings.Join(errors, ", "))
 		return apperrors.NewBadRequest("invalid token", err)
 	}
 	if !success {
-		fmt.Print(errors)
+		slog.WarnContext(r.Context(), "signup captcha verification error", "error", err, "errors", strings.Join(errors, ", "))
 		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
@@ -170,7 +171,7 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 	//
 	//	// Fallback for local development if Resend isn't configured yet
 	//	if config.Cfg.Env == "development" {
-	//		fmt.Printf("LOCAL DEV MAGIC LINK FOR %s: %s\n", req.Email, magicLink)
+	//		slog.Debug("LOCAL DEV MAGIC LINK", "email", req.Email, "magic_link", magicLink)
 	//		// Continue returning 200 OK so the dev can copy the link from the terminal
 	//	} else {
 	//		return apperrors.NewInternal(err)

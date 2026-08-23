@@ -39,7 +39,7 @@ func IssueRefreshToken() GeneratedRefreshToken {
 	}
 }
 
-func IssueAccessToken(fgpHash string, dpopJkt string, userID string, email string) (string, time.Time) {
+func IssueAccessToken(fgpHash string, dpopJkt string, userID string, email string, sessionId string, familyId string) (string, time.Time) {
 	var (
 		privateKey *ecdsa.PrivateKey
 		t          *jwt.Token
@@ -60,6 +60,8 @@ func IssueAccessToken(fgpHash string, dpopJkt string, userID string, email strin
 		"cnf": map[string]string{
 			"jkt": dpopJkt,
 		},
+		"sessionId": sessionId,
+		"familyId":  familyId,
 	})
 	s, _ = t.SignedString(privateKey)
 

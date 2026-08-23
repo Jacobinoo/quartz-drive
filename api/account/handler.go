@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"quartz/config"
@@ -18,6 +17,7 @@ import (
 	"quartz/pkg/captcha"
 	"quartz/pkg/crypto"
 	"quartz/pkg/email"
+	"strings"
 	"time"
 
 	"crypto/sha256"
@@ -69,11 +69,11 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 
 	success, errorsList, err := captcha.VerifyTurnstileToken(req.TurnstileToken, cfip)
 	if err != nil {
-		log.Printf("Turnstile verification failed: %v", err)
+		slog.WarnContext(r.Context(), "Turnstile verification failed", "error", err, "errors", strings.Join(errorsList, ", "))
 		return apperrors.NewBadRequest("invalid turnstile token", err)
 	}
 	if !success {
-		log.Printf("Turnstile verification failed: %v", errorsList)
+		slog.WarnContext(r.Context(), "Turnstile verification failed", "error", err, "errors", strings.Join(errorsList, ", "))
 		return apperrors.NewBadRequest("invalid turnstile token", nil)
 	}
 
@@ -108,7 +108,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 	}
 	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
 		// Don't leak whether user exists, we won't send an email either way
-		log.Printf("ForgotPasswordRequest: email not found, silently failing")
+		slog.Info("ForgotPasswordRequest: email not found, silently failing")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 		return nil
@@ -139,11 +139,9 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 
 	// Send email using Resend
 	if err := email.SendPasswordReset(r.Context(), req.Email, magicLink); err != nil {
-		log.Printf("Failed to send email: %v", err)
-
 		// Fallback for local development if Resend isn't configured yet
 		if config.Cfg.Env == "development" {
-			fmt.Printf("LOCAL DEV MAGIC LINK FOR %s: %s\n", req.Email, magicLink)
+			slog.Debug("LOCAL DEV MAGIC LINK", "email", req.Email, "magic_link", magicLink)
 			// Continue returning 200 OK so the dev can copy the link from the terminal
 		} else {
 			return apperrors.NewInternal(err)

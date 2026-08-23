@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"quartz/pkg/app-errors"
 	"quartz/pkg/contextkeys"
-	"quartz/pkg/logger"
 
 	"github.com/getsentry/sentry-go"
 )
@@ -26,15 +26,29 @@ func Wrap(h APIHandler) http.HandlerFunc {
 		ctx := r.Context()
 		reqID, _ := ctx.Value(contextkeys.RequestIDKey).(string)
 
-		// NEW: Catch panics, push to the sentryhttp context hub, and return JSON!
+		// Catch panics, push to the sentryhttp context hub, and return JSON!
 		defer func() {
 			if rec := recover(); rec != nil {
 				err := fmt.Errorf("panic: %v", rec)
-				logger.ErrorContext(ctx, "PANIC RECOVERED", err)
+				slog.ErrorContext(ctx, "PANIC RECOVERED", slog.Any("error", err))
 
 				if hub := sentry.GetHubFromContext(ctx); hub != nil {
 					hub.WithScope(func(scope *sentry.Scope) {
 						scope.SetTag("request_id", reqID)
+
+						if cfRay, ok := ctx.Value(contextkeys.CFRayKey).(string); ok && cfRay != "" {
+							scope.SetTag("cf_ray", cfRay)
+						}
+
+						if sessionID, ok := ctx.Value(contextkeys.SessionIDKey).(string); ok && sessionID != "" {
+							scope.SetTag("session_id", sessionID)
+						}
+						if familyID, ok := ctx.Value(contextkeys.FamilyIDKey).(string); ok && familyID != "" {
+							scope.SetTag("family_id", familyID)
+						}
+						if userID, ok := ctx.Value(contextkeys.UserIDKey).(string); ok && userID != "" {
+							scope.SetUser(sentry.User{ID: userID})
+						}
 						hub.Recover(rec)
 					})
 				}
@@ -60,10 +74,24 @@ func Wrap(h APIHandler) http.HandlerFunc {
 		if errors.As(err, &appErr) {
 			// Only push to Sentry and terminal logs if it's an actual 5xx Server Error
 			if appErr.Status >= 500 {
-				logger.ErrorContext(ctx, "Internal Server Error", appErr.Err)
+				slog.ErrorContext(ctx, "Internal Server Error", slog.Any("error", appErr.Err))
 				if hub := sentry.GetHubFromContext(ctx); hub != nil {
 					hub.WithScope(func(scope *sentry.Scope) {
 						scope.SetTag("request_id", reqID)
+
+						if cfRay, ok := ctx.Value(contextkeys.CFRayKey).(string); ok && cfRay != "" {
+							scope.SetTag("cf_ray", cfRay)
+						}
+
+						if sessionID, ok := ctx.Value(contextkeys.SessionIDKey).(string); ok && sessionID != "" {
+							scope.SetTag("session_id", sessionID)
+						}
+						if familyID, ok := ctx.Value(contextkeys.FamilyIDKey).(string); ok && familyID != "" {
+							scope.SetTag("family_id", familyID)
+						}
+						if userID, ok := ctx.Value(contextkeys.UserIDKey).(string); ok && userID != "" {
+							scope.SetUser(sentry.User{ID: userID})
+						}
 						hub.CaptureException(appErr.Err) // Capture the true underlying DB/System error!
 					})
 				}
@@ -81,10 +109,24 @@ func Wrap(h APIHandler) http.HandlerFunc {
 		}
 
 		// 2. If it's a completely unhandled, raw Go error
-		logger.ErrorContext(ctx, "Unhandled Raw Error", err)
+		slog.ErrorContext(ctx, "Unhandled Raw Error", slog.Any("error", err))
 		if hub := sentry.GetHubFromContext(ctx); hub != nil {
 			hub.WithScope(func(scope *sentry.Scope) {
 				scope.SetTag("request_id", reqID)
+
+				if cfRay, ok := ctx.Value(contextkeys.CFRayKey).(string); ok && cfRay != "" {
+					scope.SetTag("cf_ray", cfRay)
+				}
+
+				if sessionID, ok := ctx.Value(contextkeys.SessionIDKey).(string); ok && sessionID != "" {
+					scope.SetTag("session_id", sessionID)
+				}
+				if familyID, ok := ctx.Value(contextkeys.FamilyIDKey).(string); ok && familyID != "" {
+					scope.SetTag("family_id", familyID)
+				}
+				if userID, ok := ctx.Value(contextkeys.UserIDKey).(string); ok && userID != "" {
+					scope.SetUser(sentry.User{ID: userID})
+				}
 				hub.CaptureException(err)
 			})
 		}

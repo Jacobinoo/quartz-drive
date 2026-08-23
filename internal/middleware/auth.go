@@ -9,11 +9,12 @@ import (
 	"quartz/config"
 	"strings"
 
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	apperrors "quartz/pkg/app-errors"
 	"quartz/pkg/contextkeys"
 	"quartz/pkg/httputils"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 func AccessTokenMiddleware(next httputils.APIHandler) httputils.APIHandler {
@@ -61,9 +62,25 @@ func AccessTokenMiddleware(next httputils.APIHandler) httputils.APIHandler {
 		// Extract Email ('email')
 		email, _ := claims["email"].(string)
 
+		// Extract Session ID ('sessionId')
+		sessionIdStr, _ := claims["sessionId"].(string)
+		sessionId, err := uuid.Parse(sessionIdStr)
+		if err != nil {
+			return apperrors.NewUnauthorized("invalid session ID in token", err)
+		}
+
+		// Extract Family ID ('familyId')
+		familyIdStr, _ := claims["familyId"].(string)
+		familyId, err := uuid.Parse(familyIdStr)
+		if err != nil {
+			return apperrors.NewUnauthorized("invalid family ID in token", err)
+		}
+
 		// 4. Inject Data into Context
 		ctx := context.WithValue(r.Context(), contextkeys.UserIDKey, userID)
 		ctx = context.WithValue(ctx, contextkeys.EmailKey, email)
+		ctx = context.WithValue(ctx, contextkeys.SessionIDKey, sessionId)
+		ctx = context.WithValue(ctx, contextkeys.FamilyIDKey, familyId)
 
 		log.Printf("context %s %s", email, userID)
 

@@ -1,11 +1,11 @@
 package main
 
 import (
-	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"quartz/config"
 	"quartz/internal/app"
+	"quartz/pkg/logger"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -20,15 +20,17 @@ func main() {
 		envFile = ".env." + appEnv
 	}
 
+	logger.InitLogger(appEnv)
+
 	// If PORT is already set by systemd, skip loading the .env file so we don't accidentally override it
 	if os.Getenv("PORT") == "" {
 		err := godotenv.Load(envFile)
 		if err != nil && appEnv != "" {
 			// If .env.development fails, fallback to standard .env
-			log.Printf("Could not load %s, falling back to .env", envFile)
+			slog.Error("Could not load %s, falling back to .env", "envFile", envFile)
 			godotenv.Load(".env")
 		} else if err != nil {
-			log.Printf("No .env file found. Falling back to system environment variables.")
+			slog.Warn("No .env file found. Falling back to system environment variables.")
 		}
 	}
 
@@ -42,10 +44,10 @@ func main() {
 			TracesSampleRate: 1.0,
 		})
 		if err != nil {
-			log.Fatalf("sentry.Init: %s", err)
+			slog.Error("sentry could not be initialized: ", "error", err)
 		}
 		defer sentry.Flush(2 * time.Second)
-		fmt.Println("Sentry initialized successfully.")
+		slog.Info("Sentry initialized successfully.")
 	}
 
 	app.Run()

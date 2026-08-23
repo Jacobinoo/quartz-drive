@@ -9,30 +9,50 @@ import (
 
 var Log *slog.Logger
 
+// ContextHandler is a custom slog.Handler that automatically extracts context values
+// and appends them to every log record.
+type ContextHandler struct {
+	slog.Handler
+}
+
+// Handle intercepts the log record, extracts relevant context keys, and passes it to the underlying handler.
+func (h *ContextHandler) Handle(ctx context.Context, r slog.Record) error {
+	// Extract cf-ray
+	if cfRay, ok := ctx.Value(contextkeys.CFRayKey).(string); ok && cfRay != "" {
+		r.AddAttrs(slog.String("cf_ray", cfRay))
+	}
+
+	// Extract standard IDs
+	if reqID, ok := ctx.Value(contextkeys.RequestIDKey).(string); ok && reqID != "" {
+		r.AddAttrs(slog.String("request_id", reqID))
+	}
+	if sessionID, ok := ctx.Value(contextkeys.SessionIDKey).(string); ok && sessionID != "" {
+		r.AddAttrs(slog.String("session_id", sessionID))
+	}
+	if familyID, ok := ctx.Value(contextkeys.FamilyIDKey).(string); ok && familyID != "" {
+		r.AddAttrs(slog.String("family_id", familyID))
+	}
+
+	// Extract UserID if the request is authenticated
+	if userID, ok := ctx.Value(contextkeys.UserIDKey).(string); ok && userID != "" {
+		r.AddAttrs(slog.String("user_id", userID))
+	}
+
+	return h.Handler.Handle(ctx, r)
+}
+
 func InitLogger(env string) {
-	var handler slog.Handler
+	var baseHandler slog.Handler
 
 	if env == "development" {
 		// Pretty text format for local development
-		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
+		baseHandler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
 	} else {
 		// Pure JSON format for production (perfect for DataDog/Grafana/Prometheus)
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+		baseHandler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
 	}
 
-	Log = slog.New(handler)
+	// Wrap the base handler with our custom ContextHandler
+	Log = slog.New(&ContextHandler{baseHandler})
 	slog.SetDefault(Log)
-}
-
-// ErrorContext securely logs an error to the terminal, automatically
-// extracting the RequestID from the context to tag the log entry.
-func ErrorContext(ctx context.Context, msg string, err error, args ...any) {
-	reqID, _ := ctx.Value(contextkeys.RequestIDKey).(string)
-
-	attrs := append([]any{
-		slog.String("request_id", reqID),
-		slog.Any("error", err),
-	}, args...)
-
-	Log.ErrorContext(ctx, msg, attrs...)
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"log/slog"
 	"time"
 
 	"github.com/caarlos0/env/v11"
@@ -197,8 +198,7 @@ func (c *Config) Init() {
 		log.Fatalf("JWT_PRIVATE_KEY_HEX is not a valid ECDSA P-256 private key: %v", err)
 	}
 
-	fmt.Printf("Environment \"%s\" loaded.\n", c.App.Env)
-	fmt.Printf("Version: %s\n", c.App.Version)
+	slog.Info("Environment loaded", "environment", c.App.Env, "version", c.App.Version)
 }
 
 func (db *DB) GetDSN() string {

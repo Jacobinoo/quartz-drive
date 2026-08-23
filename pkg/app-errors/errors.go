@@ -59,12 +59,9 @@ func NewUnauthorized(msg string, err error) *AppError {
 	}
 }
 
-func NewForbidden(code string, msg string, err error) *AppError {
-	if code == "" {
-		code = CodeForbidden
-	}
+func NewForbidden(msg string, err error) *AppError {
 	return &AppError{
-		Code:    code,
+		Code:    CodeForbidden,
 		Message: msg,
 		Status:  http.StatusForbidden,
 		Err:     err,

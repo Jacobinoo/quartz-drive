@@ -7,8 +7,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"quartz/internal/bindings"
 	"quartz/internal/dto"
@@ -18,6 +18,7 @@ import (
 	"quartz/pkg/crypto"
 	"quartz/pkg/dpop"
 	"quartz/pkg/token"
+	"strings"
 
 	// pb "quartz/proto"
 	"time"
@@ -61,11 +62,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 
 	success, errors, err := captcha.VerifyTurnstileToken(m1.Token, cfip)
 	if err != nil {
-		fmt.Print(errors)
+		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errors, ","), "error", err)
 		return apperrors.NewBadRequest("invalid token", err)
 	}
 	if !success {
-		fmt.Print(errors)
+		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errors, ","), "error", err)
 		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
@@ -76,7 +77,6 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 
 	regRecordBytes, err := base64.RawURLEncoding.DecodeString(userRegistrationRecord.RegistrationRecord)
 	if err != nil {
-		fmt.Print(err)
 		return apperrors.NewInternal(err)
 	}
 
@@ -194,7 +194,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewUnauthorized("login failed", err)
 	}
 
-	fmt.Println("Established a new trusted session key.")
+	slog.Debug("Established a new trusted session key.")
 
 	var trustedUserInfo dto.TrustedUserInformation
 
@@ -211,25 +211,14 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 	uaHeader := r.Header.Get("User-Agent")
 	ua := useragent.New(uaHeader)
 
-	fmt.Printf("Mobile: %v\n", ua.Mobile())   // => true
-	fmt.Printf("Bot: %v\n", ua.Bot())         // => false
-	fmt.Printf("Mozilla: %v\n", ua.Mozilla()) // => "5.0"
-	fmt.Printf("Model: %v\n", ua.Model())     // => "Nexus One"
-
-	fmt.Printf("Platform: %v\n", ua.Platform()) // => "Linux"
-	fmt.Printf("OS: %v\n", ua.OS())             // => "Android 2.3.7"
-
-	name, version := ua.Engine()
-	fmt.Printf("Engine: %v\n", name)     // => "AppleWebKit"
-	fmt.Printf("Version: %v\n", version) // => "533.1"
-
-	name, version = ua.Browser()
-	fmt.Printf("Browser: %v\n", name)    // => "Android"
-	fmt.Printf("Version: %v\n", version) // => "4.0"
+	name, _ := ua.Browser()
 
 	displayedDeviceName := ua.OS() + " - " + ua.Model() + " - " + name
 
+	generatedNewSessionID := uuid.New()
+
 	newSessionEntry := model.Session{
+		ID:           generatedNewSessionID,
 		UserID:       trustedUserInfo.ID,
 		UserAgent:    uaHeader,
 		DeviceName:   displayedDeviceName,
@@ -258,7 +247,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 	fingerprintHashBytes := sha256.Sum256(fingerprintBytes)
 	fingerprintHash := hex.EncodeToString(fingerprintHashBytes[:])
 
-	accessToken, expTime := token.IssueAccessToken(fingerprintHash, thumbprint, trustedUserInfo.ID.String(), trustedUserInfo.Email)
+	accessToken, expTime := token.IssueAccessToken(fingerprintHash, thumbprint, trustedUserInfo.ID.String(), trustedUserInfo.Email, generatedNewSessionID.String(), familyID.String())
 	maxAge := time.Until(expTime)
 
 	http.SetCookie(w, &http.Cookie{

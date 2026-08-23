@@ -7,8 +7,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"strings"
@@ -119,7 +119,7 @@ func ValidateDpopProof(dpopProof string, r *http.Request) (string, error) {
 		return "", err
 	}
 
-	fmt.Println("JWK Thumbprint:", thumbprint)
+	slog.Debug("JWK Thumbprint", "thumbprint", thumbprint)
 	return thumbprint, nil
 }
 

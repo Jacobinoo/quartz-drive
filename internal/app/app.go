@@ -3,8 +3,9 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"log"
+	"log/slog"
 	"net/http"
 	"quartz/api/account"
 	"quartz/api/dev"
@@ -18,7 +19,6 @@ import (
 	"quartz/config"
 	"quartz/pkg/database"
 	"quartz/pkg/httputils"
-	"quartz/pkg/logger"
 	"quartz/pkg/storage"
 
 	"encoding/base64"
@@ -32,8 +32,6 @@ import (
 )
 
 func Run() {
-	logger.InitLogger(config.Cfg.App.Env)
-
 	// grpcClient, conn := initGrpcClient()
 	// defer conn.Close()
 
@@ -78,17 +76,18 @@ func Run() {
 
 	// Start server in a goroutine
 	go func() {
-		fmt.Printf("Server running on %s:%s\n", config.Cfg.Host, config.Cfg.Port)
+		slog.Info("Server running", "host", config.Cfg.Host, "port", config.Cfg.Port)
 		var err error
 		if config.Cfg.CertFilePath != "" && config.Cfg.KeyFilePath != "" {
 			err = server.ListenAndServeTLS(config.Cfg.CertFilePath, config.Cfg.KeyFilePath)
 		} else {
-			fmt.Println("No TLS certificates found, falling back to HTTP")
+			slog.Info("No TLS certificates found, falling back to HTTP")
 			err = server.ListenAndServe()
 		}
 
-		if err != nil && err != http.ErrServerClosed {
-			log.Fatalf("listen: %s\n", err)
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("server listening error", "error", err)
+			os.Exit(1)
 		}
 	}()
 

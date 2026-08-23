@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"quartz/internal/model"
 	apperrors "quartz/pkg/app-errors"
@@ -57,11 +58,16 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 	h.db.Where("token_hash = ?", refreshTokenHash).First(&storedToken)
 	h.db.Preload("Session").Where("token_hash = ?", refreshTokenHash).First(&storedToken)
 
-	fmt.Println("Stored Token:", storedToken)             // Debugging line
-	fmt.Println("Provided token hash:", refreshTokenHash) // Debugging line
+	slog.Debug("Stored Token:", storedToken)
+	slog.Debug("Provided token hash:", refreshTokenHash)
 
 	if storedToken.IsRevoked == true {
-		fmt.Println("token reuse detections triggered!")
+		slog.Info("token reuse detection triggered",
+			"reused_revoked_token_id", storedToken.ID,
+			"session_id", storedToken.SessionID,
+			"family_id", storedToken.FamilyID,
+			"user_id", storedToken.UserID,
+		)
 		err = h.db.Transaction(func(tx *gorm.DB) error {
 			if err := tx.Where("family_id = ?", storedToken.FamilyID).Delete(&model.GormRefreshToken{}).Error; err != nil {
 				return err
@@ -97,8 +103,11 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewUnauthorized("unauthorized-reuse-detection", nil)
 	}
 
-	if storedToken.TokenHash != refreshTokenHash {
-		fmt.Println("unauth4") // Debugging line
+	if subtle.ConstantTimeCompare([]byte(storedToken.TokenHash), []byte(refreshTokenHash)) == 0 {
+		slog.Debug("refresh token hash mismatch",
+			"stored_token_hash", storedToken.TokenHash,
+			"provided_token_hash", refreshTokenHash,
+		)
 		return apperrors.NewUnauthorized("unauthorized4", nil)
 	}
 
@@ -120,10 +129,10 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 	providedCsrfHash := hex.EncodeToString(hashBytes[:])
 
 	if subtle.ConstantTimeCompare([]byte(providedCsrfHash), []byte(storedToken.CsrfTokenHash)) != 1 {
-		fmt.Println("unauth5")                                            // Debugging line
-		fmt.Println("Stored CSRF Token hash:", storedToken.CsrfTokenHash) // Debugging line
-		fmt.Println("Provided CSRF Token (hashed):", providedCsrfHash)    // Debugging line
-		fmt.Println("Provided token header:", refreshTokenCookie)         // Debugging line
+		slog.Debug("unauth5")                                                         // Debugging line
+		slog.Debug("Stored CSRF Token hash", "token_hash", storedToken.CsrfTokenHash) // Debugging line
+		slog.Debug("Provided CSRF Token (hashed)", "token", providedCsrfHash)         // Debugging line
+		slog.Debug("Provided token header", "header", refreshTokenCookie)             // Debugging line
 		http.SetCookie(w, &http.Cookie{
 			Name:     "__Secure-Auth",
 			Value:    "",
@@ -149,7 +158,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewUnauthorized("user not found", err)
 	}
 
-	newAccessToken, expTime := token.IssueAccessToken(fingerprintHash, storedToken.DpopJKT, storedToken.UserID.String(), user.Email)
+	newAccessToken, expTime := token.IssueAccessToken(fingerprintHash, storedToken.DpopJKT, storedToken.UserID.String(), user.Email, storedToken.SessionID.String(), storedToken.FamilyID.String())
 	maxAge := time.Until(expTime)
 
 	newCsrfToken := token.IssueCsrfToken()

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"log/slog"
 	"math"
 	"net/http"
 	"quartz/config"
@@ -71,7 +72,7 @@ func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if user.StorageUsed+uploadRequest.TotalFileSize > user.StorageQuota {
-		return apperrors.NewForbidden("", "quota exceeded", nil)
+		return apperrors.NewForbidden("quota exceeded", nil)
 	}
 
 	minPlausibleChunks := int(math.Ceil(float64(uploadRequest.TotalFileSize) / float64(maxChunkSize)))
@@ -97,7 +98,7 @@ func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) error {
 	for i := int64(0); i < uploadRequest.TotalChunks; i++ {
 		id, err := uuid.NewV7()
 		if err != nil {
-			return apperrors.NewInternal(fmt.Errorf("internal server error"))
+			return apperrors.NewInternal(err)
 		}
 
 		chunkRows = append(chunkRows, model.UploadChunk{
@@ -135,7 +136,7 @@ func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 
-		log.Printf("chunkRows: %d", len(chunkRows))
+		slog.Debug("chunkRows", "chunk_rows_amount", len(chunkRows))
 
 		if err := tx.CreateInBatches(chunkRows, len(chunkRows)).Error; err != nil {
 			return err
@@ -171,13 +172,13 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) error {
 
 	var uploadRequest dto.RequestChunkUploadRequest
 	if err := json.NewDecoder(r.Body).Decode(&uploadRequest); err != nil {
-		log.Printf("failed to decode RequestChunkUploadRequest")
+		slog.Debug("failed to decode RequestChunkUploadRequest")
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	userID := r.Context().Value(contextkeys.UserIDKey)
 	if userID == nil {
-		log.Printf("access token invalid")
+		slog.InfoContext(r.Context(), "access token invalid")
 		return apperrors.NewUnauthorized("access token invalid", nil)
 	}
 
@@ -193,60 +194,60 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) error {
 
 	var user model.User
 	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
-		log.Printf("user not found")
+		slog.WarnContext(r.Context(), "user not found")
 		return apperrors.NewUnauthorized("user not found", nil)
 	}
 
 	var uploadSession model.Upload
 	if err := h.db.First(&uploadSession, "id = ?", uploadRequest.UploadID).Error; err != nil {
-		log.Printf("upload session not found")
-		return apperrors.NewForbidden("", "upload session not found", nil)
-	}
-
-	if !time.Now().Before(uploadSession.ExpiresAt) {
-		log.Printf("upload session expired")
-		return apperrors.NewForbidden("", "upload session not found", nil)
-	}
-
-	if uploadSession.Status != model.UploadStatusPending {
-		log.Printf("upload session is not pending (status: %s)", uploadSession.Status)
-		return apperrors.NewForbidden("", "upload session is no longer active", nil)
+		slog.WarnContext(r.Context(), "upload session not found")
+		return apperrors.NewForbidden("upload session not found", nil)
 	}
 
 	if user.ID != uploadSession.UserID {
-		log.Printf("user is not the owner of the upload session")
-		return apperrors.NewForbidden("", "upload session not found", nil)
+		slog.WarnContext(r.Context(), "user is not the owner of the upload session")
+		return apperrors.NewForbidden("upload session not found", nil)
+	}
+
+	if !time.Now().Before(uploadSession.ExpiresAt) {
+		slog.WarnContext(r.Context(), "upload session expired")
+		return apperrors.NewForbidden("upload session not found", nil)
+	}
+
+	if uploadSession.Status != model.UploadStatusPending {
+		slog.WarnContext(r.Context(), "upload session is not pending", "status", uploadSession.Status)
+		return apperrors.NewForbidden("upload session is no longer active", nil)
 	}
 
 	if uploadRequest.DeclaredSize <= 0 || uploadRequest.DeclaredSize > maxChunkSize {
-		log.Printf("declared chunk size out of allowed range")
+		slog.WarnContext(r.Context(), "declared chunk size out of allowed range")
 		return apperrors.NewValidation("declared chunk size out of allowed range", nil)
 	}
 
 	if int64(uploadRequest.ChunkIndex) >= uploadSession.TotalChunks || uploadRequest.ChunkIndex < 0 {
-		log.Printf("requested chunk index out of allowed range")
-		return apperrors.NewForbidden("", "requested chunk index out of allowed range", nil)
+		slog.WarnContext(r.Context(), "requested chunk index out of allowed range")
+		return apperrors.NewForbidden("requested chunk index out of allowed range", nil)
 	}
 
 	if user.StorageUsed+uploadRequest.DeclaredSize > user.StorageQuota {
-		return apperrors.NewForbidden("", "quota exceeded", nil)
+		slog.InfoContext(r.Context(), "quota exceeded")
+		return apperrors.NewForbidden("quota exceeded", nil)
 	}
 
 	var chunkRow model.UploadChunk
 	if err := h.db.First(&chunkRow, "upload_id = ? AND chunk_index = ?", uploadRequest.UploadID, uploadRequest.ChunkIndex).Error; err != nil {
-		log.Printf("failed to find chunk row %s", err)
-		return apperrors.NewForbidden("", "requested chunk not found", nil)
+		slog.WarnContext(r.Context(), "failed to find chunk row %s", err)
+		return apperrors.NewForbidden("requested chunk not found", nil)
 	}
 
 	if chunkRow.Status != model.ChunkUploadStatusPending {
-		log.Printf("error: requested chunk %d status is %s", chunkRow.ChunkIndex, chunkRow.Status)
-		return apperrors.NewForbidden("", "requested chunk not found", nil)
+		slog.WarnContext(r.Context(), "error: requested chunk status", "chunk_idx", chunkRow.ChunkIndex, "chunk_status", chunkRow.Status)
+		return apperrors.NewForbidden("requested chunk not found", nil)
 	}
 
 	url, err := h.storage.GenerateUploadUrl(r.Context(), chunkRow.ObjectKey, expiry, uploadRequest.DeclaredSize, uploadRequest.ChunkHash)
 	if err != nil {
-		log.Printf("%v", err)
-		return apperrors.NewInternal(fmt.Errorf("failed to generate presigned url"))
+		return apperrors.NewInternal(fmt.Errorf("failed to generate presigned upload url: %w", err))
 	}
 
 	chunkRow.GeneratedUrls++
@@ -254,8 +255,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) error {
 
 	result := h.db.Save(&chunkRow)
 	if result.Error != nil {
-		log.Printf("chunk row generated urls amount and declared size could not be saved: %v", err)
-		return apperrors.NewInternal(fmt.Errorf("failed to generate presigned url"))
+		return apperrors.NewInternal(fmt.Errorf("chunk row generated urls amount and declared size could not be saved: %w", result.Error))
 	}
 
 	uploadResponse := dto.RequestChunkUploadResponse{
@@ -264,7 +264,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) error {
 
 	err = json.NewEncoder(w).Encode(uploadResponse)
 	if err != nil {
-		return apperrors.NewInternal(fmt.Errorf("internal server error"))
+		return apperrors.NewInternal(err)
 	}
 	return nil
 }
@@ -278,13 +278,13 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 
 	var uploadRequest dto.FinishChunkUploadRequest
 	if err := json.NewDecoder(r.Body).Decode(&uploadRequest); err != nil {
-		log.Printf("failed to decode FinishChunkUploadRequest")
+		slog.WarnContext(r.Context(), "failed to decode FinishChunkUploadRequest")
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	userID := r.Context().Value(contextkeys.UserIDKey)
 	if userID == nil {
-		log.Printf("access token invalid")
+		slog.WarnContext(r.Context(), "access token invalid")
 		return apperrors.NewUnauthorized("access token invalid", nil)
 	}
 
@@ -292,39 +292,44 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 
 	var user model.User
 	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
-		log.Printf("user not found")
+		slog.WarnContext(r.Context(), "user not found", "queried_user_id", userID, "error", err)
 		return apperrors.NewUnauthorized("user not found", nil)
 	}
 
 	var uploadSession model.Upload
 	if err := h.db.First(&uploadSession, "id = ?", uploadRequest.UploadID).Error; err != nil {
-		log.Printf("upload session not found")
-		return apperrors.NewForbidden("", "upload session not found", nil)
+		slog.WarnContext(r.Context(), "upload session not found", "queried_upload_id", uploadRequest.UploadID, "error", err)
+		return apperrors.NewForbidden("upload session not found", nil)
+	}
+
+	uploadLogger := slog.With(
+		"upload_id", uploadRequest.UploadID,
+		"chunk_idx", uploadRequest.ChunkIndex,
+	)
+
+	if user.ID != uploadSession.UserID {
+		uploadLogger.WarnContext(r.Context(), "user is not the owner of the upload session")
+		return apperrors.NewForbidden("upload session not found", nil)
 	}
 
 	if !time.Now().Before(uploadSession.ExpiresAt) {
-		log.Printf("upload session expired")
-		return apperrors.NewForbidden("", "upload session not found", nil)
-	}
-
-	if user.ID != uploadSession.UserID {
-		log.Printf("user is not the owner of the upload session")
-		return apperrors.NewForbidden("", "upload session not found", nil)
+		uploadLogger.WarnContext(r.Context(), "upload session expired")
+		return apperrors.NewForbidden("upload session not found", nil)
 	}
 
 	if int64(uploadRequest.ChunkIndex) >= uploadSession.TotalChunks || uploadRequest.ChunkIndex < 0 {
-		log.Printf("requested chunk index out of allowed range")
-		return apperrors.NewForbidden("", "requested chunk index out of allowed range", nil)
+		uploadLogger.WarnContext(r.Context(), "requested chunk index out of allowed range")
+		return apperrors.NewForbidden("requested chunk index out of allowed range", nil)
 	}
 
 	var chunkRow model.UploadChunk
 	if err := h.db.First(&chunkRow, "upload_id = ? AND chunk_index = ?", uploadRequest.UploadID, uploadRequest.ChunkIndex).Error; err != nil {
-		log.Printf("failed to find chunk row %s", err)
-		return apperrors.NewForbidden("", "requested chunk not found", nil)
+		uploadLogger.WarnContext(r.Context(), "failed to find chunk row")
+		return apperrors.NewForbidden("requested chunk not found", nil)
 	}
 
 	if chunkRow.Status != model.ChunkUploadStatusPending && chunkRow.Status != model.ChunkUploadStatusVerified {
-		log.Printf("error: requested chunk %d status is %s", chunkRow.ChunkIndex, chunkRow.Status)
+		uploadLogger.WarnContext(r.Context(), "requested chunk status", "status", chunkRow.Status)
 		return apperrors.NewNotFound("requested chunk not found", nil)
 	}
 
@@ -332,31 +337,31 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 	if chunkRow.Status == model.ChunkUploadStatusPending {
 		size, etag, sha256, err := h.storage.GetChunkSize(r.Context(), chunkRow.ObjectKey)
 		if err != nil {
-			log.Printf("failed to get chunk size, etag and checksum: %v", err)
-			return apperrors.NewInternal(fmt.Errorf("internal server error"))
+			wrappedErr := fmt.Errorf("failed to get chunk size from s3 (upload_id: %s, chunk_idx: %d): %w", uploadRequest.UploadID, uploadRequest.ChunkIndex, err)
+			return apperrors.NewInternal(wrappedErr)
 		}
 
-		log.Printf("checksum is %s", sha256)
+		uploadLogger.Debug("checksum", "sha256", sha256)
 
 		if subtle.ConstantTimeCompare([]byte(sha256), []byte(uploadRequest.ChunkHash)) == 0 {
-			log.Printf("integrity check failed: %v", err)
+			uploadLogger.WarnContext(r.Context(), "integrity check failed", "error", err)
 			go func(objectKey string) {
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
 				if delErr := h.storage.DeleteChunk(ctx, objectKey); delErr != nil {
-					log.Printf("failed to delete (integrity check failed) chunk %s: %v", objectKey, delErr)
+					uploadLogger.WarnContext(r.Context(), "failed to delete chunk (integrity check failed)", "objectKey", objectKey, "error", delErr)
 				}
 			}(chunkRow.ObjectKey)
-			return apperrors.NewForbidden("", "integrity check failed", nil)
+			return apperrors.NewForbidden("integrity check failed", err)
 		}
 
 		if size > maxChunkSize {
-			log.Printf("CHUNK %s OVERSIZED: %d > %d", chunkRow.ObjectKey, size, maxChunkSize)
+			uploadLogger.WarnContext(r.Context(), "CHUNK OVERSIZED", "size", size, "max_size", maxChunkSize, "object_key", chunkRow.ObjectKey)
 			go func(objectKey string) {
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
 				if delErr := h.storage.DeleteChunk(ctx, objectKey); delErr != nil {
-					log.Printf("failed to delete oversized chunk %s: %v", objectKey, delErr)
+					uploadLogger.WarnContext(r.Context(), "failed to delete oversized chunk", "objectKey", objectKey, "error", delErr)
 				}
 			}(chunkRow.ObjectKey)
 
@@ -365,17 +370,18 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 			uploadSession.Status = model.UploadStatusFlaggedMalicious
 			h.db.Save(&uploadSession)
 
-			return apperrors.NewInternal(fmt.Errorf("internal server error"))
+			wrappedErr := fmt.Errorf("chunk is oversized (upload_id: %s, chunk_idx: %d, ): %w", uploadRequest.UploadID, uploadRequest.ChunkIndex, err)
+			return apperrors.NewValidation("chunk size is invalid", wrappedErr)
 		}
 
 		if etag != uploadRequest.Etag {
-			log.Printf("CHUNK %s etags dont match: %s != %s", chunkRow.ObjectKey, etag, uploadRequest.Etag)
+			uploadLogger.WarnContext(r.Context(), "CHUNK etags dont match", "object_key", chunkRow.ObjectKey, "s3_etag", etag, "provided_etag", uploadRequest.Etag)
 
 			go func(objectKey string) {
 				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
 				if delErr := h.storage.DeleteChunk(ctx, objectKey); delErr != nil {
-					log.Printf("failed to delete (mismatch etag) chunk %s: %v", objectKey, delErr)
+					uploadLogger.WarnContext(r.Context(), "failed to delete chunk (mismatch etag)", "object_key", objectKey, "error", delErr)
 				}
 			}(chunkRow.ObjectKey)
 
@@ -384,11 +390,12 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 			uploadSession.Status = model.UploadStatusFlaggedMalicious
 			h.db.Save(&uploadSession)
 
-			return apperrors.NewInternal(fmt.Errorf("internal server error"))
+			wrappedErr := fmt.Errorf("etag mismatch (upload_id: %s, chunk_idx: %d): %w", uploadRequest.UploadID, uploadRequest.ChunkIndex, err)
+			return apperrors.NewInternal(wrappedErr)
 		}
 
 		if size != chunkRow.DeclaredSize {
-			log.Printf("log: size of chunk %s declared by client does not match with verified size: declared %d vs verified %d", chunkRow.ObjectKey, chunkRow.DeclaredSize, size)
+			uploadLogger.WarnContext(r.Context(), "size of chunk declared by client does not match with verified size", "object_key", chunkRow.ObjectKey, "declared_size", chunkRow.DeclaredSize, "true_size", size)
 		}
 
 		chunkRow.Etag = etag
@@ -398,8 +405,8 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 
 		result := h.db.Save(&chunkRow)
 		if result.Error != nil {
-			log.Printf("chunk etag, size, timestamp, status could not be saved: %v", result.Error)
-			return apperrors.NewInternal(fmt.Errorf("internal server error"))
+			wrappedErr := fmt.Errorf("chunk etag, size, timestamp, status could not be saved (upload_id: %s, chunk_idx: %d, size: %d): %w", uploadRequest.UploadID, uploadRequest.ChunkIndex, size, result.Error)
+			return apperrors.NewInternal(wrappedErr)
 		}
 	}
 

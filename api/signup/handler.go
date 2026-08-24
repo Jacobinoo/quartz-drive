@@ -49,10 +49,12 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if email.IsDisposableEmail(m1.Email) {
+		slog.WarnContext(r.Context(), "disposable email domain detected", "`email`", m1.Email)
 		return apperrors.NewBadRequest("disposable emails are not allowed", nil)
 	}
 
 	if !email.HasValidMXRecord(m1.Email) {
+		slog.WarnContext(r.Context(), "", "`email`", m1.Email)
 		return apperrors.NewBadRequest("provided email address can't receive emails, contact your email provider", nil)
 	}
 

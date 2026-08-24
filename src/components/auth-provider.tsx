@@ -8,6 +8,8 @@ import { clearAuthState } from "@/lib/authStore";
 import { deleteDpopDatabase } from "@/lib/dpop";
 import { deleteDeviceKeys } from "@/DeviceKeyStore";
 
+
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -21,6 +23,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isRateLimited, setIsRateLimited] = useState(false);
 
   useEffect(() => {
+    const timeout = setTimeout(() => {
+      displayConsoleScamWarning()
+      displayConsoleScamWarning()
+    }, 2000);
+
+    return () => clearTimeout(timeout);
+  }, [pathname]);
+
+  useEffect(() => {
     if (hasBooted.current) return;
     hasBooted.current = true;
 
@@ -29,7 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log("App booting... restoring session from secure cookie...");
         // This hits /v1/refresh and automatically populates your authStore in memory!
         await refreshSession();
-        
+
         if (publicPaths.includes(pathname)) {
            router.push("/drive");
            return;
@@ -48,9 +59,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsBooting(false);
           return;
         }
-        
+
         console.warn("Silent boot failed (cookie missing/expired).");
-        
+
         if (publicPaths.includes(pathname)) {
             clearAuthState();
             deleteDpopDatabase().catch(() => {});
@@ -79,8 +90,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex flex-col h-screen w-screen items-center justify-center bg-background text-muted-foreground gap-4">
         <p className="text-sm font-medium text-destructive">Cannot reach Quartz servers. Are you offline?</p>
-        <button 
-          onClick={() => window.location.reload()} 
+        <button
+          onClick={() => window.location.reload()}
           className="px-4 py-2 bg-primary text-primary-foreground font-medium rounded-md hover:opacity-90 transition-opacity"
         >
           Try Again
@@ -93,8 +104,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex flex-col h-screen w-screen items-center justify-center bg-background text-muted-foreground gap-4">
         <p className="text-sm font-medium text-destructive">Rate limited. Try again in a minute.</p>
-        <button 
-          onClick={() => window.location.reload()} 
+        <button
+          onClick={() => window.location.reload()}
           className="px-4 py-2 bg-primary text-primary-foreground font-medium rounded-md hover:opacity-90 transition-opacity"
         >
           Try Again
@@ -104,4 +115,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return <>{children}</>;
+}
+
+function displayConsoleScamWarning(): void {
+    console.log(
+      "\n\n\n\n%cHold Up! WARNING!",
+      "color: red; font-size: 50px; font-weight: bold; text-shadow: 2px 2px 0 #000;"
+    );
+
+    console.log(
+      "%cIf someone told you to copy/paste something here you have an 11/10 chance %cyou're being scammed.",
+      "font-size: 20px;", "font-size: 20px; color: red;"
+    );
+
+    console.log(
+      "%cPasting anything in here could give attackers access to your encrypted files. Don't paste anything. %cCLOSE this window RIGHT NOW to stay safe!",
+      "font-size: 16px; font-weight: bold;", "font-weight: bold; font-size: 20px; color: red;"
+    );
+
+    console.log(
+      "%cPlease report any suspicious behavior to customer support!\nOur customer support will NEVER ask you to paste ANYTHING in here. We will NEVER ask for your password, recovery keys, or private keys. If someone asked you to give them your credentials, you are being scammed.\n",
+      "font-size: 14px;"
+    );
 }

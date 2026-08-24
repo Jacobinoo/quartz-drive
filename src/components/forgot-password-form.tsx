@@ -47,9 +47,9 @@ export function ForgotPasswordForm({
             <Button onClick={() => router.push("/signin")}>
                 Return to sign in
             </Button>
-            <Button 
-                variant="outline" 
-                disabled={countdown > 0} 
+            <Button
+                variant="outline"
+                disabled={countdown > 0}
                 onClick={() => {
                     if (countdown === 0) {
                         setSubmitted(false);
@@ -87,7 +87,7 @@ export function ForgotPasswordForm({
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </Field>
-              
+
               <Field>
                   <Turnstile
                     ref={turnstileRef}
@@ -115,7 +115,7 @@ export function ForgotPasswordForm({
                   .then((res) => {
                     if (res.ok) {
                         setSubmitted(true);
-                        setCountdown(60);
+                        setCountdown(70);
                         const interval = setInterval(() => {
                             setCountdown((prev) => {
                                 if (prev <= 1) {
@@ -126,8 +126,11 @@ export function ForgotPasswordForm({
                             });
                         }, 1000);
                     } else {
-                        setError("Failed to send reset link.");
-                        turnstileRef.current?.reset();
+                      const body = res.json()
+                      body.then((d) => {
+                        setError(`Failed to send reset link: ${d.message}`);
+                          turnstileRef.current?.reset();
+                      })
                     }
                   })
                   .catch((err: Error) => {

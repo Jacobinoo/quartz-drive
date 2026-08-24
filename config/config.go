@@ -113,11 +113,13 @@ type (
 	}
 
 	CRYPTO struct {
-		KdfOpsLimit       int8   `env:"KDF_OPSLIMIT,required"`
-		KdfMemLimit       int64  `env:"KDF_MEMLIMIT,required"`
-		KdfAlg            int8   `env:"KDF_ALG,required"`
-		EncryptionVersion int16  `env:"ENC_VERSION,required"`
-		OpaqueServerSetup string `env:"OPAQUE_SERVER_SETUP,required"`
+		KdfOpsLimit        int8   `env:"KDF_OPSLIMIT,required"`
+		KdfMemLimit        int64  `env:"KDF_MEMLIMIT,required"`
+		KdfAlg             int8   `env:"KDF_ALG,required"`
+		EncryptionVersion  int16  `env:"ENC_VERSION,required"`
+		OpaqueServerSetup  string `env:"OPAQUE_SERVER_SETUP,required"`
+		EmailEncryptionKey string `env:"EMAIL_ENCRYPTION_KEY,required"`
+		EmailHashSecretKey string `env:"EMAIL_HASH_SECRET_KEY,required"`
 	}
 
 	S3 struct {

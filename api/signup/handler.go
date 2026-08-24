@@ -14,6 +14,7 @@ import (
 	"quartz/internal/model"
 	apperrors "quartz/pkg/app-errors"
 	"quartz/pkg/captcha"
+	crypto "quartz/pkg/crypto"
 	"quartz/pkg/email"
 	"strings"
 
@@ -140,11 +141,16 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 		log.Println("bindings FinishRegistration call succeeded")
 	}
 
+	hashedEmail, err := crypto.HashEmail([]byte(m3.User.Email))
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
 	var user model.User
-	err = h.db.First(&user, "email = ?", m3.User.Email).Error
+	err = h.db.First(&user, "hashed_email = ?", hashedEmail).Error
 
 	if err == nil {
-		slog.Debug("user already signed up, preventing enum attacks by faking status ok")
+		slog.InfoContext(r.Context(), "user already signed up, preventing enum attacks by faking status ok")
 		w.WriteHeader(http.StatusCreated)
 		err = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 		if err != nil {
@@ -158,6 +164,11 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	slog.Debug("user by email not found, will sign up")
+
+	encryptedEmail, err := crypto.EncryptEmail([]byte(m3.User.Email))
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 
 	// Generate secure token
 	tokenBytes := make([]byte, 64)
@@ -201,7 +212,8 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 
 		storedUser := model.User{
 			ID:                 credID,
-			Email:              m3.User.Email,
+			EncryptedEmail:     encryptedEmail,
+			HashedEmail:        hashedEmail,
 			RegistrationRecord: m3.User.APAKE.RegistrationRecord,
 			RegistrationNonce:  m3.User.APAKE.RegistrationNonce,
 			KdfParams: dto.KdfParams{

@@ -734,7 +734,7 @@ func (h *Handler) Files(w http.ResponseWriter, r *http.Request) error {
 			EncryptedMetadata: link.ChildNode.EncryptedMetadata,
 			MetadataNonce:     link.ChildNode.MetadataNonce,
 
-			AuthorEmail:            link.Author.Email,
+			AuthorEmail:            link.Author.EncryptedEmail,
 			AuthorSigningPublicKey: link.Author.KeyStore.AccountSigningPublicKey,
 		})
 	}
@@ -1200,7 +1200,7 @@ func (h *Handler) GetAllFiles(w http.ResponseWriter, r *http.Request) error {
 			EncryptedMetadata: link.ChildNode.EncryptedMetadata,
 			MetadataNonce:     link.ChildNode.MetadataNonce,
 
-			AuthorEmail:            link.Author.Email,
+			AuthorEmail:            link.Author.EncryptedEmail,
 			AuthorSigningPublicKey: link.Author.KeyStore.AccountSigningPublicKey,
 		})
 	}

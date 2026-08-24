@@ -66,8 +66,13 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
+	hashedEmail, err := crypto.HashEmail([]byte(m1.Email))
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
 	var userRegistrationRecord dto.UserRegistrationRecord
-	if err := h.db.Where("email = ?", m1.Email).First(&userRegistrationRecord).Error; err != nil {
+	if err := h.db.Where("hashed_email = ?", hashedEmail).First(&userRegistrationRecord).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return apperrors.NewNotFound("user not found", err)
 		}
@@ -102,7 +107,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 		// Store in Redis
 		nonceData := map[string]string{
 			"serverLoginState": base64.RawURLEncoding.EncodeToString(serverLoginState),
-			"email":            m1.Email,
+			"email":            hashedEmail,
 		}
 		nonceJSON, err := json.Marshal(nonceData)
 		if err != nil {
@@ -181,7 +186,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	serverLoginState, _ := base64.RawURLEncoding.DecodeString(nonceData["serverLoginState"])
-	email := nonceData["email"]
+	hashedEmail := nonceData["email"]
 
 	finishLoginReqBytes, err := base64.RawURLEncoding.DecodeString(m3.FinishLoginRequest)
 	if err != nil {
@@ -204,9 +209,9 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 	var trustedUserInfo dto.TrustedUserInformation
 
 	err = h.db.Model(&model.User{}).
-		Select("users.*, user_key_stores.*").
+		Select("users.*, users.encrypted_email AS email, user_key_stores.*").
 		Joins("INNER JOIN user_key_stores ON user_key_stores.user_id = users.id").
-		Where("users.email = ?", email).
+		Where("users.hashed_email = ?", hashedEmail).
 		First(&trustedUserInfo).Error
 
 	if err != nil {
@@ -215,6 +220,17 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 		}
 		return apperrors.NewInternal(err)
 	}
+
+	// The database does not store an email in plaintext, instead we use two columns
+	// that store an HMAC hash of the email, and an AES-GCM ciphertext.
+	// This is brilliant, because it protects the PII in the DB, while still allowing for email sending & lookups
+	// The dto has an "Email" field, it will be null, because there is no column of that name in the database
+	// Instead we need to decrypt the email and return the decrypted email to the user
+	decryptedEmail, err := crypto.DecryptEmail(trustedUserInfo.Email)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+	trustedUserInfo.Email = string(decryptedEmail)
 
 	uaHeader := r.Header.Get("User-Agent")
 	if uaHeader == "" {

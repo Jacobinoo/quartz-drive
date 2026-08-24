@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"quartz/internal/model"
 	apperrors "quartz/pkg/app-errors"
+	"quartz/pkg/crypto"
 
 	"gorm.io/gorm"
 )
@@ -27,9 +28,16 @@ func (h *Handler) GetUserKeys(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("email is required", nil)
 	}
 
+	hashedEmail, err := crypto.HashEmail([]byte(email))
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	// TODO: enumeration attack!
+	// WARN: !
 	// Find the user by email
 	var user model.User
-	if err := h.db.Where("email = ?", email).First(&user).Error; err != nil {
+	if err := h.db.Where("hashed_email = ?", hashedEmail).First(&user).Error; err != nil {
 		return apperrors.NewNotFound("user not found", err)
 	}
 
@@ -40,7 +48,7 @@ func (h *Handler) GetUserKeys(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(map[string]string{
+	err = json.NewEncoder(w).Encode(map[string]string{
 		"userId":                     user.ID.String(),
 		"accountEncryptionPublicKey": keyStore.AccountEncryptionPublicKey,
 	})

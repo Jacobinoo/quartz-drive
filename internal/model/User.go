@@ -13,7 +13,8 @@ type User struct {
 	UpdatedAt          time.Time
 	DeletedAt          sql.NullTime `gorm:"index"`
 	ID                 uuid.UUID    `gorm:"primaryKey;type:uuid;not null"`
-	Email              string       `gorm:"not null;uniqueIndex"`
+	EncryptedEmail     string       `gorm:"not null;"`
+	HashedEmail        string       `gorm:"not null;uniqueIndex"`
 	RegistrationRecord string       `gorm:"not null"`
 	RegistrationNonce  string       `gorm:"not null"`
 

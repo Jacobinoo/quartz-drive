@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"crypto/sha256"
-	"encoding/hex"
 
 	"github.com/go-redis/redis_rate/v10"
 	"github.com/google/uuid"
@@ -64,8 +63,10 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
-	emailHashBytes := sha256.Sum256([]byte(req.Email))
-	emailHash := hex.EncodeToString(emailHashBytes[:])
+	emailHash, err := crypto.HashEmail([]byte(req.Email))
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
 
 	limiter := redis_rate.NewLimiter(h.redis)
 
@@ -89,7 +90,7 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var user model.User
-	err = h.db.Where("email = ?", req.Email).First(&user).Error
+	err = h.db.Where("hashed_email = ?", emailHash).First(&user).Error
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return apperrors.NewInternal(err)
 	}
@@ -176,9 +177,14 @@ func (h *Handler) VerifyResetCode(w http.ResponseWriter, r *http.Request) error 
 		return apperrors.NewInternal(err)
 	}
 
+	decryptedEmail, err := crypto.DecryptEmail(token.User.EncryptedEmail)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
 	res := VerifyCodeResponse{
 		Status: "ok",
-		Email:  token.User.Email,
+		Email:  string(decryptedEmail),
 		RecoveryKeys: dto.KeysDTO{
 			MasterKdfSalt:              keyStore.MasterKdfSalt,
 			AccountEncryptionPublicKey: keyStore.AccountEncryptionPublicKey,
@@ -192,7 +198,7 @@ func (h *Handler) VerifyResetCode(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	w.WriteHeader(http.StatusOK)
-	err := json.NewEncoder(w).Encode(res)
+	err = json.NewEncoder(w).Encode(res)
 	if err != nil {
 		return apperrors.NewInternal(err)
 	}

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"quartz/internal/model"
 	apperrors "quartz/pkg/app-errors"
+	"quartz/pkg/crypto"
 	"quartz/pkg/dpop"
 	"quartz/pkg/token"
 	"time"
@@ -158,7 +159,12 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewUnauthorized("user not found", err)
 	}
 
-	newAccessToken, expTime := token.IssueAccessToken(fingerprintHash, storedToken.DpopJKT, storedToken.UserID.String(), user.Email, storedToken.SessionID.String(), storedToken.FamilyID.String())
+	decryptedEmail, err := crypto.DecryptEmail(user.EncryptedEmail)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	newAccessToken, expTime := token.IssueAccessToken(fingerprintHash, storedToken.DpopJKT, storedToken.UserID.String(), string(decryptedEmail), storedToken.SessionID.String(), storedToken.FamilyID.String())
 	maxAge := time.Until(expTime)
 
 	newCsrfToken := token.IssueCsrfToken()

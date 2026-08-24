@@ -10,7 +10,6 @@ import (
 type M1 struct {
 	Email               string `json:"email"`
 	RegistrationRequest string `json:"registrationRequest"`
-	Token               string `json:"token"`
 }
 
 // OPAQUE Message M2

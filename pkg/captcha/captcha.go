@@ -10,7 +10,15 @@ import (
 	"strings"
 )
 
-func VerifyCaptchaToken(token, ip string) (bool, []string, error) {
+func VerifyCaptchaTokenInRequest(r *http.Request) (bool, []string, error) {
+	ip := httputils.GetRequestIp(r)
+
+	header := r.Header.Get("X-Verify-Token")
+	token := strings.TrimSpace(header)
+	if token == "" {
+		return false, []string{"no captcha token in request headers"}, fmt.Errorf("no captcha token in request headers")
+	}
+
 	form := url.Values{
 		"secret":   {config.Cfg.Security.CaptchaSecret},
 		"response": {token},

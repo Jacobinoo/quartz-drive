@@ -14,9 +14,12 @@ import (
 	"quartz/internal/dto"
 	"quartz/internal/model"
 	"quartz/pkg/app-errors"
+	"quartz/pkg/captcha"
 	"quartz/pkg/crypto"
 	"quartz/pkg/dpop"
 	"quartz/pkg/token"
+	"strings"
+
 	// pb "quartz/proto"
 	"time"
 
@@ -51,6 +54,16 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 	loginReqBytes, err := base64.RawURLEncoding.DecodeString(m1.LoginRequest)
 	if err != nil {
 		return apperrors.NewBadRequest("invalid base64 in login request", err)
+	}
+
+	success, errArr, err := captcha.VerifyTurnstileTokenInRequest(r)
+	if err != nil {
+		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","), "error", err)
+		return apperrors.NewBadRequest("invalid token", err)
+	}
+	if !success {
+		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","))
+		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
 	var userRegistrationRecord dto.UserRegistrationRecord

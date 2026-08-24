@@ -54,27 +54,14 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("Request body is invalid", err)
 	}
 
-	if req.TurnstileToken == "" {
-		slog.Debug("no turnstile token in request body")
-		return apperrors.NewBadRequest("no turntile token in request", fmt.Errorf("no turnstile token in request"))
-	}
-
-	cfip := r.Header.Get("CF-Connecting-IP")
-	if cfip == "" {
-		cfip = r.Header.Get("X-Forwarded-For")
-	}
-	if cfip == "" {
-		cfip = r.Header.Get("X-Real-IP")
-	}
-
-	success, errorsList, err := captcha.VerifyTurnstileToken(req.TurnstileToken, cfip)
+	success, errArr, err := captcha.VerifyTurnstileTokenInRequest(r)
 	if err != nil {
-		slog.WarnContext(r.Context(), "Turnstile verification failed", "error", err, "errors", strings.Join(errorsList, ", "))
-		return apperrors.NewBadRequest("invalid turnstile token", err)
+		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","), "error", err)
+		return apperrors.NewBadRequest("invalid token", err)
 	}
 	if !success {
-		slog.WarnContext(r.Context(), "Turnstile verification failed", "error", err, "errors", strings.Join(errorsList, ", "))
-		return apperrors.NewBadRequest("invalid turnstile token", nil)
+		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","))
+		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
 	emailHashBytes := sha256.Sum256([]byte(req.Email))

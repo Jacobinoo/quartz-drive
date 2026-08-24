@@ -2,9 +2,12 @@ package captcha
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"quartz/config"
+	"quartz/pkg/httputils"
+	"strings"
 )
 
 func VerifyCaptchaToken(token, ip string) (bool, []string, error) {
@@ -36,7 +39,15 @@ func VerifyCaptchaToken(token, ip string) (bool, []string, error) {
 	return false, out.ErrorCodes, nil
 }
 
-func VerifyTurnstileToken(token, ip string) (bool, []string, error) {
+func VerifyTurnstileTokenInRequest(r *http.Request) (bool, []string, error) {
+	ip := httputils.GetRequestIp(r)
+
+	header := r.Header.Get("X-Verify-Token")
+	token := strings.TrimSpace(header)
+	if token == "" {
+		return false, []string{"no turnstile token in request headers"}, fmt.Errorf("no turnstile token in request headers")
+	}
+
 	form := url.Values{
 		"secret":   {config.Cfg.Security.TurnstileSecret},
 		"response": {token},

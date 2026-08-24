@@ -58,21 +58,13 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("provided email address can't receive emails, contact your email provider", nil)
 	}
 
-	cfip := r.Header.Get("CF-Connecting-IP")
-	if cfip == "" {
-		cfip = r.Header.Get("X-Forwarded-For")
-	}
-	if cfip == "" {
-		cfip = r.Header.Get("X-Real-IP")
-	}
-
-	success, errors, err := captcha.VerifyCaptchaToken(m1.Token, cfip)
+	success, errArr, err := captcha.VerifyTurnstileTokenInRequest(r)
 	if err != nil {
-		slog.WarnContext(r.Context(), "signup captcha verification error", "error", err, "errors", strings.Join(errors, ", "))
+		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","), "error", err)
 		return apperrors.NewBadRequest("invalid token", err)
 	}
 	if !success {
-		slog.WarnContext(r.Context(), "signup captcha verification error", "error", err, "errors", strings.Join(errors, ", "))
+		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","))
 		return apperrors.NewBadRequest("invalid token", nil)
 	}
 

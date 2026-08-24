@@ -7,6 +7,7 @@ import { signOut } from "@/signout";
 import { clearAuthState } from "@/lib/authStore";
 import { deleteDpopDatabase } from "@/lib/dpop";
 import { deleteDeviceKeys } from "@/DeviceKeyStore";
+import { env } from "node:process";
 
 
 
@@ -22,14 +23,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isOffline, setIsOffline] = useState(false);
   const [isRateLimited, setIsRateLimited] = useState(false);
 
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      displayConsoleScamWarning()
-      displayConsoleScamWarning()
-    }, 2000);
+  if (process.env.NODE_ENV != "development") {
+    useEffect(() => {
+      const timeout = setTimeout(() => {
+        displayConsoleScamWarning()
+        displayConsoleScamWarning()
+      }, 2000);
 
-    return () => clearTimeout(timeout);
-  }, [pathname]);
+      return () => clearTimeout(timeout);
+    }, [pathname]);
+  }
 
   useEffect(() => {
     if (hasBooted.current) return;

@@ -48,14 +48,13 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
-	if email.IsDisposableEmail(m1.Email) {
-		slog.WarnContext(r.Context(), "disposable email domain detected", "`email`", m1.Email)
-		return apperrors.NewBadRequest("disposable emails are not allowed", nil)
-	}
+	emailTrustScore := email.ValidateAndParseEmail(m1.Email)
 
-	if !email.HasValidMXRecord(m1.Email) {
-		slog.WarnContext(r.Context(), "", "`email`", m1.Email)
-		return apperrors.NewBadRequest("provided email address can't receive emails, contact your email provider", nil)
+	if emailTrustScore <= 0 {
+		slog.WarnContext(r.Context(), "untrusted email detected, possible abuse, temporary email or bot", "`email`", m1.Email)
+		return apperrors.NewBadRequest("email is invalid", nil)
+	} else if emailTrustScore <= 0.6 {
+		slog.WarnContext(r.Context(), "email from untrusted provider detected, logging for investigation", "`email`", m1.Email)
 	}
 
 	success, errArr, err := captcha.VerifyCaptchaTokenInRequest(r)

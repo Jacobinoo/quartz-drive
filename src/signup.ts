@@ -177,12 +177,14 @@ export async function signUp(email: string, password: string, captchaToken:strin
     const payload = {
         email,
         registrationRequest: registrationRequest,
-        token: captchaToken
     };
 
     const response = await fetch(`${config.apiUrl}/v1/signup`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Verify-Token": captchaToken
+      },
         body: JSON.stringify(payload)
     });
 

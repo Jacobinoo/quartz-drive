@@ -109,8 +109,8 @@ export function ForgotPasswordForm({
 
                   fetch(`${config.apiUrl}/v1/account/forgot-password`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email, turnstileToken })
+                    headers: { "Content-Type": "application/json", "X-Verify-Token": turnstileToken },
+                    body: JSON.stringify({ email})
                   })
                   .then((res) => {
                     if (res.ok) {

@@ -15,6 +15,22 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # Copy the rest of the source code
 COPY . .
 
+# Fetch the latest disposable email blocklist and compare with local
+RUN curl -sSL -o remote.conf "https://raw.githubusercontent.com/disposable-email-domains/disposable-email-domains/refs/heads/main/disposable_email_blocklist.conf" || true && \
+    if [ -s remote.conf ]; then \
+        REMOTE_COUNT=$(wc -l < remote.conf); \
+        LOCAL_COUNT=$(wc -l < pkg/email/disposable_email_blocklist.conf 2>/dev/null || echo "0"); \
+        if [ "$REMOTE_COUNT" -gt "$LOCAL_COUNT" ]; then \
+            echo "CI INFO: Using remote blocklist ($REMOTE_COUNT entries vs local $LOCAL_COUNT entries)"; \
+            mv remote.conf pkg/email/disposable_email_blocklist.conf; \
+        else \
+            echo "CI INFO: Using local blocklist (Remote is smaller or identical)"; \
+            rm remote.conf; \
+        fi \
+    else \
+        echo "CI INFO: Failed to fetch remote list, falling back to local list"; \
+    fi
+
 # Build the Rust bindings and the Go application
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \

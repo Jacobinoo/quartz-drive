@@ -6,7 +6,8 @@ export function proxy(request: NextRequest) {
 
   const isDev = process.env.NODE_ENV === 'development'
   const s3Endpoint = process.env.NEXT_PUBLIC_S3_ENDPOINT || ''
-  const apiOrigin = process.env.NEXT_PUBLIC_API_URL|| ''
+  const apiOrigin = process.env.NEXT_PUBLIC_API_URL || ''
+  const passwordPwnedCheckApi = 'https://api.pwnedpasswords.com'
 
   const devOrigins = [
     "https://localhost:3000",
@@ -15,8 +16,8 @@ export function proxy(request: NextRequest) {
   ]
 
   const connectSrc = isDev
-    ? ["'self'", ...devOrigins, s3Endpoint, "https://*.hcaptcha.com "].join(' ')
-    : ["'self'", apiOrigin, s3Endpoint, "https://*.hcaptcha.com"].join(' ')
+    ? ["'self'", ...devOrigins, s3Endpoint, passwordPwnedCheckApi, "https://*.hcaptcha.com "].join(' ')
+    : ["'self'", apiOrigin, s3Endpoint, passwordPwnedCheckApi, "https://*.hcaptcha.com"].join(' ')
 
   const cspHeader = `
     default-src 'self';

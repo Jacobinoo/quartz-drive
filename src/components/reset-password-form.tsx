@@ -34,6 +34,8 @@ export function ResetPasswordForm({
 
   const [recoveryPhrase, setRecoveryPhrase] = useState<string>("");
   const [newPassword, setNewPassword] = useState<string>("");
+  const [passwordScore, setPasswordScore] = useState<number | null>(null);
+  const [passwordFeedback, setPasswordFeedback] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [success, setSuccess] = useState<boolean>(false);
@@ -54,6 +56,69 @@ export function ResetPasswordForm({
         setIsVerifying(false);
       });
   }, [token]);
+
+  useEffect(() => {
+    if (!newPassword || !verifyResponse) {
+      setPasswordScore(null);
+      setPasswordFeedback("");
+      return;
+    }
+
+    let isMounted = true;
+
+    const timer = setTimeout(() => {
+      Promise.all([
+        import("@zxcvbn-ts/core"),
+        import("@zxcvbn-ts/language-common"),
+        import("@zxcvbn-ts/language-en"),
+        import("@zxcvbn-ts/language-pl"),
+        import("@zxcvbn-ts/matcher-pwned")
+      ]).then(([zxcvbnCore, common, en, pl, matcherPwned]) => {
+        if (!isMounted) return;
+
+        const { ZxcvbnFactory } = zxcvbnCore;
+        const { matcherPwnedFactory } = matcherPwned;
+
+        const options = {
+          dictionary: {
+            ...common.dictionary,
+            ...en.dictionary,
+            ...pl.dictionary,
+          },
+          graphs: common.adjacencyGraphs,
+          translations: en.translations,
+        };
+
+        const matcher = matcherPwnedFactory(window.fetch);
+        const zxcvbn = new ZxcvbnFactory(options, { pwned: matcher });
+
+        const email = verifyResponse.email;
+        const deriveUsernameFromEmail = (email: string) => {
+            if (!email) return "";
+            return email.split("@")[0];
+        };
+
+        // Pass the user's email and app name to penalize them if they use them in the password
+        zxcvbn.checkAsync(newPassword, [email, deriveUsernameFromEmail(email), "Quartz", "QuartzDrive", "quartzapp.top"]).then((result) => {
+          if (isMounted) {
+            setPasswordScore(result.score);
+            if (result.feedback.warning) {
+                setPasswordFeedback(result.feedback.warning);
+            } else if (result.feedback.suggestions.length > 0) {
+                setPasswordFeedback(result.feedback.suggestions[0]);
+            } else {
+                setPasswordFeedback("");
+            }
+          }
+        });
+      }).catch(console.error);
+    }, 400);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [newPassword, verifyResponse]);
 
   if (isVerifying) {
     return (
@@ -161,10 +226,42 @@ export function ResetPasswordForm({
                     type="password"
                     required
                     onChange={(e) => setNewPassword(e.target.value)} />
+                {newPassword && (
+                  <div className="mt-2 flex flex-col gap-1">
+                    <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                      {[0, 1, 2, 3].map((index) => {
+                        let bgColor = "bg-transparent";
+                        if (passwordScore !== null) {
+                          let litSegments = 0;
+                          if (passwordScore <= 1) litSegments = 1;
+                          else if (passwordScore === 2) litSegments = 2;
+                          else if (passwordScore === 3) litSegments = 3;
+                          else if (passwordScore === 4) litSegments = 4;
+
+                          if (index < litSegments) {
+                            if (passwordScore <= 1) bgColor = "bg-destructive";
+                            else if (passwordScore === 2) bgColor = "bg-orange-500";
+                            else if (passwordScore === 3) bgColor = "bg-yellow-500";
+                            else bgColor = "bg-green-500";
+                          }
+                        }
+                        return (
+                          <div
+                            key={index}
+                            className={`flex-1 transition-colors duration-300 ${bgColor} ${index > 0 ? "border-l border-background/20" : ""}`}
+                          />
+                        );
+                      })}
+                    </div>
+                    {passwordFeedback && (
+                      <span className="text-xs text-muted-foreground">{passwordFeedback}</span>
+                    )}
+                  </div>
+                )}
               </Field>
               {error && <div className="text-red-500 text-sm text-center">{error}</div>}
               <Field>
-                <Button type="submit" disabled={loading} onClick={(e) => submitForm()}>
+                <Button type="submit" disabled={loading || passwordScore === null || passwordScore < 3} onClick={(e) => submitForm()}>
                   {loading ? "Recovering..." : "Reset Password"}
                 </Button>
               </Field>

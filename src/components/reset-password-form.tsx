@@ -25,8 +25,8 @@ export function ResetPasswordForm({
   ...props
 }: React.ComponentProps<"div">) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const token = searchParams.get("token") || "";
+  const token = window.location.hash.slice(1).split("token=").at(1)
+
 
   const [verifyResponse, setVerifyResponse] = useState<VerifyResponse | null>(null)
   const [isVerifying, setIsVerifying] = useState<boolean>(true);
@@ -114,8 +114,8 @@ export function ResetPasswordForm({
   }
 
   function submitForm(){
-    if (verifyResponse == null) {
-      throw new Error("verify response is null")
+    if (verifyResponse == null || !token) {
+      throw new Error("verify response or token is missing")
     }
 
     setError("");

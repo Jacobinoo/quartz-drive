@@ -56,7 +56,9 @@ func InitLogger(env string) {
 		})
 	}
 
-	// Wrap the base handler with our custom ContextHandler
-	Log = slog.New(&ContextHandler{baseHandler})
+	hostname, _ := os.Hostname()
+
+	// Wrap the base handler with our custom ContextHandler, and permanently attach the container ID
+	Log = slog.New(&ContextHandler{baseHandler}).With("container_id", hostname)
 	slog.SetDefault(Log)
 }

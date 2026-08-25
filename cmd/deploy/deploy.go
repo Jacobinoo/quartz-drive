@@ -90,13 +90,24 @@ func (d *Deployer) Run(ctx context.Context) error {
 		return fmt.Errorf("pulling image: %w", err)
 	}
 
-	// 6. Scale up to oldCount+1 — starts exactly one new container alongside all existing ones.
+	// 5b. Ensure we only have exactly 1 old container before scaling up.
+	//     If a previous deploy crashed or the user manually scaled up,
+	//     we gracefully kill the extras so we can cleanly scale to exactly 2.
+	if len(oldIDs) > 1 {
+		d.log.Warn("Found multiple old containers, cleaning up extras...", "count", len(oldIDs)-1)
+		for _, id := range oldIDs[1:] {
+			_ = stopContainer(ctx, id)
+			_ = removeContainer(ctx, id)
+		}
+		oldIDs = oldIDs[:1]
+	}
+
+	// 6. Scale up to exactly 2 — creates the pendulum effect.
+	//    If index 1 is running, Compose creates index 2.
+	//    If index 2 is running, Compose creates index 1!
 	//    --no-recreate ensures existing containers are NOT touched.
-	//    We use oldCount+1 rather than a hardcoded 2 because a previous deployment
-	//    may have left the service running at scale=2 already.
-	newScale := len(oldIDs) + 1
-	d.log.Info("Starting new container alongside old one...", "new_scale", newScale)
-	scaleUp := fmt.Sprintf("%s=%d", d.cfg.Service, newScale)
+	d.log.Info("Starting new container alongside old one...", "pendulum_scale", 2)
+	scaleUp := fmt.Sprintf("%s=2", d.cfg.Service)
 	if err := compose(ctx, d.cfg.ComposeFile, "up", "-d",
 		"--scale", scaleUp,
 		"--no-recreate",
@@ -145,19 +156,11 @@ func (d *Deployer) Run(ctx context.Context) error {
 		}
 	}
 
-	// 10. Scale back down to 1 so the next deployment always starts from a clean
-	//     single-container baseline. This is safe NOW because all old containers
-	//     have already been removed — only the healthy new container remains.
-	//     Without this, each deployment would increment the scale by 1 forever.
-	d.log.Info("Resetting scale to 1...")
-	if err := compose(ctx, d.cfg.ComposeFile, "up", "-d",
-		"--scale", fmt.Sprintf("%s=1", d.cfg.Service),
-		"--no-recreate", // the surviving new container must NOT be touched
-		d.cfg.Service,
-	); err != nil {
-		// Non-fatal: the new container is healthy and serving traffic regardless
-		d.log.Warn("Scale reset failed (non-fatal — new container is still healthy)", "error", err)
-	}
+	// We purposely DO NOT scale back down to 1 here.
+	// If we scale back to 1, Docker Compose V2 enforces index <= scale,
+	// which means it would instantly assassinate our brand new container
+	// (if it has index 2) and start index 1 in the background!
+	// Leaving the compose state at scale=2 allows the pendulum to work perfectly.
 
 	d.log.Info("Deployment complete",
 		"duration", time.Since(start).Round(time.Millisecond),

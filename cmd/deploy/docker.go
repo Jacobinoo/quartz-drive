@@ -13,8 +13,12 @@ import (
 
 // compose runs a `docker compose -f <file> <args...>` command,
 // streaming stdout/stderr directly to the terminal.
-func compose(ctx context.Context, composeFile string, args ...string) error {
-	cmdArgs := append([]string{"compose", "-f", composeFile}, args...)
+func compose(ctx context.Context, composeFile, envFile string, args ...string) error {
+	cmdArgs := []string{"compose", "-f", composeFile}
+	if envFile != "" {
+		cmdArgs = append(cmdArgs, "--env-file", envFile)
+	}
+	cmdArgs = append(cmdArgs, args...)
 	cmd := exec.CommandContext(ctx, "docker", cmdArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -27,8 +31,14 @@ func compose(ctx context.Context, composeFile string, args ...string) error {
 // listServiceContainerIDs returns the full container IDs currently
 // running for a given compose service. Returns nil (not an error)
 // if no containers are running yet.
-func listServiceContainerIDs(ctx context.Context, composeFile, service string) ([]string, error) {
-	cmd := exec.CommandContext(ctx, "docker", "compose", "-f", composeFile, "ps", "-q", service)
+func listServiceContainerIDs(ctx context.Context, composeFile, envFile, service string) ([]string, error) {
+	cmdArgs := []string{"compose", "-f", composeFile}
+	if envFile != "" {
+		cmdArgs = append(cmdArgs, "--env-file", envFile)
+	}
+	cmdArgs = append(cmdArgs, "ps", "-q", service)
+
+	cmd := exec.CommandContext(ctx, "docker", cmdArgs...)
 	out, err := cmd.Output()
 	if err != nil {
 		// docker compose ps returns exit 1 when no containers exist — treat as empty

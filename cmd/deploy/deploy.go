@@ -72,7 +72,7 @@ func (d *Deployer) Run(ctx context.Context) error {
 
 	// 3. Snapshot the currently running container IDs *before* we touch anything.
 	//    This is what lets us distinguish "old" vs "new" after the scale-up.
-	oldIDs, err := listServiceContainerIDs(ctx, d.cfg.ComposeFile, d.cfg.Service)
+	oldIDs, err := listServiceContainerIDs(ctx, d.cfg.ComposeFile, d.cfg.EnvFile, d.cfg.Service)
 	if err != nil {
 		return fmt.Errorf("listing existing containers: %w", err)
 	}
@@ -80,13 +80,13 @@ func (d *Deployer) Run(ctx context.Context) error {
 
 	// 4. Ensure supporting infrastructure (Traefik, Valkey) is running
 	d.log.Info("Ensuring infrastructure services are up...")
-	if err := compose(ctx, d.cfg.ComposeFile, "up", "-d", "traefik", "valkey"); err != nil {
+	if err := compose(ctx, d.cfg.ComposeFile, d.cfg.EnvFile, "up", "-d", "traefik", "valkey"); err != nil {
 		return fmt.Errorf("starting infrastructure: %w", err)
 	}
 
 	// 5. Pull the latest image *before* starting a new container
 	d.log.Info("Pulling latest image...")
-	if err := compose(ctx, d.cfg.ComposeFile, "pull", d.cfg.Service); err != nil {
+	if err := compose(ctx, d.cfg.ComposeFile, d.cfg.EnvFile, "pull", d.cfg.Service); err != nil {
 		return fmt.Errorf("pulling image: %w", err)
 	}
 
@@ -108,7 +108,7 @@ func (d *Deployer) Run(ctx context.Context) error {
 	//    --no-recreate ensures existing containers are NOT touched.
 	d.log.Info("Starting new container alongside old one...", "pendulum_scale", 2)
 	scaleUp := fmt.Sprintf("%s=2", d.cfg.Service)
-	if err := compose(ctx, d.cfg.ComposeFile, "up", "-d",
+	if err := compose(ctx, d.cfg.ComposeFile, d.cfg.EnvFile, "up", "-d",
 		"--scale", scaleUp,
 		"--no-recreate",
 		d.cfg.Service,
@@ -120,7 +120,7 @@ func (d *Deployer) Run(ctx context.Context) error {
 	time.Sleep(2 * time.Second)
 
 	// 7. Find which container ID is new (not in our pre-scale snapshot)
-	allIDs, err := listServiceContainerIDs(ctx, d.cfg.ComposeFile, d.cfg.Service)
+	allIDs, err := listServiceContainerIDs(ctx, d.cfg.ComposeFile, d.cfg.EnvFile, d.cfg.Service)
 	if err != nil {
 		return fmt.Errorf("listing containers after scale-up: %w", err)
 	}

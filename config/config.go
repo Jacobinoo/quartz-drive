@@ -11,6 +11,8 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
+var BuildVersion = "unknown"
+
 type (
 	Config struct {
 		Host         string `env:"HOST,required"`

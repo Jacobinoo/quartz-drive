@@ -49,6 +49,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_VERSION=${{ github.ref_name }}-sha-${{ github.sha }}-build-${{ github.run_number }}
           platforms: linux/amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max

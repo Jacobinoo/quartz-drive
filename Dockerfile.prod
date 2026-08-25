@@ -36,7 +36,8 @@ RUN cd internal/bindings/opaque_rust \
 
 # 5. Build the Go binary (module cache from step 1 is reused; only your own
 #    packages get compiled since GOCACHE isn't primed by go mod download alone)
-RUN CGO_ENABLED=1 go build -ldflags="-s -w" -trimpath -o build/quartz-account ./cmd/app
+ARG BUILD_VERSION=unknown
+RUN CGO_ENABLED=1 go build -ldflags="-s -w -X 'quartz/config.BuildVersion=${BUILD_VERSION}'" -trimpath -o build/quartz-account ./cmd/app
 
 # Stage 2: Runtime
 FROM debian:bookworm-slim

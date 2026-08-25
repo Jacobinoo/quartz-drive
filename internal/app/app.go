@@ -182,10 +182,12 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 	response := struct {
 		Service     string
 		Version     string
+		Build       string
 		Description string
 	}{
 		Service:     config.Cfg.App.Name,
 		Version:     config.Cfg.App.Version,
+		Build:       config.BuildVersion,
 		Description: "Quartz API Server",
 	}
 

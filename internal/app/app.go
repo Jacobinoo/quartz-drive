@@ -20,6 +20,7 @@ import (
 	"quartz/pkg/database"
 	"quartz/pkg/httputils"
 	"quartz/pkg/storage"
+	"strings"
 
 	"encoding/base64"
 	"os"
@@ -179,16 +180,25 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
+	buildVerArr := strings.Split(config.BuildVersion, "-")
+	version := buildVerArr[0]
+	commitHash := buildVerArr[1] + buildVerArr[2]
+	buildNumber := buildVerArr[4]
+
 	response := struct {
-		Service     string
-		Version     string
-		Build       string
-		Description string
+		Service            string
+		EnvironmentVersion string
+		Version            string
+		BuildNumber        string
+		CommitHash         string
+		Description        string
 	}{
-		Service:     config.Cfg.App.Name,
-		Version:     config.Cfg.App.Version,
-		Build:       config.BuildVersion,
-		Description: "Quartz API Server",
+		Service:            config.Cfg.App.Name,
+		EnvironmentVersion: config.Cfg.App.Version,
+		Version:            version,
+		BuildNumber:        buildNumber,
+		CommitHash:         commitHash,
+		Description:        "Quartz API Server",
 	}
 
 	err := json.NewEncoder(w).Encode(&response)

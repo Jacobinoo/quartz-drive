@@ -182,7 +182,7 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 
 	buildVerArr := strings.Split(config.BuildVersion, "-")
 	version := buildVerArr[0]
-	commitHash := buildVerArr[1] + buildVerArr[2]
+	commitHash := buildVerArr[1] + "-" + buildVerArr[2]
 	buildNumber := buildVerArr[4]
 
 	response := struct {

@@ -4,8 +4,8 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/caarlos0/env/v11"
@@ -163,25 +163,30 @@ func (c *Config) validateJWT() {
 func (c *Config) validateSweeper() {
 	_, err := time.ParseDuration(c.Sweeper.HourlyInterval)
 	if err != nil {
-		log.Fatalf("failed to parse env vars: %v", err)
+		slog.Error("failed to parse env vars", "error", err)
+		os.Exit(1)
 		return
 	}
 	_, err = time.ParseDuration(c.Sweeper.DailyInterval)
 	if err != nil {
-		log.Fatalf("failed to parse env vars: %v", err)
+		slog.Error("failed to parse env vars", "error", err)
+		os.Exit(1)
 		return
 	}
 	_, err = time.ParseDuration(c.Sweeper.CompletedInterval)
 	if err != nil {
-		log.Fatalf("failed to parse env vars: %v", err)
+		slog.Error("failed to parse env vars", "error", err)
+		os.Exit(1)
 		return
 	}
 	if c.Sweeper.UploadSessionExpiresHours <= 0 {
-		log.Fatal("Sweeper.UploadSessionExpiresHours must be higher than 0")
+		slog.Error("Sweeper.UploadSessionExpiresHours must be higher than 0")
+		os.Exit(1)
 		return
 	}
 	if c.Sweeper.TrashRetentionDays <= 0 {
-		log.Fatal("Sweeper.TrashRetentionDays must be higher than 0")
+		slog.Error("Sweeper.TrashRetentionDays must be higher than 0")
+		os.Exit(1)
 		return
 	}
 }
@@ -189,17 +194,22 @@ func (c *Config) validateSweeper() {
 func (c *Config) Init() {
 	err := env.Parse(c)
 	if err != nil {
-		log.Fatalf("failed to parse env vars: %v", err)
+		slog.Error("failed to parse env vars", "error", err)
+		os.Exit(1)
 		return
 	}
 
 	// Validate JWT Key to fail-fast
 	privateKeyBytes, err := hex.DecodeString(c.JWT.SecretKey)
 	if err != nil {
-		log.Fatalf("JWT_PRIVATE_KEY_HEX is not a valid hex string: %v", err)
+		slog.Error("JWT_PRIVATE_KEY_HEX is not a valid hex string", "error", err)
+		os.Exit(1)
+		return
 	}
 	if _, err := x509.ParseECPrivateKey(privateKeyBytes); err != nil {
-		log.Fatalf("JWT_PRIVATE_KEY_HEX is not a valid ECDSA P-256 private key: %v", err)
+		slog.Error("JWT_PRIVATE_KEY_HEX is not a valid ECDSA P-256 private key", "error", err)
+		os.Exit(1)
+		return
 	}
 
 	slog.Info("Environment loaded", "environment", c.App.Env, "version", c.App.Version)

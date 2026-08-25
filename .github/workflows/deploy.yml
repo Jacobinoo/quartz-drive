@@ -92,11 +92,10 @@ jobs:
             chmod +x qdeploy
 
             # Deploy the exact immutable SHA that was just built in CI.
-            # This guarantees what's on Docker Hub is exactly what gets deployed,
-            # even if :latest was updated by another push racing this deployment.
+            # metadata-action pushes short SHAs (7 chars), so we truncate here to match.
             ./qdeploy \
               -f docker-compose.prod.yml \
               -env-file .env.production \
               -service quartz-server \
-              -tag sha-${{ github.sha }} \
+              -tag sha-$(echo "${{ github.sha }}" | cut -c1-7) \
               -timeout 90s

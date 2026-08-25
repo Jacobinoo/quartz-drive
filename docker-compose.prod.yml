@@ -8,6 +8,13 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.websecure.http.encodedCharacters.allowEncodedSlash=false"
+      - "--entrypoints.websecure.http.encodedCharacters.allowEncodedBackSlash=false"
+      - "--entrypoints.websecure.http.encodedCharacters.allowEncodedNullCharacter=false"
+      - "--entrypoints.websecure.http.encodedCharacters.allowEncodedSemicolon=false"
+      - "--entrypoints.websecure.http.encodedCharacters.allowEncodedPercent=false"
+      - "--entrypoints.websecure.http.encodedCharacters.allowEncodedQuestionMark=false"
+      - "--entrypoints.websecure.http.encodedCharacters.allowEncodedHash=false"
       # Automatically redirects HTTP to HTTPS
       - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
       - "--entrypoints.web.http.redirections.entryPoint.scheme=https"

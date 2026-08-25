@@ -1,30 +1,33 @@
-name: Build and Push to Docker Hub
+name: Build and Deploy
+
 on:
   push:
     branches:
       - master
-    # Skip triggering on changes that don't affect the build
     paths-ignore:
       - '**.md'
       - 'docs/**'
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v7
 
+    steps:
+      # ── 1. Source ────────────────────────────────────────────────────────────
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      # ── 2. Docker image ──────────────────────────────────────────────────────
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v4
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push quartz-server image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -32,30 +35,59 @@ jobs:
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/quartz-server:latest
           platforms: linux/amd64
-          # GitHub Actions cache for Docker layers.
-          # mode=max is required here (not the default mode=min) because this
-          # is a multi-stage build: mode=min only caches layers that make it
-          # into the final image, which would skip the builder-stage
-          # go mod download / cargo build layers entirely.
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Copy Deployment Files to Server
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build qdeploy
+        # Pure stdlib — no CGO, cross-compiles cleanly in CI
+        run: |
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+            go build \
+              -ldflags="-s -w" \
+              -trimpath \
+              -o qdeploy \
+              ./cmd/deploy
+        
+      - name: Copy deploy artifacts to server
         uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "docker-compose.prod.yml,deploy.sh"
-          target: "QuartzAccountGo/"
+          # Only ship what the server actually needs:
+          #   qdeploy              — the deploy binary
+          #   docker-compose.prod.yml — the compose definition
+          source: "qdeploy,docker-compose.prod.yml"
+          target: "~/QuartzAccountGo/"
 
-      - name: Trigger Server Deployment
+      # ── 5. Run deployment on server ──────────────────────────────────────────
+      - name: Deploy
         uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
+          # Timeout is health-check-timeout (90s) + pull time + buffer
+          command_timeout: 5m
           script: |
-            cd QuartzAccountGo
-            chmod +x deploy.sh
-            ./deploy.sh
+            set -euo pipefail
+            cd ~/QuartzAccountGo
+
+            set -a
+            source .env.production
+            set +a
+
+            chmod +x qdeploy
+
+            # Run the deployment
+            # -timeout is the health check wait, not the total SSH timeout above
+            ./qdeploy \
+              -f docker-compose.prod.yml \
+              -service quartz-server \
+              -timeout 90s

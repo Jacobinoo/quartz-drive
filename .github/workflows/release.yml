@@ -28,7 +28,9 @@ jobs:
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/quartz-server
           tags: |
-            # :v0.1.0 — exact semver tag (always created)
+            # :v0.1.0 — exact git tag (including the 'v')
+            type=raw,value=${{ github.ref_name }}
+            # :0.1.0 — exact semver tag (without 'v')
             type=semver,pattern={{version}}
             # :v0.1 — minor alias (suppressed for pre-releases like -beta, -alpha)
             type=semver,pattern={{major}}.{{minor}}

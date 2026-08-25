@@ -3,6 +3,7 @@ services:
     image: traefik:v3.7.10
     command:
       - "--log.level=WARN"
+      - "--log.format=json"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"

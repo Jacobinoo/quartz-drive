@@ -59,3 +59,6 @@ To clean all build artifacts (including the compiled Rust library and Go binary)
 ```bash
 make clean
 ```
+
+## License
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPLv3)**. See the `LICENSE` file for details.

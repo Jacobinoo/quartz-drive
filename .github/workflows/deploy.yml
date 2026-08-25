@@ -13,11 +13,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ── 1. Source ────────────────────────────────────────────────────────────
       - name: Check out code
         uses: actions/checkout@v4
 
-      # ── 2. Docker image ──────────────────────────────────────────────────────
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -66,28 +64,24 @@ jobs:
           source: "qdeploy,docker-compose.prod.yml"
           target: "~/QuartzAccountGo/"
 
-      # ── 5. Run deployment on server ──────────────────────────────────────────
       - name: Deploy
         uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          # Timeout is health-check-timeout (90s) + pull time + buffer
+          # command_timeout must exceed health-timeout + image pull time
           command_timeout: 5m
           script: |
             set -euo pipefail
             cd ~/QuartzAccountGo
 
-            set -a
-            source .env.production
-            set +a
-
             chmod +x qdeploy
 
-            # Run the deployment
-            # -timeout is the health check wait, not the total SSH timeout above
+            # qdeploy loads .env.production
+            # -env-file is relative to -f (the compose file)
             ./qdeploy \
               -f docker-compose.prod.yml \
+              -env-file .env.production \
               -service quartz-server \
               -timeout 90s

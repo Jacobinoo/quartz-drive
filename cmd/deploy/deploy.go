@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -24,7 +28,22 @@ func (d *Deployer) Run(ctx context.Context) error {
 		"qdeploy_version", version,
 	)
 
-	// 1. Pre-flight: verify the environment is safe to deploy into
+	// 1. Load the env file so all subsequent steps (including docker compose)
+	//    have access to variables like DOMAIN_NAME, ACME_EMAIL, etc.
+	//    Resolve the env file path relative to the compose file's directory,
+	//    since both files live together on the server.
+	if d.cfg.EnvFile != "" {
+		envPath := d.cfg.EnvFile
+		if !filepath.IsAbs(envPath) {
+			envPath = filepath.Join(filepath.Dir(d.cfg.ComposeFile), envPath)
+		}
+		if err := loadEnvFile(envPath); err != nil {
+			return fmt.Errorf("loading env file %q: %w", envPath, err)
+		}
+		d.log.Info("Env file loaded", "path", envPath)
+	}
+
+	// 2. Pre-flight: verify the environment is safe to deploy into
 	if err := runPreflightChecks(ctx, d.cfg); err != nil {
 		return fmt.Errorf("pre-flight failed: %w", err)
 	}
@@ -34,7 +53,7 @@ func (d *Deployer) Run(ctx context.Context) error {
 		return nil
 	}
 
-	// 2. Exclusive lock: prevent concurrent deployments
+	// 3. Exclusive lock: prevent concurrent deployments
 	lock, err := acquireLock(lockFilePath)
 	if err != nil {
 		return err
@@ -172,4 +191,62 @@ func findNew(all, old []string) string {
 		}
 	}
 	return ""
+}
+
+// loadEnvFile reads a .env file and sets each key=value pair as an
+// environment variable for this process and all child processes it spawns
+// (docker compose inherits the environment automatically).
+//
+// Rules:
+//   - Lines starting with # are comments and are skipped
+//   - Blank lines are skipped
+//   - Existing env vars are NOT overridden (shell-set vars take precedence)
+//   - Values may optionally be wrapped in single or double quotes
+func loadEnvFile(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", path, err)
+	}
+	defer f.Close()
+
+	lineNum := 0
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		lineNum++
+		line := strings.TrimSpace(scanner.Text())
+
+		// Skip blank lines and comments
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Split on the first `=` only — values may contain `=` themselves
+		idx := strings.IndexByte(line, '=')
+		if idx < 0 {
+			// Not a valid key=value pair — skip silently
+			continue
+		}
+
+		key := strings.TrimSpace(line[:idx])
+		val := strings.TrimSpace(line[idx+1:])
+
+		// Strip surrounding quotes (single or double) if present
+		if len(val) >= 2 {
+			if (val[0] == '"' && val[len(val)-1] == '"') ||
+				(val[0] == '\'' && val[len(val)-1] == '\'') {
+				val = val[1 : len(val)-1]
+			}
+		}
+
+		// Don't override a var that's already set in the environment
+		if os.Getenv(key) != "" {
+			continue
+		}
+
+		if err := os.Setenv(key, val); err != nil {
+			return fmt.Errorf("line %d: setenv %q: %w", lineNum, key, err)
+		}
+	}
+
+	return scanner.Err()
 }

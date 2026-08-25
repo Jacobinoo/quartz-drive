@@ -17,6 +17,7 @@ const (
 
 type Config struct {
 	ComposeFile   string
+	EnvFile       string
 	Service       string
 	HealthTimeout time.Duration
 	DryRun        bool
@@ -27,6 +28,7 @@ func main() {
 	cfg := &Config{}
 
 	flag.StringVar(&cfg.ComposeFile, "f", "docker-compose.prod.yml", "Docker Compose file to use")
+	flag.StringVar(&cfg.EnvFile, "env-file", ".env.production", "Env file to load before deployment (relative to -f location)")
 	flag.StringVar(&cfg.Service, "service", "quartz-server", "Service name to deploy")
 	flag.DurationVar(&cfg.HealthTimeout, "timeout", 90*time.Second, "Max time to wait for new container to become healthy")
 	flag.BoolVar(&cfg.DryRun, "dry-run", false, "Preview what would happen without making any changes")

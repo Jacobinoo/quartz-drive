@@ -1,15 +1,12 @@
-name: Build and Deploy
+name: Release
 
 on:
   push:
-    branches:
-      - master
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
+    tags:
+      - 'v*'   # triggers on v0.1.0, v1.0.0-beta, v0.2.1-alpha, etc.
 
 jobs:
-  build-and-deploy:
+  release:
     runs-on: ubuntu-latest
 
     steps:
@@ -31,20 +28,27 @@ jobs:
         with:
           images: ${{ secrets.DOCKERHUB_USERNAME }}/quartz-server
           tags: |
-            # :latest — always updated on master push
-            type=raw,value=latest
-            # :sha-a3f9c1b — immutable commit pin for precise rollbacks
+            # :v0.1.0 — exact semver tag (always created)
+            type=semver,pattern={{version}}
+            # :v0.1 — minor alias (suppressed for pre-releases like -beta, -alpha)
+            type=semver,pattern={{major}}.{{minor}}
+            # :v0 — major alias (suppressed for pre-releases)
+            type=semver,pattern={{major}}
+            # :sha-a3f9c1b — immutable commit pin, same as CI builds
             type=sha,prefix=sha-,format=short
-            # :build-142 — monotonic build number, easy to compare
+            # :build-142 — monotonic build number
             type=raw,value=build-${{ github.run_number }}
+            # :latest — move latest forward on stable releases only (not pre-releases)
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
 
-      - name: Build and push quartz-server image
+      - name: Build and push release image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.prod
           push: true
           tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -56,7 +60,6 @@ jobs:
           cache: true
 
       - name: Build qdeploy
-        # Pure stdlib — no CGO, cross-compiles cleanly in CI
         run: |
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
             go build \
@@ -64,26 +67,22 @@ jobs:
               -trimpath \
               -o qdeploy \
               ./cmd/deploy
-        
+
       - name: Copy deploy artifacts to server
         uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          # Only ship what the server actually needs:
-          #   qdeploy              — the deploy binary
-          #   docker-compose.prod.yml — the compose definition
           source: "qdeploy,docker-compose.prod.yml"
           target: "~/QuartzAccountGo/"
 
-      - name: Deploy
+      - name: Deploy release
         uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          # command_timeout must exceed health-timeout + image pull time
           command_timeout: 5m
           script: |
             set -euo pipefail
@@ -91,12 +90,12 @@ jobs:
 
             chmod +x qdeploy
 
-            # Deploy the exact immutable SHA that was just built in CI.
-            # This guarantees what's on Docker Hub is exactly what gets deployed,
-            # even if :latest was updated by another push racing this deployment.
+            # Deploy the exact semver tag that triggered this release.
+            # Using the semver tag (not :latest) guarantees reproducibility —
+            # if you re-run this workflow, you get the exact same image.
             ./qdeploy \
               -f docker-compose.prod.yml \
               -env-file .env.production \
               -service quartz-server \
-              -tag sha-${{ github.sha }} \
+              -tag ${{ github.ref_name }} \
               -timeout 90s

@@ -46,7 +46,7 @@ services:
     restart: unless-stopped
 
   quartz-server:
-    image: ${DOCKERHUB_USERNAME}/quartz-server:latest
+    image: ${DOCKERHUB_USERNAME}/quartz-server:${DEPLOY_TAG:-latest}
     logging:
       driver: "nanoandrew4/ngcplogs:linux-amd64-v1.3.0"
     env_file:

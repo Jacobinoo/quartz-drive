@@ -43,6 +43,16 @@ func (d *Deployer) Run(ctx context.Context) error {
 		d.log.Info("Env file loaded", "path", envPath)
 	}
 
+	// 1b. Set DEPLOY_TAG so docker-compose.prod.yml uses the correct image tag.
+	//     The compose file uses ${DEPLOY_TAG:-latest}, so if -tag is empty we
+	//     leave the env var unset and Compose falls back to :latest automatically.
+	deployTag := d.cfg.DeployTag
+	if deployTag == "" {
+		deployTag = "latest"
+	}
+	_ = os.Setenv("DEPLOY_TAG", deployTag)
+	d.log.Info("Deploy tag set", "tag", deployTag)
+
 	// 2. Pre-flight: verify the environment is safe to deploy into
 	if err := runPreflightChecks(ctx, d.cfg); err != nil {
 		return fmt.Errorf("pre-flight failed: %w", err)
@@ -132,17 +142,12 @@ func (d *Deployer) Run(ctx context.Context) error {
 		}
 	}
 
-	// 10. Scale back down to 1 so compose state is consistent
-	d.log.Info("Resetting scale to 1...")
-	scaleDown := fmt.Sprintf("%s=1", d.cfg.Service)
-	if err := compose(ctx, d.cfg.ComposeFile, "up", "-d",
-		"--scale", scaleDown,
-		"--no-deps",
-		d.cfg.Service,
-	); err != nil {
-		// Non-fatal: the new container is healthy and serving traffic regardless
-		d.log.Warn("Scale reset failed (non-fatal — new container is still healthy)", "error", err)
-	}
+	// Removed Step 10: DO NOT scale back down to 1.
+	// Docker Compose V2 enforces that container indexes must be <= scale.
+	// If we set scale=1, Compose will instantly kill the brand new container (e.g. index 2)
+	// and start the old one (index 1) in the background, causing complete downtime!
+	// By leaving the compose state as-is, the next deployment will cleanly oscillate
+	// and recreate index 1, creating a perfect blue-green pendulum.
 
 	d.log.Info("Deployment complete",
 		"duration", time.Since(start).Round(time.Millisecond),
@@ -165,15 +170,8 @@ func (d *Deployer) rollback(ctx context.Context, newID string, reason error) err
 		d.log.Info("Rollback: unhealthy container removed", "id", shortID(newID))
 	}
 
-	// Reset compose scale state back to 1
-	scaleDown := fmt.Sprintf("%s=1", d.cfg.Service)
-	if err := compose(ctx, d.cfg.ComposeFile, "up", "-d",
-		"--scale", scaleDown,
-		"--no-deps",
-		d.cfg.Service,
-	); err != nil {
-		d.log.Error("Rollback: scale reset failed", "error", err)
-	}
+	// Rollback: we don't scale reset here either, to avoid the same issue.
+	// Since we removed the unhealthy new container, the old one remains at its index.
 
 	d.log.Info("Rollback complete — old container is still serving traffic")
 	return fmt.Errorf("deployment failed (rolled back): %w", reason)

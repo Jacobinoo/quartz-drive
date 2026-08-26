@@ -59,7 +59,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 	h.db.Where("token_hash = ?", refreshTokenHash).First(&storedToken)
 	h.db.Preload("Session").Where("token_hash = ?", refreshTokenHash).First(&storedToken)
 
-	slog.Debug("Stored Token:", storedToken)
+	slog.Debug("Stored Token:", storedToken.TokenHash)
 	slog.Debug("Provided token hash:", refreshTokenHash)
 
 	if storedToken.IsRevoked == true {

@@ -1,6 +1,6 @@
 services:
   traefik:
-    image: traefik:v3.7.10
+    image: traefik:v3.7.11
     command:
       - "--log.level=WARN"
       - "--log.format=json"

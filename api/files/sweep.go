@@ -12,8 +12,8 @@ import (
 	"quartz/config"
 	"quartz/internal/model"
 
-	"github.com/google/uuid"
 	"github.com/bsm/redislock"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 

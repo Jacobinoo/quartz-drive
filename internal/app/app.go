@@ -20,6 +20,7 @@ import (
 	"quartz/pkg/database"
 	"quartz/pkg/httputils"
 	"quartz/pkg/storage"
+	"quartz/pkg/worker"
 	"strings"
 
 	"encoding/base64"
@@ -38,6 +39,9 @@ func Run() {
 
 	redisClient := database.NewRedis()
 	defer redisClient.Close()
+
+	asynqClient := worker.InitBackgroundWorkerClient(redisClient)
+	asynqServer := worker.InitBackgroundWorkerServer(redisClient)
 
 	db := initDb()
 	if db == nil {
@@ -63,6 +67,7 @@ func Run() {
 		// GRPCClient:     *grpcClient,
 		// GRPCContext:    context.WithoutCancel(context.Background()),
 		StorageService: storageService,
+		AsynqClient:    asynqClient,
 	}
 
 	router := initRouter(state)
@@ -99,7 +104,7 @@ func Run() {
 	// kill -9 is syscall.SIGKILL but can't be caught, so don't need add it
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down server...")
+	slog.Info("Shutting down server...")
 
 	// The context is used to inform the server it has 5 seconds to finish
 	// the request it is currently handling
@@ -107,8 +112,10 @@ func Run() {
 	defer cancel()
 
 	if err := server.Shutdown(ctx); err != nil {
-		log.Fatal("Server forced to shutdown: ", err)
+		slog.Error("Server forced to shutdown", "error", err)
 	}
+
+	asynqServer.Shutdown()
 
 	log.Println("Server exiting")
 }
@@ -259,7 +266,7 @@ func initV1Mux(state *ServerState) *http.ServeMux {
 	signoutHandler := signout.NewHandler(state.DB)
 	signout.RegisterRoutes(mux, signoutHandler, state.Redis)
 
-	signupHandler := signup.NewHandler(state.DB, state.Redis, state.OpaqueSetup)
+	signupHandler := signup.NewHandler(state.DB, state.Redis, state.OpaqueSetup, state.AsynqClient)
 	signup.RegisterRoutes(mux, signupHandler, state.Redis)
 
 	refreshHandler := refresh.NewHandler(state.DB)

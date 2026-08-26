@@ -18,11 +18,13 @@ import (
 	"quartz/pkg/captcha"
 	crypto "quartz/pkg/crypto"
 	"quartz/pkg/email"
+	"quartz/pkg/worker"
 	"strings"
 	"time"
 
 	// pb "quartz/proto"
 
+	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/google/uuid"
@@ -33,10 +35,11 @@ type Handler struct {
 	db          *gorm.DB
 	redis       *redis.Client
 	opaqueSetup []byte
+	asynqClient *asynq.Client
 }
 
-func NewHandler(db *gorm.DB, redisClient *redis.Client, opaqueSetup []byte) *Handler {
-	return &Handler{db: db, redis: redisClient, opaqueSetup: opaqueSetup}
+func NewHandler(db *gorm.DB, redisClient *redis.Client, opaqueSetup []byte, asynqClient *asynq.Client) *Handler {
+	return &Handler{db: db, redis: redisClient, opaqueSetup: opaqueSetup, asynqClient: asynqClient}
 }
 
 type redisRegistrationSession struct {
@@ -271,6 +274,30 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return apperrors.NewInternal(err)
 	}
+
+	// Handle database lookups & inserting + sending emails in the background worker
+	// This also prevents timing attacks to enumerate the emails registered in our system
+
+	task, err := worker.NewSignupProcessingTask(hashedIncomingEmail, userID.String(), &m3)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+	slog.DebugContext(r.Context(), "created a new signup processing task")
+
+	taskTimeLimit := 10 * time.Second
+	enqueuedTaskInfo, err := h.asynqClient.Enqueue(task, asynq.Timeout(taskTimeLimit))
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	slog.InfoContext(r.Context(), "enqueued a signup processing task", "task_id", enqueuedTaskInfo.ID, "timeout", taskTimeLimit)
+
+	w.WriteHeader(http.StatusAccepted)
+	err = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+	return nil
 
 	var user model.User
 	err = h.db.First(&user, "hashed_email = ?", registrationSession.HashedEmailHex).Error

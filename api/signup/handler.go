@@ -2,10 +2,12 @@ package signup
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"log"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"quartz/config"
@@ -17,6 +19,7 @@ import (
 	crypto "quartz/pkg/crypto"
 	"quartz/pkg/email"
 	"strings"
+	"time"
 
 	// pb "quartz/proto"
 
@@ -36,6 +39,11 @@ func NewHandler(db *gorm.DB, redisClient *redis.Client, opaqueSetup []byte) *Han
 	return &Handler{db: db, redis: redisClient, opaqueSetup: opaqueSetup}
 }
 
+type redisRegistrationSession struct {
+	HashedEmailHex string `json:"hashed_email"`
+	UserID         string `json:"user_id"`
+}
+
 // Signup: (opaque receive m1 & send m2)
 func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -47,6 +55,25 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) error {
 	var m1 dto.M1
 	if err := json.NewDecoder(r.Body).Decode(&m1); err != nil {
 		return apperrors.NewBadRequest("invalid request", err)
+	}
+
+	if m1.RegistrationRequest == "" || m1.Email == "" {
+		return apperrors.NewBadRequest("some fields are missing", fmt.Errorf("some fields are missing"))
+	}
+
+	regReqBytes, err := base64.RawURLEncoding.DecodeString(m1.RegistrationRequest)
+	if err != nil {
+		slog.WarnContext(r.Context(), "registration request base64 decode error",
+			"error", err,
+		)
+		return apperrors.NewBadRequest("invalid registration request", err)
+	}
+	if len(regReqBytes) != crypto.OpaqueRegistrationRequestSize {
+		slog.WarnContext(r.Context(), "registration request base64 length mismatch",
+			"expected", crypto.OpaqueRegistrationRequestSize,
+			"got", len(regReqBytes),
+		)
+		return apperrors.NewBadRequest("invalid registration request size", nil)
 	}
 
 	emailTrustScore := email.ValidateAndParseEmail(m1.Email)
@@ -68,42 +95,115 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
-	credID := uuid.New()
-
-	regReqBytes, err := base64.RawURLEncoding.DecodeString(m1.RegistrationRequest)
+	hashedEmail, err := crypto.HashEmail([]byte(m1.Email))
 	if err != nil {
-		return apperrors.NewBadRequest("invalid base64 in registration request", err)
+		return apperrors.NewInternal(err)
 	}
+	hashedEmailHex := fmt.Sprintf("%x", hashedEmail)
+
+	userId := uuid.New().String()
+
+	sessionNonceBytes := make([]byte, 32)
+	rand.Read(sessionNonceBytes)
+	sessionNonceB64 := base64.RawURLEncoding.EncodeToString(sessionNonceBytes)
+
+	sessionRedisKey := fmt.Sprintf("reg_session:%s", sessionNonceB64)
+	sessionRedisPayload, _ := json.Marshal(redisRegistrationSession{
+		HashedEmailHex: hashedEmailHex,
+		UserID:         userId,
+	})
+
+	encryptedRedisPayload, err := crypto.EncryptRedisPayload(sessionRedisPayload)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	const sessionRedisTTL = 30 * time.Second
+	redisCmdErr := h.redis.Set(r.Context(), sessionRedisKey, encryptedRedisPayload, sessionRedisTTL).Err()
+	if redisCmdErr != nil {
+		return apperrors.NewInternal(redisCmdErr)
+	}
+
+	var registrationResponse dto.M2
 
 	regResponse, err := bindings.StartRegistration(
 		h.opaqueSetup,
 		regReqBytes,
-		[]byte(credID.String()),
+		[]byte(userId),
 	)
-
-	var registrationResponse dto.M2
-
-	if err == nil {
-		registrationResponse = dto.M2{
-			Status:               "ok",
-			RegistrationResponse: base64.RawURLEncoding.EncodeToString(regResponse),
-			Nonce:                credID.String(), // Use the generated UUID as the nonce
-		}
-		w.WriteHeader(http.StatusOK)
-	} else {
-		registrationResponse = dto.M2{
-			Status:               "error",
-			RegistrationResponse: "",
-			Nonce:                "",
-		}
-		w.WriteHeader(http.StatusBadRequest)
+	if err != nil {
+		return apperrors.NewInternal(err)
 	}
 
-	log.Printf("user wants to register, waiting for m3, registration request %s", m1.RegistrationRequest)
+	registrationResponse = dto.M2{
+		Status:               "ok",
+		RegistrationResponse: base64.RawURLEncoding.EncodeToString(regResponse),
+		Nonce:                sessionNonceB64,
+	}
 
+	slog.InfoContext(r.Context(), "user wants to register, m1 correct, waiting for m3")
+
+	w.WriteHeader(http.StatusOK)
 	err = json.NewEncoder(w).Encode(registrationResponse)
 	if err != nil {
 		return apperrors.NewInternal(err)
+	}
+	return nil
+}
+
+// base64RawUrlDecodedByteLengthCompareWith compares the decoded base 64 length with compareWith parameter.
+// Returns nil if comparison successful, otherwise error.
+func base64RawUrlDecodedByteLengthCompareWith(b64 string, compareWith int) error {
+	decoded, err := base64.RawURLEncoding.DecodeString(b64)
+	if err != nil {
+		return fmt.Errorf("base64 decoding failed")
+	}
+	if len(decoded) != compareWith {
+		return fmt.Errorf("base64 decoded length mismatch, got %d, expected %d", len(decoded), compareWith)
+	}
+	return nil
+}
+
+func validateM3Payload(m3 *dto.M3) error {
+	if m3.User.Email == "" {
+		return fmt.Errorf("m3 is missing email")
+	}
+
+	checks := []struct {
+		value    string
+		expected int
+	}{
+		{m3.User.APAKE.RegistrationNonce, crypto.RegistrationNonceBytes},
+		{m3.User.APAKE.RegistrationRecord, crypto.OpaqueRegistrationRecordBytes},
+
+		{m3.User.Keys.MasterKdfSalt, crypto.MasterKdfSaltBytes},
+		{m3.User.Keys.AccountEncryptionPublicKey, crypto.EncryptionPublicKeyBytes},
+		{m3.User.Keys.EncryptedAccountEncryptionPrivateKey, crypto.EncryptedAccountEncryptionPrivateKeyBytes},
+		{m3.User.Keys.AccountEncryptionKeyNonce, crypto.SodiumNonceBytes},
+		{m3.User.Keys.AccountSigningPublicKey, crypto.AccountSigningPublicKeyBytes},
+		{m3.User.Keys.EncryptedAccountSigningPrivateKey, crypto.EncryptedAccountSigningPrivateKeyBytes},
+		{m3.User.Keys.AccountSigningKeyNonce, crypto.SodiumNonceBytes},
+		{m3.User.Keys.RecoveryEncryptedAccountEncryptionPrivateKey, crypto.RecoveryEncryptedAccountEncryptionPrivateKeyBytes},
+		{m3.User.Keys.RecoveryAccountEncryptionKeyNonce, crypto.SodiumNonceBytes},
+		{m3.User.Keys.RecoveryEncryptedAccountSigningPrivateKey, crypto.RecoveryEncryptedAccountSigningPrivateKeyBytes},
+		{m3.User.Keys.RecoveryAccountSigningKeyNonce, crypto.SodiumNonceBytes},
+
+		{m3.Drive.DefaultShare.PublicKey, crypto.SharePublicKeyBytes},
+		{m3.Drive.DefaultShare.WrappedPrivateKey, crypto.ShareWrappedPrivateKeyBytes},
+		{m3.Drive.DefaultShare.PrivKeyNonce, crypto.SodiumNonceBytes},
+		{m3.Drive.DefaultShare.EncryptedPassphraseForOwner, crypto.ShareEncryptedPassphraseForOwnerBytes},
+		{m3.Drive.DefaultShare.SignedEncryptedPassphraseForOwner, crypto.ShareSignedEncryptedPassphraseForOwnerBytes},
+		{m3.Drive.RootNode.PublicKey, crypto.NodePublicKeyBytes},
+		{m3.Drive.RootNode.WrappedPrivateKey, crypto.NodeWrappedPrivateKeyBytes},
+		{m3.Drive.RootNode.PrivKeyNonce, crypto.SodiumNonceBytes},
+		{m3.Drive.RootNode.EncryptedPassphrase, crypto.NodeEncryptedPassphraseBytes},
+		{m3.Drive.RootNode.SignedEncryptedPassphrase, crypto.NodeSignedEncryptedPassphraseBytes},
+	}
+
+	for i, check := range checks {
+		if err := base64RawUrlDecodedByteLengthCompareWith(check.value, check.expected); err != nil {
+			return fmt.Errorf("m3 validation error: %v. check %d failed`", err, i)
+		}
 	}
 	return nil
 }
@@ -116,39 +216,64 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 	var m3 dto.M3
 
 	if err := json.NewDecoder(r.Body).Decode(&m3); err != nil {
+		slog.WarnContext(r.Context(), "decode m3 payload error", "error", err)
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
-	uuidString := m3.User.APAKE.RegistrationNonce
-	credID, uuidParseErr := uuid.Parse(uuidString)
-	if uuidParseErr != nil {
-		return apperrors.NewBadRequest("invalid user identifier in nonce", uuidParseErr)
-	}
-
-	regRecordBytes, err := base64.RawURLEncoding.DecodeString(m3.User.APAKE.RegistrationRecord)
+	err := validateM3Payload(&m3)
 	if err != nil {
-		return apperrors.NewBadRequest("invalid base64 in registration record", err)
+		slog.WarnContext(r.Context(), "validate m3 payload error", "error", err)
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
+	sessionRedisKey := fmt.Sprintf("reg_session:%s", m3.User.APAKE.RegistrationNonce)
+	sessionRedisCmd := h.redis.GetDel(r.Context(), sessionRedisKey) // atomic get+delete = one-time use
+	err = sessionRedisCmd.Err()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return apperrors.NewBadRequest("invalid or expired registration session", nil)
+		}
+		return apperrors.NewInternal(err)
+	}
+	sessionRedisCmdVal := sessionRedisCmd.Val()
+
+	decryptedRedisPayloadBytes, err := crypto.DecryptRedisPayload(sessionRedisCmdVal)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	var registrationSession redisRegistrationSession
+	err = json.Unmarshal(decryptedRedisPayloadBytes, &registrationSession)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	hashedIncomingEmail, err := crypto.HashEmail([]byte(m3.User.Email))
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+	hashedIncomingEmailHex := hex.EncodeToString([]byte(hashedIncomingEmail))
+
+	if subtle.ConstantTimeCompare([]byte(hashedIncomingEmailHex), []byte(registrationSession.HashedEmailHex)) == 0 {
+		slog.WarnContext(r.Context(), "email mismatch", "hashed_incoming_email_hex", hashedIncomingEmailHex, "session_saved_hashed_email_hex", registrationSession.HashedEmailHex)
+		return apperrors.NewBadRequest("invalid or expired registration session", nil)
+	}
+
+	userID, err := uuid.Parse(registrationSession.UserID)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	regRecordBytes, _ := base64.RawURLEncoding.DecodeString(m3.User.APAKE.RegistrationRecord)
 	passwordFileRecord, err := bindings.FinishRegistration(
 		regRecordBytes,
 	)
-
-	if err != nil {
-		log.Printf("bindings FinishRegistration call failed: %v", err)
-		return apperrors.NewInternal(err)
-	} else {
-		log.Println("bindings FinishRegistration call succeeded")
-	}
-
-	hashedEmail, err := crypto.HashEmail([]byte(m3.User.Email))
 	if err != nil {
 		return apperrors.NewInternal(err)
 	}
 
 	var user model.User
-	err = h.db.First(&user, "hashed_email = ?", hashedEmail).Error
-
+	err = h.db.First(&user, "hashed_email = ?", registrationSession.HashedEmailHex).Error
 	if err == nil {
 		slog.InfoContext(r.Context(), "user already signed up, preventing enum attacks by faking status ok")
 		w.WriteHeader(http.StatusCreated)
@@ -192,10 +317,9 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 	//}
 
 	m3.User.APAKE.RegistrationRecord = base64.RawURLEncoding.EncodeToString(passwordFileRecord)
-
 	err = h.db.Transaction(func(tx *gorm.DB) error {
 		storedUserKeyStore := model.UserKeyStore{
-			UserID:                               credID,
+			UserID:                               userID,
 			MasterKdfSalt:                        m3.User.Keys.MasterKdfSalt,
 			AccountEncryptionPublicKey:           m3.User.Keys.AccountEncryptionPublicKey,
 			EncryptedAccountEncryptionPrivateKey: m3.User.Keys.EncryptedAccountEncryptionPrivateKey,
@@ -211,9 +335,9 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		storedUser := model.User{
-			ID:                 credID,
+			ID:                 userID,
 			EncryptedEmail:     encryptedEmail,
-			HashedEmail:        hashedEmail,
+			HashedEmail:        hashedIncomingEmail,
 			RegistrationRecord: m3.User.APAKE.RegistrationRecord,
 			RegistrationNonce:  m3.User.APAKE.RegistrationNonce,
 			KdfParams: dto.KdfParams{
@@ -232,7 +356,7 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 			ID:                     shareUUID,
 			TargetLinkID:           linkUUID,
 			Type:                   "DEFAULT",
-			OwnerID:                credID,
+			OwnerID:                userID,
 			SharePublicKey:         m3.Drive.DefaultShare.PublicKey,
 			WrappedSharePrivateKey: m3.Drive.DefaultShare.WrappedPrivateKey,
 			SharePrivNonce:         m3.Drive.DefaultShare.PrivKeyNonce,
@@ -243,7 +367,7 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 			Type:              model.NodeTypeFolder,
 			EncryptedMetadata: "",
 			MetadataNonce:     "",
-			OwnerID:           credID,
+			OwnerID:           userID,
 			NodePublicKey:     m3.Drive.RootNode.PublicKey,
 			WrappedNodeKey:    m3.Drive.RootNode.WrappedPrivateKey,
 			NodePrivNonce:     m3.Drive.RootNode.PrivKeyNonce,
@@ -258,12 +382,12 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 			NameNonce:                     "",
 			EncryptedNodePassphrase:       m3.Drive.RootNode.EncryptedPassphrase,
 			SignedEncryptedNodePassphrase: m3.Drive.RootNode.SignedEncryptedPassphrase,
-			AuthorID:                      credID,
+			AuthorID:                      userID,
 		}
 
 		storedShareMember := model.ShareMember{
 			ShareID:                        shareUUID,
-			UserID:                         credID,
+			UserID:                         userID,
 			Permissions:                    255, // Full Admin
 			EncryptedSharePassphrase:       m3.Drive.DefaultShare.EncryptedPassphraseForOwner,
 			SignedEncryptedSharePassphrase: m3.Drive.DefaultShare.SignedEncryptedPassphraseForOwner,

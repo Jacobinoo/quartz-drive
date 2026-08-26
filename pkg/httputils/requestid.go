@@ -2,6 +2,7 @@ package httputils
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"quartz/pkg/contextkeys"
@@ -12,6 +13,9 @@ import (
 func RequestIDMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reqID := uuid.NewString()
+		if r.Method != http.MethodOptions {
+			slog.Debug("generating request ID", "reqid", reqID)
+		}
 		ctx := context.WithValue(r.Context(), contextkeys.RequestIDKey, reqID)
 
 		if cfRay := r.Header.Get("CF-Ray"); cfRay != "" {

@@ -15,6 +15,13 @@ type ContextHandler struct {
 	slog.Handler
 }
 
+func (h *ContextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &ContextHandler{h.Handler.WithAttrs(attrs)} // Return a new ContextHandler wrapping the new base handler
+}
+func (h *ContextHandler) WithGroup(name string) slog.Handler {
+	return &ContextHandler{h.Handler.WithGroup(name)}
+}
+
 // Handle intercepts the log record, extracts relevant context keys, and passes it to the underlying handler.
 func (h *ContextHandler) Handle(ctx context.Context, r slog.Record) error {
 	// Extract cf-ray

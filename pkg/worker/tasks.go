@@ -43,6 +43,8 @@ const (
 
 type signupProcessingPayload struct {
 	RequestID          string
+	CfRay              string
+	EmailID            string
 	PasswordFileRecord []byte
 	Email              string
 	HashedEmailHex     string
@@ -50,8 +52,16 @@ type signupProcessingPayload struct {
 	M3                 *dto.M3
 }
 
-func NewSignupProcessingTask(requestId, email, hashedEmailHex string, userID uuid.UUID, passwordFileRecord []byte, m3 *dto.M3) (*asynq.Task, error) {
-	payload, err := json.Marshal(signupProcessingPayload{RequestID: requestId, Email: email, HashedEmailHex: hashedEmailHex, UserID: userID, PasswordFileRecord: passwordFileRecord, M3: m3})
+func NewSignupProcessingTask(cfRay, requestId, emailID, email, hashedEmailHex string, userID uuid.UUID, passwordFileRecord []byte, m3 *dto.M3) (*asynq.Task, error) {
+	payload, err := json.Marshal(signupProcessingPayload{
+		RequestID:          requestId,
+		CfRay:              cfRay,
+		EmailID:            emailID,
+		Email:              email,
+		HashedEmailHex:     hashedEmailHex,
+		UserID:             userID,
+		PasswordFileRecord: passwordFileRecord,
+		M3:                 m3})
 	if err != nil {
 		return nil, err
 	}
@@ -65,6 +75,8 @@ func (tp *TaskProcessor) handleSignupProcessingTask(ctx context.Context, t *asyn
 	}
 
 	ctx = context.WithValue(ctx, contextkeys.RequestIDKey, p.RequestID) // reattach corresponding request_id from http signup request to context
+	ctx = context.WithValue(ctx, contextkeys.EmailIDKey, p.EmailID)
+	ctx = context.WithValue(ctx, contextkeys.CFRayKey, p.CfRay)
 
 	taskID, ok := asynq.GetTaskID(ctx)
 	if !ok {
@@ -118,7 +130,7 @@ func (tp *TaskProcessor) handleSignupProcessingTask(ctx context.Context, t *asyn
 		return fmt.Errorf("database internal server error: %w", err)
 	}
 
-	taskLogger.Debug("user by email not found, will sign up")
+	taskLogger.DebugContext(ctx, "user by email not found, will sign up")
 
 	encryptedEmail, err := crypto.EncryptEmail([]byte(p.M3.User.Email))
 	if err != nil {
@@ -130,22 +142,6 @@ func (tp *TaskProcessor) handleSignupProcessingTask(ctx context.Context, t *asyn
 	} else {
 		p.M3.User.APAKE.RegistrationRecord = base64.RawURLEncoding.EncodeToString(p.PasswordFileRecord)
 		err = tp.db.Transaction(func(tx *gorm.DB) error {
-			storedUserKeyStore := model.UserKeyStore{
-				UserID:                               p.UserID,
-				MasterKdfSalt:                        p.M3.User.Keys.MasterKdfSalt,
-				AccountEncryptionPublicKey:           p.M3.User.Keys.AccountEncryptionPublicKey,
-				EncryptedAccountEncryptionPrivateKey: p.M3.User.Keys.EncryptedAccountEncryptionPrivateKey,
-				AccountEncryptionKeyNonce:            p.M3.User.Keys.AccountEncryptionKeyNonce,
-				AccountSigningPublicKey:              p.M3.User.Keys.AccountSigningPublicKey,
-				EncryptedAccountSigningPrivateKey:    p.M3.User.Keys.EncryptedAccountSigningPrivateKey,
-				AccountSigningKeyNonce:               p.M3.User.Keys.AccountSigningKeyNonce,
-
-				RecoveryEncryptedAccountEncryptionPrivateKey: p.M3.User.Keys.RecoveryEncryptedAccountEncryptionPrivateKey,
-				RecoveryAccountEncryptionKeyNonce:            p.M3.User.Keys.RecoveryAccountEncryptionKeyNonce,
-				RecoveryEncryptedAccountSigningPrivateKey:    p.M3.User.Keys.RecoveryEncryptedAccountSigningPrivateKey,
-				RecoveryAccountSigningKeyNonce:               p.M3.User.Keys.RecoveryAccountSigningKeyNonce,
-			}
-
 			storedUser := model.User{
 				ID:                 p.UserID,
 				EncryptedEmail:     encryptedEmail,
@@ -160,74 +156,90 @@ func (tp *TaskProcessor) handleSignupProcessingTask(ctx context.Context, t *asyn
 				EncryptionVersion: config.Cfg.CRYPTO.EncryptionVersion,
 			}
 
-			shareUUID := uuid.New()
-			linkUUID := uuid.New()
-			nodeUUID := uuid.New()
-
-			storedShare := model.Share{
-				ID:                     shareUUID,
-				TargetLinkID:           linkUUID,
-				Type:                   "DEFAULT",
-				OwnerID:                p.UserID,
-				SharePublicKey:         p.M3.Drive.DefaultShare.PublicKey,
-				WrappedSharePrivateKey: p.M3.Drive.DefaultShare.WrappedPrivateKey,
-				SharePrivNonce:         p.M3.Drive.DefaultShare.PrivKeyNonce,
-			}
-
-			storedNode := model.Node{
-				ID:                nodeUUID,
-				Type:              model.NodeTypeFolder,
-				EncryptedMetadata: "",
-				MetadataNonce:     "",
-				OwnerID:           p.UserID,
-				NodePublicKey:     p.M3.Drive.RootNode.PublicKey,
-				WrappedNodeKey:    p.M3.Drive.RootNode.WrappedPrivateKey,
-				NodePrivNonce:     p.M3.Drive.RootNode.PrivKeyNonce,
-				Signature:         p.M3.Drive.RootNode.SignedEncryptedPassphrase,
-			}
-
-			storedLink := model.Link{
-				ID:                            linkUUID,
-				ParentNodeID:                  nil,
-				ChildNodeID:                   &nodeUUID,
-				EncryptedName:                 "",
-				NameNonce:                     "",
-				EncryptedNodePassphrase:       p.M3.Drive.RootNode.EncryptedPassphrase,
-				SignedEncryptedNodePassphrase: p.M3.Drive.RootNode.SignedEncryptedPassphrase,
-				AuthorID:                      p.UserID,
-			}
-
-			storedShareMember := model.ShareMember{
-				ShareID:                        shareUUID,
-				UserID:                         p.UserID,
-				Permissions:                    255, // Full Admin
-				EncryptedSharePassphrase:       p.M3.Drive.DefaultShare.EncryptedPassphraseForOwner,
-				SignedEncryptedSharePassphrase: p.M3.Drive.DefaultShare.SignedEncryptedPassphraseForOwner,
-			}
+			//storedUserKeyStore := model.UserKeyStore{
+			//	UserID:                               p.UserID,
+			//	MasterKdfSalt:                        p.M3.User.Keys.MasterKdfSalt,
+			//	AccountEncryptionPublicKey:           p.M3.User.Keys.AccountEncryptionPublicKey,
+			//	EncryptedAccountEncryptionPrivateKey: p.M3.User.Keys.EncryptedAccountEncryptionPrivateKey,
+			//	AccountEncryptionKeyNonce:            p.M3.User.Keys.AccountEncryptionKeyNonce,
+			//	AccountSigningPublicKey:              p.M3.User.Keys.AccountSigningPublicKey,
+			//	EncryptedAccountSigningPrivateKey:    p.M3.User.Keys.EncryptedAccountSigningPrivateKey,
+			//	AccountSigningKeyNonce:               p.M3.User.Keys.AccountSigningKeyNonce,
+			//
+			//	RecoveryEncryptedAccountEncryptionPrivateKey: p.M3.User.Keys.RecoveryEncryptedAccountEncryptionPrivateKey,
+			//	RecoveryAccountEncryptionKeyNonce:            p.M3.User.Keys.RecoveryAccountEncryptionKeyNonce,
+			//	RecoveryEncryptedAccountSigningPrivateKey:    p.M3.User.Keys.RecoveryEncryptedAccountSigningPrivateKey,
+			//	RecoveryAccountSigningKeyNonce:               p.M3.User.Keys.RecoveryAccountSigningKeyNonce,
+			//}
+			//
+			//shareUUID := uuid.New()
+			//linkUUID := uuid.New()
+			//nodeUUID := uuid.New()
+			//
+			//storedShare := model.Share{
+			//	ID:                     shareUUID,
+			//	TargetLinkID:           linkUUID,
+			//	Type:                   "DEFAULT",
+			//	OwnerID:                p.UserID,
+			//	SharePublicKey:         p.M3.Drive.DefaultShare.PublicKey,
+			//	WrappedSharePrivateKey: p.M3.Drive.DefaultShare.WrappedPrivateKey,
+			//	SharePrivNonce:         p.M3.Drive.DefaultShare.PrivKeyNonce,
+			//}
+			//
+			//storedNode := model.Node{
+			//	ID:                nodeUUID,
+			//	Type:              model.NodeTypeFolder,
+			//	EncryptedMetadata: "",
+			//	MetadataNonce:     "",
+			//	OwnerID:           p.UserID,
+			//	NodePublicKey:     p.M3.Drive.RootNode.PublicKey,
+			//	WrappedNodeKey:    p.M3.Drive.RootNode.WrappedPrivateKey,
+			//	NodePrivNonce:     p.M3.Drive.RootNode.PrivKeyNonce,
+			//	Signature:         p.M3.Drive.RootNode.SignedEncryptedPassphrase,
+			//}
+			//
+			//storedLink := model.Link{
+			//	ID:                            linkUUID,
+			//	ParentNodeID:                  nil,
+			//	ChildNodeID:                   &nodeUUID,
+			//	EncryptedName:                 "",
+			//	NameNonce:                     "",
+			//	EncryptedNodePassphrase:       p.M3.Drive.RootNode.EncryptedPassphrase,
+			//	SignedEncryptedNodePassphrase: p.M3.Drive.RootNode.SignedEncryptedPassphrase,
+			//	AuthorID:                      p.UserID,
+			//}
+			//
+			//storedShareMember := model.ShareMember{
+			//	ShareID:                        shareUUID,
+			//	UserID:                         p.UserID,
+			//	Permissions:                    255, // Full Admin
+			//	EncryptedSharePassphrase:       p.M3.Drive.DefaultShare.EncryptedPassphraseForOwner,
+			//	SignedEncryptedSharePassphrase: p.M3.Drive.DefaultShare.SignedEncryptedPassphraseForOwner,
+			//}
 
 			if err := tx.Create(&storedUser).Error; err != nil {
 				return fmt.Errorf("email registered already: %w", err)
 			}
 
-			if err := tx.Create(&storedUserKeyStore).Error; err != nil {
-				return fmt.Errorf("cannot register keys: %w", err)
-			}
-
-			if err := tx.Create(&storedNode).Error; err != nil {
-				return fmt.Errorf("cannot register node: %w", err)
-			}
-
-			if err := tx.Create(&storedLink).Error; err != nil {
-				return fmt.Errorf("cannot register link: %w", err)
-			}
-
-			if err := tx.Create(&storedShare).Error; err != nil {
-				return fmt.Errorf("cannot register share: %w", err)
-			}
-
-			if err := tx.Create(&storedShareMember).Error; err != nil {
-				return fmt.Errorf("cannot register share member: %w", err)
-			}
+			//if err := tx.Create(&storedUserKeyStore).Error; err != nil {
+			//	return fmt.Errorf("cannot register keys: %w", err)
+			//}
+			//
+			//if err := tx.Create(&storedNode).Error; err != nil {
+			//	return fmt.Errorf("cannot register node: %w", err)
+			//}
+			//
+			//if err := tx.Create(&storedLink).Error; err != nil {
+			//	return fmt.Errorf("cannot register link: %w", err)
+			//}
+			//
+			//if err := tx.Create(&storedShare).Error; err != nil {
+			//	return fmt.Errorf("cannot register share: %w", err)
+			//}
+			//
+			//if err := tx.Create(&storedShareMember).Error; err != nil {
+			//	return fmt.Errorf("cannot register share member: %w", err)
+			//}
 
 			return nil
 		})

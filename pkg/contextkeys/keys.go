@@ -3,6 +3,7 @@ package contextkeys
 type ContextKey string
 
 const (
+	EmailIDKey   ContextKey = "email_id"
 	RequestIDKey ContextKey = "request_id"
 	UserIDKey    ContextKey = "userID"
 	EmailKey     ContextKey = "email"

@@ -8,9 +8,11 @@ import (
 
 // TemplateData holds the dynamic variables we inject into our emails
 type TemplateData struct {
-	Email       string
-	ActionURL   string
-	FrontendURL string
+	Email            string
+	ActionURL        string
+	ActionRecoverURL string
+	FrontendURL      string
+	EmailID          string
 }
 
 // The Base Layout (Contains Header, Footer, and the {{template "content"}} injection point + additional footer text {{template "footerAdditionalText"}} injection point)
@@ -43,6 +45,9 @@ const baseLayoutHTML = `
             <td align="center" style="padding: 0 20px 40px 20px;">
                 <p style="color: #6b7280; font-size: 12px; margin: 0 0 10px 0; text-align: center;">
 					{{template "footerAdditionalText" .}}
+                </p>
+                <p style="color: #6b7280; font-size: 12px; margin: 20px 0 10px 0; text-align: center;">
+					If you need help regarding this email, contact support and provide this identifier: {{.EmailID}}
                 </p>
                 <p style="color: #6b7280; font-size: 12px; margin: 0; text-align: center;">
                     &copy; 2026 Quartz Drive. 
@@ -87,7 +92,7 @@ This email was sent automatically. If you didn't request this action, please ign
 
 const SignupVerificationFooterHTML = `
 {{define "footerAdditionalText"}}
-This email was sent automatically because you created a Quartz Drive account.<br>If you didn't request this action, please ignore it, and the account assigned to your email will be deleted.
+This email was sent automatically because you or someone created a Quartz Drive account with this email address .<br>If you didn't request this action, you don't have to do anything, just ignore it.
 {{end}}
 `
 
@@ -112,6 +117,32 @@ const SignupVerificationHTML = `
     <a href="{{.ActionURL}}" style="color: #2563eb; text-decoration: underline;">{{.ActionURL}}</a>
 </p>
 <p style="color: #6b7280; margin: 24px 0 0 0; font-size: 13px;">For your security, this link will expire in 15 minutes, and the Quartz Drive account will be deleted.</p>
+{{end}}
+`
+
+const SignupAccountExistsFooterHTML = `
+{{define "footerAdditionalText"}}
+This email was sent automatically because someone attempted to create a new <br/>Quartz Drive account with this email address, which is already registered.
+<br/>If you didn't request this action, you don't have to do anything, just ignore this email.
+{{end}}
+`
+
+const SignupAccountExistsHTML = `
+{{define "content"}}
+<h2 style="color: #111827; margin: 0 0 20px 0; font-size: 20px; font-weight: 600;">Quartz Account already exists</h2>
+<p style="color: #374151; margin: 0 0 24px 0; font-size: 16px; line-height: 24px;">
+    Someone recently tried to create a new Quartz account using your email address (<strong>{{.Email}}</strong>).
+	<br/>However, this email is already registered with us.
+</p>
+<p style="color: #374151; margin: 0 0 24px 0; font-size: 16px; line-height: 24px;">
+	<strong>If this was you: </strong>You don't need to do anything, you can just <a href="{{.ActionURL}}" style="color: #2563eb; text-decoration: underline;">log in to your account here</a>.
+</p>
+<p style="color: #374151; margin: 0 0 24px 0; font-size: 16px; line-height: 24px;">
+	<strong>Forgot your password?: </strong>If you were trying to sign up because you forgot your password, you can use your Recovery Phrase to <a href="{{.ActionRecoverURL}}" style="color: #2563eb; text-decoration: underline;">recover your account here</a>.
+</p>
+<p style="color: #374151; margin: 0 0 24px 0; font-size: 16px; line-height: 24px;">
+	<strong>If this wasn't you: </strong>You can safely ignore this email. Your account remains completely secure, and the person who attempted to sign up cannot access your data.
+</p>
 {{end}}
 `
 

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"quartz/config"
 	"quartz/internal/bindings"
 	"quartz/internal/dto"
 	apperrors "quartz/pkg/app-errors"
@@ -282,7 +283,17 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewInternal(fmt.Errorf("request ID not found in context"))
 	}
 
-	task, err := worker.NewSignupProcessingTask(reqIDStr, m3.User.Email, registrationSession.HashedEmailHex, userID, passwordFileRecord, &m3)
+	var cfRay string = ""
+	if config.Cfg.Env == "production" {
+		cfRay, ok = r.Context().Value(contextkeys.CFRayKey).(string)
+		if !ok {
+			return apperrors.NewInternal(fmt.Errorf("cf ray not found in context"))
+		}
+	}
+
+	emailID := uuid.NewString()
+
+	task, err := worker.NewSignupProcessingTask(cfRay, reqIDStr, emailID, m3.User.Email, registrationSession.HashedEmailHex, userID, passwordFileRecord, &m3)
 	if err != nil {
 		return apperrors.NewInternal(err)
 	}

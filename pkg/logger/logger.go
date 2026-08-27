@@ -29,6 +29,10 @@ func (h *ContextHandler) Handle(ctx context.Context, r slog.Record) error {
 		r.AddAttrs(slog.String("cf_ray", cfRay))
 	}
 
+	if email, ok := ctx.Value(contextkeys.EmailIDKey).(string); ok && email != "" {
+		r.AddAttrs(slog.String("email_id", email))
+	}
+
 	// Extract standard IDs
 	if reqID, ok := ctx.Value(contextkeys.RequestIDKey).(string); ok && reqID != "" {
 		r.AddAttrs(slog.String("request_id", reqID))

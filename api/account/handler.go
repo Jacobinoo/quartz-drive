@@ -25,6 +25,7 @@ import (
 	"github.com/go-redis/redis_rate/v10"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/resend/resend-go/v2"
 	"gorm.io/gorm"
 )
 
@@ -125,8 +126,11 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 
 	magicLink := fmt.Sprintf("%s/reset-password#token=%s", config.Cfg.App.FrontendURL, tokenString)
 
+	//temp resend client
+	resendClient := resend.NewClient(config.Cfg.Email.Key)
+
 	// Send email using Resend
-	if err := email.SendPasswordReset(r.Context(), req.Email, magicLink); err != nil {
+	if err := email.SendPasswordReset(r.Context(), resendClient, req.Email, magicLink); err != nil {
 		// Fallback for local development if Resend isn't configured yet
 		if config.Cfg.Env == "development" {
 			slog.Debug("LOCAL DEV MAGIC LINK", "email", req.Email, "magic_link", magicLink)

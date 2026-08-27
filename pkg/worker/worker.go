@@ -6,6 +6,8 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
+	"github.com/resend/resend-go/v2"
+	"gorm.io/gorm"
 )
 
 type slogLogger struct{}
@@ -31,7 +33,7 @@ func (l *slogLogger) Fatal(args ...interface{}) {
 	os.Exit(1)
 }
 
-func InitBackgroundWorkerServer(redisClient *redis.Client) *asynq.Server {
+func InitBackgroundWorkerServer(db *gorm.DB, emailClient *resend.Client, redisClient *redis.Client) *asynq.Server {
 	srv := asynq.NewServer(
 		asynq.RedisClientOpt{
 			Addr: redisClient.Options().Addr,
@@ -43,11 +45,10 @@ func InitBackgroundWorkerServer(redisClient *redis.Client) *asynq.Server {
 		},
 	)
 
-	// mux maps a type to a handler
+	processor := NewTaskProcessor(db, emailClient, redisClient)
+
 	mux := asynq.NewServeMux()
-	mux.HandleFunc(TypeSignupProcessing, HandleSignupProcessingTask)
-	//mux.Handle(tasks.TypeImageResize, tasks.NewImageProcessor())
-	// ...register other handlers...
+	mux.HandleFunc(typeSignupProcessing, processor.handleSignupProcessingTask)
 
 	if err := srv.Start(mux); err != nil {
 		slog.Error("could not start background worker server", "error", err)

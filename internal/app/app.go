@@ -30,6 +30,7 @@ import (
 	"time"
 
 	sentryhttp "github.com/getsentry/sentry-go/http"
+	"github.com/resend/resend-go/v2"
 	"gorm.io/gorm"
 )
 
@@ -40,14 +41,16 @@ func Run() {
 	redisClient := database.NewRedis()
 	defer redisClient.Close()
 
-	asynqClient := worker.InitBackgroundWorkerClient(redisClient)
-	asynqServer := worker.InitBackgroundWorkerServer(redisClient)
+	resendClient := resend.NewClient("ss")
 
 	db := initDb()
 	if db == nil {
 		log.Fatal("database initialization failed")
 		return
 	}
+
+	asynqServer := worker.InitBackgroundWorkerServer(db, resendClient, redisClient)
+	asynqClient := worker.InitBackgroundWorkerClient(redisClient)
 
 	var storageService storage.StorageService
 	var err error

@@ -9,7 +9,7 @@ import (
 )
 
 // SendPasswordReset prepares the HTML/Text templates and sends the recovery email
-func SendPasswordReset(ctx context.Context, toEmail, magicLink string) error {
+func SendPasswordReset(ctx context.Context, emailClient *resend.Client, toEmail, magicLink string) error {
 	data := TemplateData{
 		Email:       toEmail,
 		ActionURL:   magicLink,
@@ -36,8 +36,6 @@ This email was sent automatically. If you didn't request this action, please ign
 Terms of Service: %s/terms
 Privacy Policy: %s/privacy`, data.Email, data.ActionURL, data.FrontendURL, data.FrontendURL)
 
-	client := resend.NewClient(config.Cfg.Email.Key)
-
 	from := fmt.Sprintf("%s <%s>", config.Cfg.Email.UpdatesFromSenderName, config.Cfg.Email.UpdatesVerifiedDomain)
 
 	params := &resend.SendEmailRequest{
@@ -53,7 +51,7 @@ Privacy Policy: %s/privacy`, data.Email, data.ActionURL, data.FrontendURL, data.
 	opt := &resend.SendEmailOptions{
 		//IdempotencyKey: "",
 	}
-	_, err = client.Emails.SendWithOptions(ctx, params, opt)
+	_, err = emailClient.Emails.SendWithOptions(ctx, params, opt)
 	if err != nil {
 		return fmt.Errorf("resend api failed to send email: %w", err)
 	}
@@ -62,7 +60,7 @@ Privacy Policy: %s/privacy`, data.Email, data.ActionURL, data.FrontendURL, data.
 }
 
 // SendSignupVerification prepares the HTML/Text templates and sends the signup verification email
-func SendSignupVerification(ctx context.Context, toEmail, magicLink string) error {
+func SendSignupVerification(ctx context.Context, emailClient *resend.Client, toEmail, magicLink string) error {
 	data := TemplateData{
 		Email:       toEmail,
 		ActionURL:   magicLink,
@@ -89,8 +87,6 @@ This email was sent automatically. If you didn't request this action, please ign
 Terms of Service: %s/terms
 Privacy Policy: %s/privacy`, data.Email, data.ActionURL, data.FrontendURL, data.FrontendURL)
 
-	client := resend.NewClient(config.Cfg.Email.Key)
-
 	from := fmt.Sprintf("%s <%s>", config.Cfg.Email.UpdatesFromSenderName, config.Cfg.Email.UpdatesVerifiedDomain)
 
 	params := &resend.SendEmailRequest{
@@ -106,7 +102,7 @@ Privacy Policy: %s/privacy`, data.Email, data.ActionURL, data.FrontendURL, data.
 	opt := &resend.SendEmailOptions{
 		//IdempotencyKey: "",
 	}
-	_, err = client.Emails.SendWithOptions(ctx, params, opt)
+	_, err = emailClient.Emails.SendWithOptions(ctx, params, opt)
 	if err != nil {
 		return fmt.Errorf("resend api failed to send email: %w", err)
 	}

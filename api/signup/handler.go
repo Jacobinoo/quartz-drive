@@ -10,12 +10,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"quartz/config"
 	"quartz/internal/bindings"
 	"quartz/internal/dto"
-	"quartz/internal/model"
 	apperrors "quartz/pkg/app-errors"
 	"quartz/pkg/captcha"
+	"quartz/pkg/contextkeys"
 	crypto "quartz/pkg/crypto"
 	"quartz/pkg/email"
 	"quartz/pkg/worker"
@@ -278,14 +277,18 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 	// Handle database lookups & inserting + sending emails in the background worker
 	// This also prevents timing attacks to enumerate the emails registered in our system
 
-	task, err := worker.NewSignupProcessingTask(hashedIncomingEmail, userID.String(), &m3)
+	reqIDStr, ok := r.Context().Value(contextkeys.RequestIDKey).(string)
+	if !ok {
+		return apperrors.NewInternal(fmt.Errorf("request ID not found in context"))
+	}
+
+	task, err := worker.NewSignupProcessingTask(reqIDStr, m3.User.Email, registrationSession.HashedEmailHex, userID, passwordFileRecord, &m3)
 	if err != nil {
 		return apperrors.NewInternal(err)
 	}
-	slog.DebugContext(r.Context(), "created a new signup processing task")
 
 	taskTimeLimit := 10 * time.Second
-	enqueuedTaskInfo, err := h.asynqClient.Enqueue(task, asynq.Timeout(taskTimeLimit))
+	enqueuedTaskInfo, err := h.asynqClient.Enqueue(task, asynq.Timeout(taskTimeLimit), asynq.MaxRetry(3))
 	if err != nil {
 		return apperrors.NewInternal(err)
 	}
@@ -293,167 +296,6 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 	slog.InfoContext(r.Context(), "enqueued a signup processing task", "task_id", enqueuedTaskInfo.ID, "timeout", taskTimeLimit)
 
 	w.WriteHeader(http.StatusAccepted)
-	err = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-	if err != nil {
-		return apperrors.NewInternal(err)
-	}
-	return nil
-
-	var user model.User
-	err = h.db.First(&user, "hashed_email = ?", registrationSession.HashedEmailHex).Error
-	if err == nil {
-		slog.InfoContext(r.Context(), "user already signed up, preventing enum attacks by faking status ok")
-		w.WriteHeader(http.StatusCreated)
-		err = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-		if err != nil {
-			return apperrors.NewInternal(err)
-		}
-		return nil
-	}
-
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return apperrors.NewInternal(err)
-	}
-
-	slog.Debug("user by email not found, will sign up")
-
-	encryptedEmail, err := crypto.EncryptEmail([]byte(m3.User.Email))
-	if err != nil {
-		return apperrors.NewInternal(err)
-	}
-
-	// Generate secure token
-	tokenBytes := make([]byte, 64)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		return apperrors.NewInternal(err)
-	}
-	//tokenStr := fmt.Sprintf("%x", tokenBytes)
-
-	//magicLink := fmt.Sprintf("%s/verify-email#token=%s", config.Cfg.App.FrontendURL, tokenStr)
-
-	//if err := email.SendSignupVerification(r.Context(), m3.User.Email, magicLink); err != nil {
-	//	log.Printf("Failed to send email: %v", err)
-	//
-	//	// Fallback for local development if Resend isn't configured yet
-	//	if config.Cfg.Env == "development" {
-	//		slog.Debug("LOCAL DEV MAGIC LINK", "email", req.Email, "magic_link", magicLink)
-	//		// Continue returning 200 OK so the dev can copy the link from the terminal
-	//	} else {
-	//		return apperrors.NewInternal(err)
-	//	}
-	//}
-
-	m3.User.APAKE.RegistrationRecord = base64.RawURLEncoding.EncodeToString(passwordFileRecord)
-	err = h.db.Transaction(func(tx *gorm.DB) error {
-		storedUserKeyStore := model.UserKeyStore{
-			UserID:                               userID,
-			MasterKdfSalt:                        m3.User.Keys.MasterKdfSalt,
-			AccountEncryptionPublicKey:           m3.User.Keys.AccountEncryptionPublicKey,
-			EncryptedAccountEncryptionPrivateKey: m3.User.Keys.EncryptedAccountEncryptionPrivateKey,
-			AccountEncryptionKeyNonce:            m3.User.Keys.AccountEncryptionKeyNonce,
-			AccountSigningPublicKey:              m3.User.Keys.AccountSigningPublicKey,
-			EncryptedAccountSigningPrivateKey:    m3.User.Keys.EncryptedAccountSigningPrivateKey,
-			AccountSigningKeyNonce:               m3.User.Keys.AccountSigningKeyNonce,
-
-			RecoveryEncryptedAccountEncryptionPrivateKey: m3.User.Keys.RecoveryEncryptedAccountEncryptionPrivateKey,
-			RecoveryAccountEncryptionKeyNonce:            m3.User.Keys.RecoveryAccountEncryptionKeyNonce,
-			RecoveryEncryptedAccountSigningPrivateKey:    m3.User.Keys.RecoveryEncryptedAccountSigningPrivateKey,
-			RecoveryAccountSigningKeyNonce:               m3.User.Keys.RecoveryAccountSigningKeyNonce,
-		}
-
-		storedUser := model.User{
-			ID:                 userID,
-			EncryptedEmail:     encryptedEmail,
-			HashedEmail:        hashedIncomingEmail,
-			RegistrationRecord: m3.User.APAKE.RegistrationRecord,
-			RegistrationNonce:  m3.User.APAKE.RegistrationNonce,
-			KdfParams: dto.KdfParams{
-				KdfAlg:      config.Cfg.CRYPTO.KdfAlg,
-				KdfOpsLimit: config.Cfg.CRYPTO.KdfOpsLimit,
-				KdfMemLimit: config.Cfg.CRYPTO.KdfMemLimit,
-			},
-			EncryptionVersion: config.Cfg.CRYPTO.EncryptionVersion,
-		}
-
-		shareUUID := uuid.New()
-		linkUUID := uuid.New()
-		nodeUUID := uuid.New()
-
-		storedShare := model.Share{
-			ID:                     shareUUID,
-			TargetLinkID:           linkUUID,
-			Type:                   "DEFAULT",
-			OwnerID:                userID,
-			SharePublicKey:         m3.Drive.DefaultShare.PublicKey,
-			WrappedSharePrivateKey: m3.Drive.DefaultShare.WrappedPrivateKey,
-			SharePrivNonce:         m3.Drive.DefaultShare.PrivKeyNonce,
-		}
-
-		storedNode := model.Node{
-			ID:                nodeUUID,
-			Type:              model.NodeTypeFolder,
-			EncryptedMetadata: "",
-			MetadataNonce:     "",
-			OwnerID:           userID,
-			NodePublicKey:     m3.Drive.RootNode.PublicKey,
-			WrappedNodeKey:    m3.Drive.RootNode.WrappedPrivateKey,
-			NodePrivNonce:     m3.Drive.RootNode.PrivKeyNonce,
-			Signature:         m3.Drive.RootNode.SignedEncryptedPassphrase,
-		}
-
-		storedLink := model.Link{
-			ID:                            linkUUID,
-			ParentNodeID:                  nil,
-			ChildNodeID:                   &nodeUUID,
-			EncryptedName:                 "",
-			NameNonce:                     "",
-			EncryptedNodePassphrase:       m3.Drive.RootNode.EncryptedPassphrase,
-			SignedEncryptedNodePassphrase: m3.Drive.RootNode.SignedEncryptedPassphrase,
-			AuthorID:                      userID,
-		}
-
-		storedShareMember := model.ShareMember{
-			ShareID:                        shareUUID,
-			UserID:                         userID,
-			Permissions:                    255, // Full Admin
-			EncryptedSharePassphrase:       m3.Drive.DefaultShare.EncryptedPassphraseForOwner,
-			SignedEncryptedSharePassphrase: m3.Drive.DefaultShare.SignedEncryptedPassphraseForOwner,
-		}
-
-		if err := tx.Create(&storedUser).Error; err != nil {
-			// registrationSessions.Delete(m3.RegistrationNonce)
-			return apperrors.NewConflict("email registered already", err)
-		}
-
-		if err := tx.Create(&storedUserKeyStore).Error; err != nil {
-			return apperrors.NewConflict("cannot register keys", err)
-		}
-
-		if err := tx.Create(&storedNode).Error; err != nil {
-			return apperrors.NewConflict("cannot register node", err)
-		}
-
-		if err := tx.Create(&storedLink).Error; err != nil {
-			return apperrors.NewConflict("cannot register link", err)
-		}
-
-		if err := tx.Create(&storedShare).Error; err != nil {
-			return apperrors.NewConflict("cannot register share", err)
-		}
-
-		if err := tx.Create(&storedShareMember).Error; err != nil {
-			return apperrors.NewConflict("cannot register share member", err)
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return err
-	}
-
-	w.WriteHeader(http.StatusCreated)
-
 	err = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	if err != nil {
 		return apperrors.NewInternal(err)

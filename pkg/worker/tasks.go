@@ -118,12 +118,10 @@ func (tp *TaskProcessor) handleSignupProcessingTask(ctx context.Context, t *asyn
 			skipDbTransaction = true
 		} else {
 			taskLogger.InfoContext(ctx, "User already existed from an older signup! Possible abuse! Sending 'Account Already Exists' email.", "possible_abuse", true, "hashed_email_hex", p.HashedEmailHex)
-
-			taskLogger.DebugContext(ctx, "Sending 'Account Already Exists' email...")
-			//if err := email.SendSignupVerification(ctx, tp.emailClient, p.M3.User.Email, magicLink); err != nil {
-			//	taskLogger.WarnContext(ctx, "email delivery failed", "error", err)
-			//	return err
-			//}
+			if err := email.SendSignupAccountExist(ctx, tp.emailClient, p.M3.User.Email); err != nil {
+				taskLogger.WarnContext(ctx, "email delivery failed", "error", err)
+				return err
+			}
 			return nil
 		}
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -147,7 +145,6 @@ func (tp *TaskProcessor) handleSignupProcessingTask(ctx context.Context, t *asyn
 				EncryptedEmail:     encryptedEmail,
 				HashedEmail:        p.HashedEmailHex,
 				RegistrationRecord: p.M3.User.APAKE.RegistrationRecord,
-				RegistrationNonce:  p.M3.User.APAKE.RegistrationNonce,
 				KdfParams: dto.KdfParams{
 					KdfAlg:      config.Cfg.CRYPTO.KdfAlg,
 					KdfOpsLimit: config.Cfg.CRYPTO.KdfOpsLimit,

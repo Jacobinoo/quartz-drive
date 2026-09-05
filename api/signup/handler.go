@@ -13,6 +13,7 @@ import (
 	"quartz/config"
 	"quartz/internal/bindings"
 	"quartz/internal/dto"
+	"quartz/internal/utils"
 	apperrors "quartz/pkg/app-errors"
 	"quartz/pkg/captcha"
 	"quartz/pkg/contextkeys"
@@ -154,59 +155,15 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// base64RawUrlDecodedByteLengthCompareWith compares the decoded base 64 length with compareWith parameter.
-// Returns nil if comparison successful, otherwise error.
-func base64RawUrlDecodedByteLengthCompareWith(b64 string, compareWith int) error {
-	decoded, err := base64.RawURLEncoding.DecodeString(b64)
-	if err != nil {
-		return fmt.Errorf("base64 decoding failed")
-	}
-	if len(decoded) != compareWith {
-		return fmt.Errorf("base64 decoded length mismatch, got %d, expected %d", len(decoded), compareWith)
-	}
-	return nil
-}
-
 func validateM3Payload(m3 *dto.M3) error {
 	if m3.User.Email == "" {
 		return fmt.Errorf("m3 is missing email")
 	}
-
-	checks := []struct {
-		value    string
-		expected int
-	}{
-		{m3.User.APAKE.RegistrationNonce, crypto.RegistrationNonceBytes},
-		{m3.User.APAKE.RegistrationRecord, crypto.OpaqueRegistrationRecordBytes},
-
-		{m3.User.Keys.MasterKdfSalt, crypto.MasterKdfSaltBytes},
-		{m3.User.Keys.AccountEncryptionPublicKey, crypto.EncryptionPublicKeyBytes},
-		{m3.User.Keys.EncryptedAccountEncryptionPrivateKey, crypto.EncryptedAccountEncryptionPrivateKeyBytes},
-		{m3.User.Keys.AccountEncryptionKeyNonce, crypto.SodiumNonceBytes},
-		{m3.User.Keys.AccountSigningPublicKey, crypto.AccountSigningPublicKeyBytes},
-		{m3.User.Keys.EncryptedAccountSigningPrivateKey, crypto.EncryptedAccountSigningPrivateKeyBytes},
-		{m3.User.Keys.AccountSigningKeyNonce, crypto.SodiumNonceBytes},
-		{m3.User.Keys.RecoveryEncryptedAccountEncryptionPrivateKey, crypto.RecoveryEncryptedAccountEncryptionPrivateKeyBytes},
-		{m3.User.Keys.RecoveryAccountEncryptionKeyNonce, crypto.SodiumNonceBytes},
-		{m3.User.Keys.RecoveryEncryptedAccountSigningPrivateKey, crypto.RecoveryEncryptedAccountSigningPrivateKeyBytes},
-		{m3.User.Keys.RecoveryAccountSigningKeyNonce, crypto.SodiumNonceBytes},
-
-		{m3.Drive.DefaultShare.PublicKey, crypto.SharePublicKeyBytes},
-		{m3.Drive.DefaultShare.WrappedPrivateKey, crypto.ShareWrappedPrivateKeyBytes},
-		{m3.Drive.DefaultShare.PrivKeyNonce, crypto.SodiumNonceBytes},
-		{m3.Drive.DefaultShare.EncryptedPassphraseForOwner, crypto.ShareEncryptedPassphraseForOwnerBytes},
-		{m3.Drive.DefaultShare.SignedEncryptedPassphraseForOwner, crypto.ShareSignedEncryptedPassphraseForOwnerBytes},
-		{m3.Drive.RootNode.PublicKey, crypto.NodePublicKeyBytes},
-		{m3.Drive.RootNode.WrappedPrivateKey, crypto.NodeWrappedPrivateKeyBytes},
-		{m3.Drive.RootNode.PrivKeyNonce, crypto.SodiumNonceBytes},
-		{m3.Drive.RootNode.EncryptedPassphrase, crypto.NodeEncryptedPassphraseBytes},
-		{m3.Drive.RootNode.SignedEncryptedPassphrase, crypto.NodeSignedEncryptedPassphraseBytes},
+	if err := utils.Base64RawUrlDecodedByteLengthCompareWith(m3.User.APAKE.RegistrationNonce, crypto.RegistrationNonceBytes); err != nil {
+		return fmt.Errorf("m3 validation error: %v. check nonce failed`", err)
 	}
-
-	for i, check := range checks {
-		if err := base64RawUrlDecodedByteLengthCompareWith(check.value, check.expected); err != nil {
-			return fmt.Errorf("m3 validation error: %v. check %d failed`", err, i)
-		}
+	if err := utils.Base64RawUrlDecodedByteLengthCompareWith(m3.User.APAKE.RegistrationRecord, crypto.OpaqueRegistrationRecordBytes); err != nil {
+		return fmt.Errorf("m3 validation error: %v. check record failed`", err)
 	}
 	return nil
 }
@@ -275,14 +232,10 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewInternal(err)
 	}
 
-	// Handle database lookups & inserting + sending emails in the background worker
-	// This also prevents timing attacks to enumerate the emails registered in our system
-
 	reqIDStr, ok := r.Context().Value(contextkeys.RequestIDKey).(string)
 	if !ok {
 		return apperrors.NewInternal(fmt.Errorf("request ID not found in context"))
 	}
-
 	var cfRay string = ""
 	if config.Cfg.Env == "production" {
 		cfRay, ok = r.Context().Value(contextkeys.CFRayKey).(string)
@@ -290,9 +243,10 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 			return apperrors.NewInternal(fmt.Errorf("cf ray not found in context"))
 		}
 	}
-
 	emailID := uuid.NewString()
 
+	// Handle database lookups & inserting + sending emails in the background worker
+	// This also prevents timing attacks to enumerate the emails registered in our system
 	task, err := worker.NewSignupProcessingTask(cfRay, reqIDStr, emailID, m3.User.Email, registrationSession.HashedEmailHex, userID, passwordFileRecord, &m3)
 	if err != nil {
 		return apperrors.NewInternal(err)

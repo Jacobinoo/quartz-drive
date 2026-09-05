@@ -59,6 +59,12 @@ func AccessTokenMiddleware(next httputils.APIHandler) httputils.APIHandler {
 			return apperrors.NewUnauthorized("invalid user ID in token", err)
 		}
 
+		// Extract 'keysInitialized'
+		keysInitializedStr, ok := claims["keysInitialized"].(bool)
+		if !ok {
+			return apperrors.NewUnauthorized("missing or invalid keys initialized claim in token", nil)
+		}
+
 		// Extract Email ('email')
 		email, _ := claims["email"].(string)
 
@@ -81,6 +87,7 @@ func AccessTokenMiddleware(next httputils.APIHandler) httputils.APIHandler {
 		ctx = context.WithValue(ctx, contextkeys.EmailKey, email)
 		ctx = context.WithValue(ctx, contextkeys.SessionIDKey, sessionId)
 		ctx = context.WithValue(ctx, contextkeys.FamilyIDKey, familyId)
+		ctx = context.WithValue(ctx, contextkeys.KeysInitializedKey, keysInitializedStr)
 
 		log.Printf("context %s %s", email, userID)
 

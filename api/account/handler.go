@@ -13,8 +13,10 @@ import (
 	"quartz/internal/bindings"
 	"quartz/internal/dto"
 	"quartz/internal/model"
+	"quartz/internal/utils"
 	apperrors "quartz/pkg/app-errors"
 	"quartz/pkg/captcha"
+	"quartz/pkg/contextkeys"
 	"quartz/pkg/crypto"
 	"quartz/pkg/email"
 	"strings"
@@ -276,93 +278,280 @@ type ResetM3 struct {
 	User  dto.UserDTO `json:"user"`
 }
 
-func (h *Handler) ResetPasswordM3(w http.ResponseWriter, r *http.Request) error {
+//func (h *Handler) ResetPasswordM3(w http.ResponseWriter, r *http.Request) error {
+//	if r.Method != http.MethodPost {
+//		return apperrors.NewMethodNotAllowed("Provided method is not allowed")
+//	}
+//
+//	var m3 ResetM3
+//	if err := json.NewDecoder(r.Body).Decode(&m3); err != nil {
+//		return apperrors.NewBadRequest("Provided request body is invalid", err)
+//	}
+//
+//	tokenHashBytes := sha256.Sum256([]byte(m3.Token))
+//	tokenHash := fmt.Sprintf("%x", tokenHashBytes)
+//
+//	var token model.PasswordResetToken
+//	if err := h.db.Preload("User").Where("token_hash = ? AND expires_at > ?", tokenHash, time.Now()).First(&token).Error; err != nil {
+//		return apperrors.NewBadRequest("invalid or expired token", err)
+//	}
+//
+//	// Verify the nonce
+//	storedEncryptedUserID, err := h.redis.Get(context.Background(), "reset:nonce:"+m3.User.APAKE.RegistrationNonce).Result()
+//	if err != nil {
+//		return apperrors.NewBadRequest("invalid registration nonce", err)
+//	}
+//
+//	storedUserIDBytes, err := crypto.DecryptRedisPayload(storedEncryptedUserID)
+//	if err != nil || string(storedUserIDBytes) != token.User.ID.String() {
+//		return apperrors.NewBadRequest("invalid registration nonce", err)
+//	}
+//
+//	regRecordBytes, err := base64.RawURLEncoding.DecodeString(m3.User.APAKE.RegistrationRecord)
+//	if err != nil {
+//		return apperrors.NewBadRequest("invalid base64 in registration record", err)
+//	}
+//
+//	passwordFileRecord, err := bindings.FinishRegistration(
+//		regRecordBytes,
+//	)
+//
+//	if err != nil {
+//		return apperrors.NewInternal(err)
+//	}
+//
+//	err = h.db.Transaction(func(tx *gorm.DB) error {
+//		// Update user registration record
+//		if err := tx.Model(&token.User).Updates(map[string]interface{}{
+//			"registration_record": base64.RawURLEncoding.EncodeToString(passwordFileRecord),
+//			"registration_nonce":  m3.User.APAKE.RegistrationNonce,
+//		}).Error; err != nil {
+//			return err
+//		}
+//
+//		// Update keystore with newly encrypted standard keys
+//		// Recovery keys remain the same (unless frontend re-encrypts them too)
+//		if err := tx.Model(&model.UserKeyStore{}).Where("user_id = ?", token.User.ID).Updates(map[string]interface{}{
+//			"master_kdf_salt":                          m3.User.Keys.MasterKdfSalt,
+//			"encrypted_account_encryption_private_key": m3.User.Keys.EncryptedAccountEncryptionPrivateKey,
+//			"account_encryption_key_nonce":             m3.User.Keys.AccountEncryptionKeyNonce,
+//			"encrypted_account_signing_private_key":    m3.User.Keys.EncryptedAccountSigningPrivateKey,
+//			"account_signing_key_nonce":                m3.User.Keys.AccountSigningKeyNonce,
+//
+//			"recovery_encrypted_account_encryption_private_key": m3.User.Keys.RecoveryEncryptedAccountEncryptionPrivateKey,
+//			"recovery_account_encryption_key_nonce":             m3.User.Keys.RecoveryAccountEncryptionKeyNonce,
+//			"recovery_encrypted_account_signing_private_key":    m3.User.Keys.RecoveryEncryptedAccountSigningPrivateKey,
+//			"recovery_account_signing_key_nonce":                m3.User.Keys.RecoveryAccountSigningKeyNonce,
+//		}).Error; err != nil {
+//			return err
+//		}
+//
+//		// Delete the token so it can't be reused
+//		if err := tx.Delete(&token).Error; err != nil {
+//			return err
+//		}
+//
+//		return nil
+//	})
+//
+//	if err != nil {
+//		return apperrors.NewInternal(err)
+//	}
+//
+//	// Clean up redis
+//	h.redis.Del(context.Background(), "reset:nonce:"+m3.User.APAKE.RegistrationNonce)
+//
+//	w.WriteHeader(http.StatusOK)
+//	err = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+//	if err != nil {
+//		return apperrors.NewInternal(err)
+//	}
+//	return nil
+//}
+
+func validateInitializeAccountKeysPayload(p *dto.InitializeAccountKeysRequest) error {
+	checks := []struct {
+		value    string
+		expected int
+	}{
+		{p.User.Keys.MasterKdfSalt, crypto.MasterKdfSaltBytes},
+		{p.User.Keys.AccountEncryptionPublicKey, crypto.EncryptionPublicKeyBytes},
+		{p.User.Keys.EncryptedAccountEncryptionPrivateKey, crypto.EncryptedAccountEncryptionPrivateKeyBytes},
+		{p.User.Keys.AccountEncryptionKeyNonce, crypto.SodiumNonceBytes},
+		{p.User.Keys.AccountSigningPublicKey, crypto.AccountSigningPublicKeyBytes},
+		{p.User.Keys.EncryptedAccountSigningPrivateKey, crypto.EncryptedAccountSigningPrivateKeyBytes},
+		{p.User.Keys.AccountSigningKeyNonce, crypto.SodiumNonceBytes},
+		{p.User.Keys.RecoveryEncryptedAccountEncryptionPrivateKey, crypto.RecoveryEncryptedAccountEncryptionPrivateKeyBytes},
+		{p.User.Keys.RecoveryAccountEncryptionKeyNonce, crypto.SodiumNonceBytes},
+		{p.User.Keys.RecoveryEncryptedAccountSigningPrivateKey, crypto.RecoveryEncryptedAccountSigningPrivateKeyBytes},
+		{p.User.Keys.RecoveryAccountSigningKeyNonce, crypto.SodiumNonceBytes},
+
+		{p.Drive.DefaultShare.PublicKey, crypto.SharePublicKeyBytes},
+		{p.Drive.DefaultShare.WrappedPrivateKey, crypto.ShareWrappedPrivateKeyBytes},
+		{p.Drive.DefaultShare.PrivKeyNonce, crypto.SodiumNonceBytes},
+		{p.Drive.DefaultShare.EncryptedPassphraseForOwner, crypto.ShareEncryptedPassphraseForOwnerBytes},
+		{p.Drive.DefaultShare.SignedEncryptedPassphraseForOwner, crypto.ShareSignedEncryptedPassphraseForOwnerBytes},
+		{p.Drive.RootNode.PublicKey, crypto.NodePublicKeyBytes},
+		{p.Drive.RootNode.WrappedPrivateKey, crypto.NodeWrappedPrivateKeyBytes},
+		{p.Drive.RootNode.PrivKeyNonce, crypto.SodiumNonceBytes},
+		{p.Drive.RootNode.EncryptedPassphrase, crypto.NodeEncryptedPassphraseBytes},
+		{p.Drive.RootNode.SignedEncryptedPassphrase, crypto.NodeSignedEncryptedPassphraseBytes},
+	}
+
+	for i, check := range checks {
+		if err := utils.Base64RawUrlDecodedByteLengthCompareWith(check.value, check.expected); err != nil {
+			return fmt.Errorf("initialize account keys validation error: %v. check %d failed`", err, i)
+		}
+	}
+	return nil
+}
+
+func (h *Handler) InitializeKeys(w http.ResponseWriter, r *http.Request) error {
 	if r.Method != http.MethodPost {
 		return apperrors.NewMethodNotAllowed("Provided method is not allowed")
 	}
+	w.Header().Set("Content-Type", "application/json")
 
-	var m3 ResetM3
-	if err := json.NewDecoder(r.Body).Decode(&m3); err != nil {
-		return apperrors.NewBadRequest("Provided request body is invalid", err)
+	var initRequest dto.InitializeAccountKeysRequest
+	if err := json.NewDecoder(r.Body).Decode(&initRequest); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
-	tokenHashBytes := sha256.Sum256([]byte(m3.Token))
-	tokenHash := fmt.Sprintf("%x", tokenHashBytes)
-
-	var token model.PasswordResetToken
-	if err := h.db.Preload("User").Where("token_hash = ? AND expires_at > ?", tokenHash, time.Now()).First(&token).Error; err != nil {
-		return apperrors.NewBadRequest("invalid or expired token", err)
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
+	if !ok || userID == uuid.Nil {
+		return apperrors.NewBadRequest("unauthorized", nil)
 	}
 
-	// Verify the nonce
-	storedEncryptedUserID, err := h.redis.Get(context.Background(), "reset:nonce:"+m3.User.APAKE.RegistrationNonce).Result()
+	keysInitializedBool, ok := r.Context().Value(contextkeys.KeysInitializedKey).(bool)
+	if !ok {
+		return apperrors.NewInternal(fmt.Errorf("keys_initialized not found in context"))
+	}
+	if keysInitializedBool {
+		return apperrors.NewForbidden("Keys can be initialized only once", nil)
+	}
+
+	err := validateInitializeAccountKeysPayload(&initRequest)
 	if err != nil {
-		return apperrors.NewBadRequest("invalid registration nonce", err)
-	}
-
-	storedUserIDBytes, err := crypto.DecryptRedisPayload(storedEncryptedUserID)
-	if err != nil || string(storedUserIDBytes) != token.User.ID.String() {
-		return apperrors.NewBadRequest("invalid registration nonce", err)
-	}
-
-	regRecordBytes, err := base64.RawURLEncoding.DecodeString(m3.User.APAKE.RegistrationRecord)
-	if err != nil {
-		return apperrors.NewBadRequest("invalid base64 in registration record", err)
-	}
-
-	passwordFileRecord, err := bindings.FinishRegistration(
-		regRecordBytes,
-	)
-
-	if err != nil {
-		return apperrors.NewInternal(err)
+		slog.WarnContext(r.Context(), "validate initialize account keys payload failed", "error", err)
+		return apperrors.NewBadRequest("invalid payload", err)
 	}
 
 	err = h.db.Transaction(func(tx *gorm.DB) error {
-		// Update user registration record
-		if err := tx.Model(&token.User).Updates(map[string]interface{}{
-			"registration_record": base64.RawURLEncoding.EncodeToString(passwordFileRecord),
-			"registration_nonce":  m3.User.APAKE.RegistrationNonce,
+
+		// update the existing user, the encryption version is important here, because we set it to a non-negative number, depending on the config
+		// note: encryption version (-1) - means keys are not initialized, we are changing it here, to a value in the config, which must be >= 0
+		if err := tx.Model(&model.User{}).Where("id = ?", userID).Updates(model.User{
+			EncryptionVersion: config.Cfg.CRYPTO.EncryptionVersion,
+			KdfParams: dto.KdfParams{
+				KdfAlg:      config.Cfg.CRYPTO.KdfAlg,
+				KdfOpsLimit: config.Cfg.CRYPTO.KdfOpsLimit,
+				KdfMemLimit: config.Cfg.CRYPTO.KdfMemLimit,
+			},
 		}).Error; err != nil {
-			return err
+			return fmt.Errorf("failed to update user encryption settings: %w", err)
 		}
 
-		// Update keystore with newly encrypted standard keys
-		// Recovery keys remain the same (unless frontend re-encrypts them too)
-		if err := tx.Model(&model.UserKeyStore{}).Where("user_id = ?", token.User.ID).Updates(map[string]interface{}{
-			"master_kdf_salt":                          m3.User.Keys.MasterKdfSalt,
-			"encrypted_account_encryption_private_key": m3.User.Keys.EncryptedAccountEncryptionPrivateKey,
-			"account_encryption_key_nonce":             m3.User.Keys.AccountEncryptionKeyNonce,
-			"encrypted_account_signing_private_key":    m3.User.Keys.EncryptedAccountSigningPrivateKey,
-			"account_signing_key_nonce":                m3.User.Keys.AccountSigningKeyNonce,
+		storedUserKeyStore := model.UserKeyStore{
+			UserID:                               userID,
+			MasterKdfSalt:                        initRequest.User.Keys.MasterKdfSalt,
+			AccountEncryptionPublicKey:           initRequest.User.Keys.AccountEncryptionPublicKey,
+			EncryptedAccountEncryptionPrivateKey: initRequest.User.Keys.EncryptedAccountEncryptionPrivateKey,
+			AccountEncryptionKeyNonce:            initRequest.User.Keys.AccountEncryptionKeyNonce,
+			AccountSigningPublicKey:              initRequest.User.Keys.AccountSigningPublicKey,
+			EncryptedAccountSigningPrivateKey:    initRequest.User.Keys.EncryptedAccountSigningPrivateKey,
+			AccountSigningKeyNonce:               initRequest.User.Keys.AccountSigningKeyNonce,
 
-			"recovery_encrypted_account_encryption_private_key": m3.User.Keys.RecoveryEncryptedAccountEncryptionPrivateKey,
-			"recovery_account_encryption_key_nonce":             m3.User.Keys.RecoveryAccountEncryptionKeyNonce,
-			"recovery_encrypted_account_signing_private_key":    m3.User.Keys.RecoveryEncryptedAccountSigningPrivateKey,
-			"recovery_account_signing_key_nonce":                m3.User.Keys.RecoveryAccountSigningKeyNonce,
-		}).Error; err != nil {
-			return err
+			RecoveryEncryptedAccountEncryptionPrivateKey: initRequest.User.Keys.RecoveryEncryptedAccountEncryptionPrivateKey,
+			RecoveryAccountEncryptionKeyNonce:            initRequest.User.Keys.RecoveryAccountEncryptionKeyNonce,
+			RecoveryEncryptedAccountSigningPrivateKey:    initRequest.User.Keys.RecoveryEncryptedAccountSigningPrivateKey,
+			RecoveryAccountSigningKeyNonce:               initRequest.User.Keys.RecoveryAccountSigningKeyNonce,
 		}
 
-		// Delete the token so it can't be reused
-		if err := tx.Delete(&token).Error; err != nil {
-			return err
+		shareUUID := uuid.New()
+		linkUUID := uuid.New()
+		nodeUUID := uuid.New()
+
+		storedShare := model.Share{
+			ID:                     shareUUID,
+			TargetLinkID:           linkUUID,
+			Type:                   "DEFAULT",
+			OwnerID:                userID,
+			SharePublicKey:         initRequest.Drive.DefaultShare.PublicKey,
+			WrappedSharePrivateKey: initRequest.Drive.DefaultShare.WrappedPrivateKey,
+			SharePrivNonce:         initRequest.Drive.DefaultShare.PrivKeyNonce,
+		}
+
+		storedNode := model.Node{
+			ID:                nodeUUID,
+			Type:              model.NodeTypeFolder,
+			EncryptedMetadata: "",
+			MetadataNonce:     "",
+			OwnerID:           userID,
+			NodePublicKey:     initRequest.Drive.RootNode.PublicKey,
+			WrappedNodeKey:    initRequest.Drive.RootNode.WrappedPrivateKey,
+			NodePrivNonce:     initRequest.Drive.RootNode.PrivKeyNonce,
+			Signature:         initRequest.Drive.RootNode.SignedEncryptedPassphrase,
+		}
+
+		storedLink := model.Link{
+			ID:                            linkUUID,
+			ParentNodeID:                  nil,
+			ChildNodeID:                   &nodeUUID,
+			EncryptedName:                 "",
+			NameNonce:                     "",
+			EncryptedNodePassphrase:       initRequest.Drive.RootNode.EncryptedPassphrase,
+			SignedEncryptedNodePassphrase: initRequest.Drive.RootNode.SignedEncryptedPassphrase,
+			AuthorID:                      userID,
+		}
+
+		storedShareMember := model.ShareMember{
+			ShareID:                        shareUUID,
+			UserID:                         userID,
+			Permissions:                    255, // Full Admin
+			EncryptedSharePassphrase:       initRequest.Drive.DefaultShare.EncryptedPassphraseForOwner,
+			SignedEncryptedSharePassphrase: initRequest.Drive.DefaultShare.SignedEncryptedPassphraseForOwner,
+		}
+
+		if err := tx.Create(&storedUserKeyStore).Error; err != nil {
+			return fmt.Errorf("cannot initialize keys: %w", err)
+		}
+
+		if err := tx.Create(&storedNode).Error; err != nil {
+			return fmt.Errorf("cannot initialize node: %w", err)
+		}
+
+		if err := tx.Create(&storedLink).Error; err != nil {
+			return fmt.Errorf("cannot initialize link: %w", err)
+		}
+
+		if err := tx.Create(&storedShare).Error; err != nil {
+			return fmt.Errorf("cannot initialize share: %w", err)
+		}
+
+		if err := tx.Create(&storedShareMember).Error; err != nil {
+			return fmt.Errorf("cannot initialize share member: %w", err)
 		}
 
 		return nil
 	})
 
 	if err != nil {
+		// User already has the crypto structure initialized
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			slog.WarnContext(r.Context(), "user attempted to initialize keys, but they already exist")
+			return apperrors.NewConflict("keys are already initialized for this account", err)
+		}
+
+		// Otherwise, it's a critical database failure
+		slog.ErrorContext(r.Context(), "failed to initialize account keys in database", "error", err)
 		return apperrors.NewInternal(err)
 	}
 
-	// Clean up redis
-	h.redis.Del(context.Background(), "reset:nonce:"+m3.User.APAKE.RegistrationNonce)
-
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusCreated)
 	err = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	if err != nil {
 		return apperrors.NewInternal(err)
 	}
+
 	return nil
 }

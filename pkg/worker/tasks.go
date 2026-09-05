@@ -145,12 +145,12 @@ func (tp *TaskProcessor) handleSignupProcessingTask(ctx context.Context, t *asyn
 				EncryptedEmail:     encryptedEmail,
 				HashedEmail:        p.HashedEmailHex,
 				RegistrationRecord: p.M3.User.APAKE.RegistrationRecord,
-				KdfParams: dto.KdfParams{
-					KdfAlg:      config.Cfg.CRYPTO.KdfAlg,
-					KdfOpsLimit: config.Cfg.CRYPTO.KdfOpsLimit,
-					KdfMemLimit: config.Cfg.CRYPTO.KdfMemLimit,
-				},
-				EncryptionVersion: config.Cfg.CRYPTO.EncryptionVersion,
+				//KdfParams: dto.KdfParams{
+				//	KdfAlg:      config.Cfg.CRYPTO.KdfAlg,
+				//	KdfOpsLimit: config.Cfg.CRYPTO.KdfOpsLimit,
+				//	KdfMemLimit: config.Cfg.CRYPTO.KdfMemLimit,
+				//},
+				//EncryptionVersion: config.Cfg.CRYPTO.EncryptionVersion,
 			}
 
 			//storedUserKeyStore := model.UserKeyStore{

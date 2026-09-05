@@ -164,7 +164,15 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewInternal(err)
 	}
 
-	newAccessToken, expTime := token.IssueAccessToken(fingerprintHash, storedToken.DpopJKT, storedToken.UserID.String(), string(decryptedEmail), storedToken.SessionID.String(), storedToken.FamilyID.String())
+	// if EncryptionVersion is -1 , this means the account key material was not yet initialized
+	// in this case the keys_initialized claim will be embedded inside the access token, to protect authenticated routes
+	// that require the user to have his account key material initialized
+	var withKeysInitialized = false
+	if user.EncryptionVersion != -1 {
+		withKeysInitialized = true
+	}
+
+	newAccessToken, expTime := token.IssueAccessToken(withKeysInitialized, fingerprintHash, storedToken.DpopJKT, storedToken.UserID.String(), string(decryptedEmail), storedToken.SessionID.String(), storedToken.FamilyID.String())
 	maxAge := time.Until(expTime)
 
 	newCsrfToken := token.IssueCsrfToken()

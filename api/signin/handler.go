@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"quartz/internal/bindings"
@@ -66,13 +67,14 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
-	hashedEmail, err := crypto.HashEmail([]byte(m1.Email))
+	hashedEmailBytes, err := crypto.HashEmail([]byte(m1.Email))
 	if err != nil {
 		return apperrors.NewInternal(err)
 	}
+	hashedEmailHex := fmt.Sprintf("%x", hashedEmailBytes)
 
 	var userRegistrationRecord dto.UserRegistrationRecord
-	if err := h.db.Where("hashed_email = ?", hashedEmail).First(&userRegistrationRecord).Error; err != nil {
+	if err := h.db.Where("hashed_email = ?", hashedEmailHex).First(&userRegistrationRecord).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return apperrors.NewNotFound("user not found", err)
 		}
@@ -107,7 +109,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 		// Store in Redis
 		nonceData := map[string]string{
 			"serverLoginState": base64.RawURLEncoding.EncodeToString(serverLoginState),
-			"email":            hashedEmail,
+			"email":            hashedEmailHex,
 		}
 		nonceJSON, err := json.Marshal(nonceData)
 		if err != nil {
@@ -210,7 +212,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 
 	err = h.db.Model(&model.User{}).
 		Select("users.*, users.encrypted_email AS email, user_key_stores.*").
-		Joins("INNER JOIN user_key_stores ON user_key_stores.user_id = users.id").
+		Joins("LEFT JOIN user_key_stores ON user_key_stores.user_id = users.id").
 		Where("users.hashed_email = ?", hashedEmail).
 		First(&trustedUserInfo).Error
 
@@ -274,7 +276,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 	fingerprintHashBytes := sha256.Sum256(fingerprintBytes)
 	fingerprintHash := hex.EncodeToString(fingerprintHashBytes[:])
 
-	accessToken, expTime := token.IssueAccessToken(fingerprintHash, thumbprint, trustedUserInfo.ID.String(), trustedUserInfo.Email, generatedNewSessionID.String(), familyID.String())
+	accessToken, expTime := token.IssueAccessToken(false, fingerprintHash, thumbprint, trustedUserInfo.ID.String(), trustedUserInfo.Email, generatedNewSessionID.String(), familyID.String())
 	maxAge := time.Until(expTime)
 
 	http.SetCookie(w, &http.Cookie{

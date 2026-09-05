@@ -18,7 +18,7 @@ type User struct {
 	RegistrationRecord string       `gorm:"not null"`
 
 	KdfParams         dto.KdfParams `gorm:"embedded;embeddedPrefix:kdf_"`
-	EncryptionVersion int16         `gorm:"type:smallint"`
+	EncryptionVersion int16         `gorm:"type:smallint;default:-1;not null"`
 
 	KeyStore UserKeyStore `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 

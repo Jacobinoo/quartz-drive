@@ -17,6 +17,7 @@ import (
 	"quartz/api/signout"
 	"quartz/api/signup"
 	"quartz/config"
+	"quartz/internal/bindings"
 	"quartz/pkg/database"
 	"quartz/pkg/httputils"
 	"quartz/pkg/storage"
@@ -60,7 +61,16 @@ func Run() {
 		storageService, err = storage.NewB2Service()
 	}
 	if err != nil {
-		log.Fatalf("storage service: connection failed: %v", err)
+		slog.Error("storage service: connection failed", "error", err)
+		os.Exit(1)
+		return
+	}
+
+	fakeRegRecord, err := bindings.GenerateFakeRegistrationRecord(opaqueSetupBytes())
+	if err != nil {
+		slog.Error("Failed to generate fake registration record", "error", err)
+		os.Exit(1)
+		return
 	}
 
 	state := &ServerState{
@@ -69,8 +79,9 @@ func Run() {
 		OpaqueSetup: opaqueSetupBytes(),
 		// GRPCClient:     *grpcClient,
 		// GRPCContext:    context.WithoutCancel(context.Background()),
-		StorageService: storageService,
-		AsynqClient:    asynqClient,
+		StorageService:               storageService,
+		AsynqClient:                  asynqClient,
+		FakeOpaqueRegistrationRecord: fakeRegRecord,
 	}
 
 	router := initRouter(state)
@@ -264,7 +275,7 @@ func initV1Mux(state *ServerState) *http.ServeMux {
 	accountHandler := account.NewHandler(state.DB, state.Redis, state.OpaqueSetup)
 	account.RegisterRoutes(mux, accountHandler, state.Redis)
 
-	signinHandler := signin.NewHandler(state.DB, state.Redis, state.OpaqueSetup)
+	signinHandler := signin.NewHandler(state.DB, state.Redis, state.OpaqueSetup, state.FakeOpaqueRegistrationRecord)
 	signin.RegisterRoutes(mux, signinHandler, state.Redis)
 
 	signoutHandler := signout.NewHandler(state.DB)

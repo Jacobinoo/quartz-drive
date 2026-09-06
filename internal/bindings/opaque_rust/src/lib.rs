@@ -5,6 +5,7 @@ use opaque_ke::ciphersuite::CipherSuite;
 use opaque_ke::errors::InternalError;
 use opaque_ke::ksf::Ksf;
 use opaque_ke::{
+    ClientRegistration, ClientRegistrationFinishParameters,
     CredentialFinalization, CredentialRequest, Identifiers, RegistrationRequest,
     RegistrationUpload, Ristretto255, ServerLogin, ServerLoginParameters, ServerRegistration,
     ServerSetup,
@@ -235,6 +236,58 @@ pub extern "C" fn free_opaque_buffer(ptr: *mut c_uchar, len: size_t) {
             let _ = Vec::from_raw_parts(ptr, len, len);
         }
     }
+}
+
+/// Generate a fake registration record for dummy login (timing attack prevention)
+#[no_mangle]
+pub extern "C" fn opaque_generate_fake_registration_record(
+    setup_ptr: *const c_uchar,
+    setup_len: size_t,
+    out_record_ptr: *mut *mut c_uchar,
+    out_record_len: *mut size_t,
+) -> c_int {
+    let setup_bytes = unsafe { slice::from_raw_parts(setup_ptr, setup_len) };
+    let setup = match ServerSetup::<DefaultCipherSuite>::deserialize(setup_bytes) {
+        Ok(s) => s,
+        Err(_) => return 1,
+    };
+
+    let mut rng = OsRng;
+    let fake_password = b"this-is-a-fake-password-never-stored-anywhere";
+    let fake_identifier = b"fake-user-identifier";
+    
+    // M1
+    let client_reg_start = match ClientRegistration::<DefaultCipherSuite>::start(&mut rng, fake_password) {
+        Ok(r) => r,
+        Err(_) => return 2,
+    };
+    
+    // M2
+    let server_reg_start = match ServerRegistration::<DefaultCipherSuite>::start(
+        &setup,
+        client_reg_start.message,
+        fake_identifier,
+    ) {
+        Ok(r) => r,
+        Err(_) => return 3,
+    };
+    
+    // M3
+    let client_reg_finish = match client_reg_start.state.finish(
+        &mut rng,
+        fake_password,
+        server_reg_start.message,
+        ClientRegistrationFinishParameters::default(),
+    ) {
+        Ok(r) => r,
+        Err(_) => return 4,
+    };
+    
+    // Server finish
+    let registration_record = ServerRegistration::<DefaultCipherSuite>::finish(client_reg_finish.message);
+    let mut rec_vec = registration_record.serialize().to_vec();
+    unsafe { write_vec_to_c(&mut rec_vec, out_record_ptr, out_record_len) };
+    0
 }
 
 mod tests;

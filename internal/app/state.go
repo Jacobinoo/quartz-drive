@@ -15,6 +15,7 @@ type ServerState struct {
 	OpaqueSetup []byte
 	// GRPCClient     pb.QuartzInternalCryptoServiceClient
 	// GRPCContext    context.Context
-	StorageService storage.StorageService
-	AsynqClient    *asynq.Client
+	StorageService               storage.StorageService
+	AsynqClient                  *asynq.Client
+	FakeOpaqueRegistrationRecord []byte
 }

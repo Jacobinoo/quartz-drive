@@ -62,3 +62,12 @@ int opaque_finish_login(const unsigned char *state_ptr,
  * Go MUST call this for every out_ptr it received.
  */
 void free_opaque_buffer(unsigned char *ptr, size_t len);
+
+/**
+ * Generate a fake registration record for dummy login (timing attack prevention)
+ */
+int opaque_generate_fake_registration_record(const unsigned char *setup_ptr,
+                                             size_t setup_len,
+                                             unsigned char **out_record_ptr,
+                                             size_t *out_record_len);
+

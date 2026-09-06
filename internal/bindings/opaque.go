@@ -114,3 +114,19 @@ func FinishLogin(serverLoginState, credentialFinalization []byte) (sessionKey []
 	}
 	return rustBytesToGo(outPtr, outLen), nil
 }
+
+// GenerateFakeRegistrationRecord generates a dummy OPAQUE registration record
+// to be used when a user is not found during login, in order to prevent timing side-channels.
+func GenerateFakeRegistrationRecord(serverSetup []byte) ([]byte, error) {
+	var outPtr *C.uchar
+	var outLen C.size_t
+
+	rc := C.opaque_generate_fake_registration_record(
+		(*C.uchar)(unsafe.Pointer(&serverSetup[0])), C.size_t(len(serverSetup)),
+		&outPtr, &outLen,
+	)
+	if rc != 0 {
+		return nil, fmt.Errorf("opaque_generate_fake_registration_record failed (rc=%d)", rc)
+	}
+	return rustBytesToGo(outPtr, outLen), nil
+}

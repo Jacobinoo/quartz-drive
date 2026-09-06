@@ -31,13 +31,14 @@ import (
 )
 
 type Handler struct {
-	db          *gorm.DB
-	redis       *redis.Client
-	opaqueSetup []byte
+	db                           *gorm.DB
+	redis                        *redis.Client
+	opaqueSetup                  []byte
+	fakeOpaqueRegistrationRecord []byte
 }
 
-func NewHandler(db *gorm.DB, redisClient *redis.Client, opaqueSetup []byte) *Handler {
-	return &Handler{db: db, redis: redisClient, opaqueSetup: opaqueSetup}
+func NewHandler(db *gorm.DB, redisClient *redis.Client, opaqueSetup []byte, fakeOpaqueRegistrationRecord []byte) *Handler {
+	return &Handler{db: db, redis: redisClient, opaqueSetup: opaqueSetup, fakeOpaqueRegistrationRecord: fakeOpaqueRegistrationRecord}
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {

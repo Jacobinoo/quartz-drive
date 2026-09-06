@@ -54,13 +54,6 @@ type signupProcessingPayload struct {
 	M3                 *dto.M3
 }
 
-type RedisPendingRegistration struct {
-	UserID             uuid.UUID `json:"user_id"`
-	EncryptedEmail     string    `json:"encrypted_email"`
-	HashedEmail        string    `json:"hashed_email"`
-	RegistrationRecord string    `json:"registration_record"`
-}
-
 func NewSignupProcessingTask(cfRay, requestId, emailID, email, hashedEmailHex string, userID uuid.UUID, passwordFileRecord []byte, m3 *dto.M3) (*asynq.Task, error) {
 	payload, err := json.Marshal(signupProcessingPayload{
 		RequestID:          requestId,
@@ -143,7 +136,7 @@ func (tp *TaskProcessor) handleSignupProcessingTask(ctx context.Context, t *asyn
 	hashedTokenStr := fmt.Sprintf("%x", sha256.Sum256([]byte(tokenStr)))
 
 	// Prepare the Redis payload
-	pendingReg := RedisPendingRegistration{
+	pendingReg := dto.RedisPendingRegistration{
 		UserID:             p.UserID,
 		EncryptedEmail:     encryptedEmail,
 		HashedEmail:        p.HashedEmailHex,

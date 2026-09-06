@@ -24,4 +24,6 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler, rdb *redis.Client) {
 			middleware.LastActivityTracker(h.db, h.InitializeKeys),
 		),
 	)))))
+
+	mux.HandleFunc("/account/verify-email", httputils.Wrap(middleware.CorsMiddleware(h.VerifyEmail)))
 }

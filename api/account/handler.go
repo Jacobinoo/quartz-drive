@@ -555,3 +555,83 @@ func (h *Handler) InitializeKeys(w http.ResponseWriter, r *http.Request) error {
 
 	return nil
 }
+
+type VerifyEmailRequest struct {
+	Token string `json:"token"`
+}
+
+type VerifyEmailResponse struct {
+	Email string `json:"email"`
+}
+
+func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != http.MethodPost {
+		return apperrors.NewMethodNotAllowed("Provided method is not allowed")
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	var verifyRequest VerifyEmailRequest
+	if err := json.NewDecoder(r.Body).Decode(&verifyRequest); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
+	}
+
+	hashedTokenStr := fmt.Sprintf("%x", sha256.Sum256([]byte(verifyRequest.Token)))
+
+	sessionRedisKey := fmt.Sprintf("pending_reg:%s", hashedTokenStr)
+	sessionRedisCmd := h.redis.GetDel(r.Context(), sessionRedisKey)
+	err := sessionRedisCmd.Err()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return apperrors.NewBadRequest("invalid verification link or account already exists", nil)
+		}
+		return apperrors.NewInternal(err)
+	}
+	sessionRedisCmdVal := sessionRedisCmd.Val()
+
+	decryptedRedisPayloadBytes, err := crypto.DecryptRedisPayload(sessionRedisCmdVal)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	var registrationSession dto.RedisPendingRegistration
+	err = json.Unmarshal(decryptedRedisPayloadBytes, &registrationSession)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	storedUser := model.User{
+		ID:                 registrationSession.UserID,
+		EncryptedEmail:     registrationSession.EncryptedEmail,
+		HashedEmail:        registrationSession.HashedEmail,
+		RegistrationRecord: registrationSession.RegistrationRecord,
+	}
+	if err := h.db.Create(&storedUser).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return apperrors.NewBadRequest("invalid verification link or account already exists", nil)
+		}
+		return apperrors.NewInternal(err)
+	}
+
+	decryptedEmail, err := crypto.DecryptEmail(registrationSession.EncryptedEmail)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	decryptedEmailStr := string(decryptedEmail)
+	if decryptedEmailStr == "" {
+		return apperrors.NewInternal(fmt.Errorf("decrypted email string is empty"))
+	}
+
+	w.WriteHeader(http.StatusOK)
+
+	res := VerifyEmailResponse{
+		Email: decryptedEmailStr,
+	}
+
+	err = json.NewEncoder(w).Encode(res)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	return nil
+}

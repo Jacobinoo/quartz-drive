@@ -4,6 +4,8 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+
+	"github.com/google/uuid"
 )
 
 type InitializeAccountKeysRequest struct {
@@ -65,4 +67,11 @@ type NodeDTO struct {
 	PrivKeyNonce              string `json:"privKeyNonce"`
 	EncryptedPassphrase       string `json:"encryptedPassphrase"`
 	SignedEncryptedPassphrase string `json:"signedEncryptedPassphrase"`
+}
+
+type RedisPendingRegistration struct {
+	UserID             uuid.UUID `json:"user_id"`
+	EncryptedEmail     string    `json:"encrypted_email"`
+	HashedEmail        string    `json:"hashed_email"`
+	RegistrationRecord string    `json:"registration_record"`
 }

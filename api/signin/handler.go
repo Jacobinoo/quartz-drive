@@ -19,6 +19,7 @@ import (
 	"quartz/pkg/crypto"
 	"quartz/pkg/dpop"
 	"quartz/pkg/token"
+	"strconv"
 	"strings"
 
 	// pb "quartz/proto"
@@ -75,28 +76,38 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 	hashedEmailHex := fmt.Sprintf("%x", hashedEmailBytes)
 
 	var userRegistrationRecord dto.UserRegistrationRecord
-	if err := h.db.Where("hashed_email = ?", hashedEmailHex).First(&userRegistrationRecord).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return apperrors.NewNotFound("user not found", err)
-		}
-		return apperrors.NewInternal(err)
-	}
+	err = h.db.Where("hashed_email = ?", hashedEmailHex).First(&userRegistrationRecord).Error
 
-	regRecordBytes, err := base64.RawURLEncoding.DecodeString(userRegistrationRecord.RegistrationRecord)
-	if err != nil {
+	var registrationRecordBytes []byte
+	var credentialIDBytes []byte
+	isFake := false
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// User doesn't exist — use fake record
+		registrationRecordBytes = h.fakeOpaqueRegistrationRecord
+		credentialIDBytes = []byte("fake-user-identifier")
+		isFake = true
+	} else if err != nil {
 		return apperrors.NewInternal(err)
+	} else {
+		// User exists — use real record
+		registrationRecordBytes, err = base64.RawURLEncoding.DecodeString(userRegistrationRecord.RegistrationRecord)
+		if err != nil {
+			return apperrors.NewInternal(err)
+		}
+		credentialIDBytes = []byte(userRegistrationRecord.CredentialID.String())
 	}
 
 	slog.Debug("DEBUG: opaqueSetup", "len", len(h.opaqueSetup))
-	slog.Debug("DEBUG: regRecordBytes", "len", len(regRecordBytes))
+	slog.Debug("DEBUG: regRecordBytes", "len", len(registrationRecordBytes))
 	slog.Debug("DEBUG: loginReqBytes", "len", len(loginReqBytes))
-	slog.Debug("DEBUG: credentialID", "len", len(userRegistrationRecord.CredentialID.String()))
+	slog.Debug("DEBUG: credentialID", "len", len(credentialIDBytes))
 
 	startLogRes, serverLoginState, err := bindings.StartLogin(
 		h.opaqueSetup,
-		regRecordBytes,
+		registrationRecordBytes,
 		loginReqBytes,
-		[]byte(userRegistrationRecord.CredentialID.String()),
+		credentialIDBytes,
 	)
 
 	var m2 dto.M2Login
@@ -111,6 +122,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 		nonceData := map[string]string{
 			"serverLoginState": base64.RawURLEncoding.EncodeToString(serverLoginState),
 			"email":            hashedEmailHex,
+			"fake":             strconv.FormatBool(isFake),
 		}
 		nonceJSON, err := json.Marshal(nonceData)
 		if err != nil {
@@ -122,7 +134,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 			return apperrors.NewInternal(err)
 		}
 
-		set := h.redis.Set(context.Background(), "login:nonce:"+nonce, encryptedJSON, 30*time.Second)
+		set := h.redis.Set(r.Context(), "login:nonce:"+nonce, encryptedJSON, 30*time.Second)
 		if set.Err() != nil {
 			return apperrors.NewInternal(err)
 		}
@@ -150,6 +162,8 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
+	const genericLoginError = "invalid email or password — if you recently signed up, check your inbox for a verification link"
+
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method != http.MethodPost {
@@ -172,7 +186,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 	encryptedNonceJSON, err := h.redis.Get(context.Background(), "login:nonce:"+m3.Nonce).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			return apperrors.NewBadRequest("invalid or expired nonce", err)
+			return apperrors.NewBadRequest(genericLoginError, err)
 		}
 		return apperrors.NewInternal(err)
 	}
@@ -190,6 +204,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 
 	serverLoginState, _ := base64.RawURLEncoding.DecodeString(nonceData["serverLoginState"])
 	hashedEmail := nonceData["email"]
+	isFake, _ := strconv.ParseBool(nonceData["fake"])
 
 	finishLoginReqBytes, err := base64.RawURLEncoding.DecodeString(m3.FinishLoginRequest)
 	if err != nil {
@@ -197,14 +212,18 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid base64 in finish login request", err)
 	}
 
+	// Always run FinishLogin — real computation in both paths
+	// For fake sessions this will fail cryptographically, which is correct
 	_, err = bindings.FinishLogin(
 		serverLoginState,
 		finishLoginReqBytes,
 	)
 
-	if err != nil {
+	if err != nil || isFake {
+		// Both wrong-password (err != nil) and fake sessions (isFake)
+		// return the identical error — attacker cannot distinguish them
 		slog.DebugContext(r.Context(), "bindings FinishLogin call failed: %v", err)
-		return apperrors.NewUnauthorized("login failed", err)
+		return apperrors.NewUnauthorized(genericLoginError, err)
 	}
 
 	slog.Debug("Established a new trusted session key.")
@@ -219,7 +238,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return apperrors.NewNotFound("user not found", err)
+			return apperrors.NewNotFound(genericLoginError, err)
 		}
 		return apperrors.NewInternal(err)
 	}

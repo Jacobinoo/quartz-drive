@@ -13,6 +13,7 @@ use opaque_ke::{
 use rand::rngs::OsRng;
 use sha2::Sha512;
 use std::slice;
+use rand::RngCore;
 
 // ─── CipherSuite (must match @serenity-kit/opaque exactly) ───────────────────
 
@@ -253,11 +254,12 @@ pub extern "C" fn opaque_generate_fake_registration_record(
     };
 
     let mut rng = OsRng;
-    let fake_password = b"this-is-a-fake-password-never-stored-anywhere";
+    let mut fake_password = [0u8; 32];
+    rng.fill_bytes(&mut fake_password);
     let fake_identifier = b"fake-user-identifier";
-    
+
     // M1
-    let client_reg_start = match ClientRegistration::<DefaultCipherSuite>::start(&mut rng, fake_password) {
+    let client_reg_start = match ClientRegistration::<DefaultCipherSuite>::start(&mut rng, &fake_password) {
         Ok(r) => r,
         Err(_) => return 2,
     };
@@ -275,7 +277,7 @@ pub extern "C" fn opaque_generate_fake_registration_record(
     // M3
     let client_reg_finish = match client_reg_start.state.finish(
         &mut rng,
-        fake_password,
+        &fake_password,
         server_reg_start.message,
         ClientRegistrationFinishParameters::default(),
     ) {

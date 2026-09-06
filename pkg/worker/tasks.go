@@ -131,9 +131,10 @@ func (tp *TaskProcessor) handleSignupProcessingTask(ctx context.Context, t *asyn
 	// Generate secure token
 	tokenBytes := make([]byte, 64)
 	_, _ = rand.Read(tokenBytes)
-	tokenStr := fmt.Sprintf("%x", tokenBytes)
+	tokenHex := fmt.Sprintf("%x", tokenBytes)
 
-	hashedTokenStr := fmt.Sprintf("%x", sha256.Sum256([]byte(tokenStr)))
+	hashedTokenBytes := sha256.Sum256(tokenBytes)
+	hashedTokenStr := fmt.Sprintf("%x", hashedTokenBytes)
 
 	// Prepare the Redis payload
 	pendingReg := dto.RedisPendingRegistration{
@@ -159,7 +160,7 @@ func (tp *TaskProcessor) handleSignupProcessingTask(ctx context.Context, t *asyn
 		return fmt.Errorf("failed to save pending registration to redis: %w", err)
 	}
 
-	magicLink := fmt.Sprintf("%s/verify-email#token=%s", config.Cfg.App.FrontendURL, tokenStr)
+	magicLink := fmt.Sprintf("%s/verify-email#token=%s", config.Cfg.App.FrontendURL, tokenHex)
 
 	// Fallback for local development
 	if config.Cfg.Env == "development" {

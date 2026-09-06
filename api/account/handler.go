@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -575,13 +576,21 @@ func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
-	hashedTokenStr := fmt.Sprintf("%x", sha256.Sum256([]byte(verifyRequest.Token)))
+	tokenBytes, err := hex.DecodeString(verifyRequest.Token)
+	if err != nil {
+		slog.InfoContext(r.Context(), "failed to decode token", "error", err)
+		return apperrors.NewBadRequest("invalid token", err)
+	}
+
+	hashedTokenBytes := sha256.Sum256(tokenBytes)
+	hashedTokenStr := fmt.Sprintf("%x", hashedTokenBytes)
 
 	sessionRedisKey := fmt.Sprintf("pending_reg:%s", hashedTokenStr)
 	sessionRedisCmd := h.redis.GetDel(r.Context(), sessionRedisKey)
-	err := sessionRedisCmd.Err()
+	err = sessionRedisCmd.Err()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
+			slog.InfoContext(r.Context(), "failed to decode token", "error", err)
 			return apperrors.NewBadRequest("invalid verification link or account already exists", nil)
 		}
 		return apperrors.NewInternal(err)
@@ -607,6 +616,7 @@ func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) error {
 	}
 	if err := h.db.Create(&storedUser).Error; err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
+
 			return apperrors.NewBadRequest("invalid verification link or account already exists", nil)
 		}
 		return apperrors.NewInternal(err)

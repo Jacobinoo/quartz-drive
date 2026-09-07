@@ -645,3 +645,74 @@ func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) error {
 
 	return nil
 }
+
+// Reauthenticate endpoint is required for deriving the OPAQUE exportKey client side more easily
+// (e.g. when the keys are not initialized during onboarding, and exportKey is required to initialize them)
+func (h *Handler) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != http.MethodPost {
+		return apperrors.NewMethodNotAllowed("method not allowed")
+	}
+
+	var m1 dto.M1Reauthenticate
+	if err := json.NewDecoder(r.Body).Decode(&m1); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
+	}
+
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
+	if !ok {
+		return apperrors.NewUnauthorized("unauthorized", nil)
+	}
+
+	loginReqBytes, err := base64.RawURLEncoding.DecodeString(m1.LoginRequest)
+	if err != nil {
+		return apperrors.NewBadRequest("invalid base64 in login request", err)
+	}
+
+	var userRegistrationRecord dto.UserRegistrationRecord
+	err = h.db.Where("id = ?", userID).First(&userRegistrationRecord).Error
+
+	var registrationRecordBytes []byte
+	var credentialIDBytes []byte
+
+	registrationRecordBytes, err = base64.RawURLEncoding.DecodeString(userRegistrationRecord.RegistrationRecord)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+	credentialIDBytes = []byte(userID.String())
+
+	decryptedEmailBytes, err := crypto.DecryptEmail(userRegistrationRecord.EncryptedEmail)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	decryptedEmailStr := string(decryptedEmailBytes)
+	if decryptedEmailStr == "" {
+		return apperrors.NewInternal(fmt.Errorf("decrypted email string is empty"))
+	}
+
+	startLogRes, _, err := bindings.StartLogin(
+		h.opaqueSetup,
+		registrationRecordBytes,
+		loginReqBytes,
+		credentialIDBytes,
+	)
+
+	if err != nil {
+		slog.DebugContext(r.Context(), "bindings StartLogin call failed: %v", err)
+		return apperrors.NewBadRequest("invalid request", err)
+	}
+
+	var m2 dto.M2Reauthenticate
+	m2 = dto.M2Reauthenticate{
+		LoginResponse: base64.RawURLEncoding.EncodeToString(startLogRes),
+		Email:         decryptedEmailStr,
+	}
+
+	err = json.NewEncoder(w).Encode(m2)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+	return nil
+}

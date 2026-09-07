@@ -75,3 +75,12 @@ type RedisPendingRegistration struct {
 	HashedEmail        string    `json:"hashed_email"`
 	RegistrationRecord string    `json:"registration_record"`
 }
+
+type M1Reauthenticate struct {
+	LoginRequest string `json:"loginRequest"`
+}
+
+type M2Reauthenticate struct {
+	LoginResponse string `json:"loginResponse"`
+	Email         string `json:"email"`
+}

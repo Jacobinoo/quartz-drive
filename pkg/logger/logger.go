@@ -49,6 +49,10 @@ func (h *ContextHandler) Handle(ctx context.Context, r slog.Record) error {
 		r.AddAttrs(slog.String("user_id", userID))
 	}
 
+	if trackM1RequestID, ok := ctx.Value(contextkeys.TrackM1RequestIDKey).(string); ok && trackM1RequestID != "" {
+		r.AddAttrs(slog.String("track_m1_request_id", trackM1RequestID))
+	}
+
 	return h.Handler.Handle(ctx, r)
 }
 

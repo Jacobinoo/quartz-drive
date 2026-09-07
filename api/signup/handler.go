@@ -1,6 +1,7 @@
 package signup
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
@@ -44,8 +45,9 @@ func NewHandler(db *gorm.DB, redisClient *redis.Client, opaqueSetup []byte, asyn
 }
 
 type redisRegistrationSession struct {
-	HashedEmailHex string `json:"hashed_email"`
-	UserID         string `json:"user_id"`
+	HashedEmailHex   string `json:"hashed_email"`
+	UserID           string `json:"user_id"`
+	TrackM1RequestID string `json:"track_m1_request_id"`
 }
 
 // Signup: (opaque receive m1 & send m2)
@@ -113,8 +115,9 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) error {
 
 	sessionRedisKey := fmt.Sprintf("reg_session:%s", sessionNonceB64)
 	sessionRedisPayload, _ := json.Marshal(redisRegistrationSession{
-		HashedEmailHex: hashedEmailHex,
-		UserID:         userId,
+		HashedEmailHex:   hashedEmailHex,
+		UserID:           userId,
+		TrackM1RequestID: r.Context().Value(contextkeys.RequestIDKey).(string),
 	})
 
 	encryptedRedisPayload, err := crypto.EncryptRedisPayload(sessionRedisPayload)
@@ -207,6 +210,10 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return apperrors.NewInternal(err)
 	}
+
+	//Inject the M1 (previous) request_id to context for logging and fraud tracking purposes
+	ctx := context.WithValue(r.Context(), contextkeys.TrackM1RequestIDKey, registrationSession.TrackM1RequestID)
+	r = r.WithContext(ctx)
 
 	hashedIncomingEmail, err := crypto.HashEmail([]byte(m3.User.Email))
 	if err != nil {

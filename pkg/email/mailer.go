@@ -38,6 +38,10 @@ This email was sent automatically. If you didn't request this action, please ign
 Terms of Service: %s/terms
 Privacy Policy: %s/privacy`, data.Email, data.ActionURL, data.FrontendURL, data.FrontendURL)
 
+	if config.Cfg.App.Env == "development" {
+		toEmail = config.Cfg.Email.LocalDeliveryAddress
+	}
+
 	from := fmt.Sprintf("%s <%s>", config.Cfg.Email.UpdatesFromSenderName, config.Cfg.Email.UpdatesVerifiedDomain)
 
 	params := &resend.SendEmailRequest{
@@ -98,6 +102,10 @@ Quartz Drive
 Terms of Service: %s/terms
 Privacy Policy: %s/privacy`, data.Email, data.ActionURL, data.EmailID, data.FrontendURL, data.FrontendURL)
 
+	if config.Cfg.App.Env == "development" {
+		toEmail = config.Cfg.Email.LocalDeliveryAddress
+	}
+
 	from := fmt.Sprintf("%s <%s>", config.Cfg.Email.UpdatesFromSenderName, config.Cfg.Email.UpdatesVerifiedDomain)
 
 	params := &resend.SendEmailRequest{
@@ -156,6 +164,10 @@ If you need help regarding this email, contact support and provide this identifi
 Quartz Drive
 Terms of Service: %s/terms
 Privacy Policy: %s/privacy`, data.Email, data.ActionURL, data.ActionRecoverURL, data.EmailID, data.FrontendURL, data.FrontendURL)
+
+	if config.Cfg.App.Env == "development" {
+		toEmail = config.Cfg.Email.LocalDeliveryAddress
+	}
 
 	from := fmt.Sprintf("%s <%s>", config.Cfg.Email.UpdatesFromSenderName, config.Cfg.Email.UpdatesVerifiedDomain)
 

@@ -70,6 +70,8 @@ type (
 
 		SupportFromSenderName string `env:"EMAIL_SUPPORT_FROM_SENDER_NAME,required"`
 		SupportVerifiedDomain string `env:"EMAIL_SUPPORT_VERIFIED_DOMAIN,required"`
+
+		LocalDeliveryAddress string `env:"EMAIL_LOCAL_DELIVERY_ADDRESS"`
 	}
 
 	Security struct {

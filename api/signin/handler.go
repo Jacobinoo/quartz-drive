@@ -16,6 +16,7 @@ import (
 	"quartz/internal/model"
 	"quartz/pkg/app-errors"
 	"quartz/pkg/captcha"
+	"quartz/pkg/contextkeys"
 	"quartz/pkg/crypto"
 	"quartz/pkg/dpop"
 	"quartz/pkg/token"
@@ -118,11 +119,14 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 		_, _ = rand.Read(nonceBytes)
 		nonce := hex.EncodeToString(nonceBytes)
 
+		requestID, _ := r.Context().Value(contextkeys.RequestIDKey).(string)
+
 		// Store in Redis
 		nonceData := map[string]string{
 			"serverLoginState": base64.RawURLEncoding.EncodeToString(serverLoginState),
 			"email":            hashedEmailHex,
 			"fake":             strconv.FormatBool(isFake),
+			"trackM1RequestID": requestID,
 		}
 		nonceJSON, err := json.Marshal(nonceData)
 		if err != nil {
@@ -205,6 +209,12 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 	serverLoginState, _ := base64.RawURLEncoding.DecodeString(nonceData["serverLoginState"])
 	hashedEmail := nonceData["email"]
 	isFake, _ := strconv.ParseBool(nonceData["fake"])
+	trackM1RequestID := nonceData["trackM1RequestID"]
+
+	if trackM1RequestID != "" {
+		ctx := context.WithValue(r.Context(), contextkeys.TrackM1RequestIDKey, trackM1RequestID)
+		r = r.WithContext(ctx)
+	}
 
 	finishLoginReqBytes, err := base64.RawURLEncoding.DecodeString(m3.FinishLoginRequest)
 	if err != nil {
@@ -226,7 +236,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewUnauthorized(genericLoginError, err)
 	}
 
-	slog.Debug("Established a new trusted session key.")
+	slog.DebugContext(r.Context(), "Established a new trusted session key.")
 
 	var trustedUserInfo dto.TrustedUserInformation
 

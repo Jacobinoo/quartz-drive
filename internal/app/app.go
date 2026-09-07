@@ -42,7 +42,7 @@ func Run() {
 	redisClient := database.NewRedis()
 	defer redisClient.Close()
 
-	resendClient := resend.NewClient("ss")
+	resendClient := resend.NewClient(config.Cfg.Email.Key)
 
 	db := initDb()
 	if db == nil {

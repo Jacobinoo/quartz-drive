@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -101,12 +100,12 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
-	hashedEmail, err := crypto.HashEmail([]byte(m1.Email))
+	m1.Email = strings.ToLower(m1.Email)
+
+	hashedEmailHex, err := crypto.HashEmail([]byte(m1.Email))
 	if err != nil {
 		return apperrors.NewInternal(err)
 	}
-	hashedEmailHex := fmt.Sprintf("%x", hashedEmail)
-
 	userId := uuid.New().String()
 
 	sessionNonceBytes := make([]byte, 32)
@@ -215,11 +214,12 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 	ctx := context.WithValue(r.Context(), contextkeys.TrackM1RequestIDKey, registrationSession.TrackM1RequestID)
 	r = r.WithContext(ctx)
 
-	hashedIncomingEmail, err := crypto.HashEmail([]byte(m3.User.Email))
+	m3.User.Email = strings.ToLower(m3.User.Email)
+
+	hashedIncomingEmailHex, err := crypto.HashEmail([]byte(m3.User.Email))
 	if err != nil {
 		return apperrors.NewInternal(err)
 	}
-	hashedIncomingEmailHex := hex.EncodeToString([]byte(hashedIncomingEmail))
 
 	if subtle.ConstantTimeCompare([]byte(hashedIncomingEmailHex), []byte(registrationSession.HashedEmailHex)) == 0 {
 		slog.WarnContext(r.Context(), "email mismatch", "hashed_incoming_email_hex", hashedIncomingEmailHex, "session_saved_hashed_email_hex", registrationSession.HashedEmailHex)

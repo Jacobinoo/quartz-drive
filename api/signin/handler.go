@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"quartz/internal/bindings"
@@ -70,11 +69,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
-	hashedEmailBytes, err := crypto.HashEmail([]byte(m1.Email))
+	m1.Email = strings.ToLower(m1.Email)
+
+	hashedEmailHex, err := crypto.HashEmail([]byte(m1.Email))
 	if err != nil {
 		return apperrors.NewInternal(err)
 	}
-	hashedEmailHex := fmt.Sprintf("%x", hashedEmailBytes)
 
 	var userRegistrationRecord dto.UserRegistrationRecord
 	err = h.db.Where("hashed_email = ?", hashedEmailHex).First(&userRegistrationRecord).Error

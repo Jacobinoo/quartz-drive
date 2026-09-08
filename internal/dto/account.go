@@ -84,3 +84,8 @@ type M2Reauthenticate struct {
 	LoginResponse string `json:"loginResponse"`
 	Email         string `json:"email"`
 }
+
+type RedisPendingEmailRecovery struct {
+	UserID    uuid.UUID `json:"user_id"`
+	TokenHash string    `json:"token_hash"`
+}

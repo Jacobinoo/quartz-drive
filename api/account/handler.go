@@ -2,7 +2,6 @@ package account
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -19,7 +18,7 @@ import (
 	"quartz/pkg/captcha"
 	"quartz/pkg/contextkeys"
 	"quartz/pkg/crypto"
-	"quartz/pkg/email"
+	"quartz/pkg/worker"
 	"strings"
 	"time"
 
@@ -27,19 +26,20 @@ import (
 
 	"github.com/go-redis/redis_rate/v10"
 	"github.com/google/uuid"
+	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
-	"github.com/resend/resend-go/v2"
 	"gorm.io/gorm"
 )
 
 type Handler struct {
 	db          *gorm.DB
 	redis       *redis.Client
+	asynqClient *asynq.Client
 	opaqueSetup []byte
 }
 
-func NewHandler(db *gorm.DB, redisClient *redis.Client, opaqueSetup []byte) *Handler {
-	return &Handler{db: db, redis: redisClient, opaqueSetup: opaqueSetup}
+func NewHandler(db *gorm.DB, redisClient *redis.Client, asynqClient *asynq.Client, opaqueSetup []byte) *Handler {
+	return &Handler{db: db, redis: redisClient, asynqClient: asynqClient, opaqueSetup: opaqueSetup}
 }
 
 type ForgotPasswordRequest struct {
@@ -67,6 +67,8 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
+	req.Email = strings.ToLower(req.Email)
+
 	emailHash, err := crypto.HashEmail([]byte(req.Email))
 	if err != nil {
 		return apperrors.NewInternal(err)
@@ -93,57 +95,33 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewRateLimited("You are being ratelimited. Too many password reset attempts for this email.")
 	}
 
-	var user model.User
-	err = h.db.Where("hashed_email = ?", emailHash).First(&user).Error
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return apperrors.NewInternal(err)
+	reqIDStr, ok := r.Context().Value(contextkeys.RequestIDKey).(string)
+	if !ok {
+		return apperrors.NewInternal(fmt.Errorf("request ID not found in context"))
 	}
-	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
-		// Don't leak whether user exists, we won't send an email either way
-		slog.Info("ForgotPasswordRequest: email not found, silently failing")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
-		return nil
-	}
-
-	// Generate secure token
-	tokenBytes := make([]byte, 64)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		return apperrors.NewInternal(err)
-	}
-
-	tokenString := fmt.Sprintf("%x", tokenBytes)
-
-	tokenHashBytes := sha256.Sum256([]byte(tokenString))
-	tokenHash := fmt.Sprintf("%x", tokenHashBytes)
-
-	token := model.PasswordResetToken{
-		UserID:    user.ID,
-		TokenHash: tokenHash,
-		ExpiresAt: time.Now().Add(15 * time.Minute),
-	}
-
-	if err := h.db.Create(&token).Error; err != nil {
-		return apperrors.NewInternal(err)
-	}
-
-	magicLink := fmt.Sprintf("%s/reset-password#token=%s", config.Cfg.App.FrontendURL, tokenString)
-
-	//temp resend client
-	resendClient := resend.NewClient(config.Cfg.Email.Key)
-
-	// Send email using Resend
-	if err := email.SendPasswordReset(r.Context(), resendClient, req.Email, magicLink); err != nil {
-		// Fallback for local development if Resend isn't configured yet
-		if config.Cfg.Env == "development" {
-			slog.Debug("LOCAL DEV MAGIC LINK", "email", req.Email, "magic_link", magicLink)
-			// Continue returning 200 OK so the dev can copy the link from the terminal
-		} else {
-			return apperrors.NewInternal(err)
+	var cfRay string = ""
+	if config.Cfg.Env == "production" {
+		cfRay, ok = r.Context().Value(contextkeys.CFRayKey).(string)
+		if !ok {
+			return apperrors.NewInternal(fmt.Errorf("cf ray not found in context"))
 		}
 	}
+	emailID := uuid.NewString()
 
-	w.WriteHeader(http.StatusOK)
+	task, err := worker.NewEmailRecoveryTask(cfRay, reqIDStr, emailID, req.Email)
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	taskTimeLimit := 10 * time.Second
+	enqueuedTaskInfo, err := h.asynqClient.Enqueue(task, asynq.Timeout(taskTimeLimit), asynq.MaxRetry(3))
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	slog.InfoContext(r.Context(), "enqueued an email recovery task", "task_id", enqueuedTaskInfo.ID, "timeout", taskTimeLimit)
+
+	w.WriteHeader(http.StatusAccepted)
 	err = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	if err != nil {
 		return apperrors.NewInternal(err)

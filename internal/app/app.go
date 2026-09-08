@@ -272,7 +272,7 @@ func upHandler(w http.ResponseWriter, r *http.Request) {
 func initV1Mux(state *ServerState) *http.ServeMux {
 	mux := http.NewServeMux()
 
-	accountHandler := account.NewHandler(state.DB, state.Redis, state.OpaqueSetup)
+	accountHandler := account.NewHandler(state.DB, state.Redis, state.AsynqClient, state.OpaqueSetup)
 	account.RegisterRoutes(mux, accountHandler, state.Redis)
 
 	signinHandler := signin.NewHandler(state.DB, state.Redis, state.OpaqueSetup, state.FakeOpaqueRegistrationRecord)

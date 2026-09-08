@@ -6,6 +6,7 @@ import (
 	"quartz/internal/model"
 	apperrors "quartz/pkg/app-errors"
 	"quartz/pkg/crypto"
+	"strings"
 
 	"gorm.io/gorm"
 )
@@ -27,6 +28,8 @@ func (h *Handler) GetUserKeys(w http.ResponseWriter, r *http.Request) error {
 	if email == "" {
 		return apperrors.NewBadRequest("email is required", nil)
 	}
+
+	email = strings.ToLower(email)
 
 	hashedEmail, err := crypto.HashEmail([]byte(email))
 	if err != nil {

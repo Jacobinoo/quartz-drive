@@ -66,7 +66,9 @@ Privacy Policy: %s/privacy`, data.Email, data.ActionURL, data.FrontendURL, data.
 }
 
 func addEmailSupportID(ctx context.Context, templateData *TemplateData) {
-	templateData.EmailID = ctx.Value(contextkeys.EmailIDKey).(string)
+	if emailID, ok := ctx.Value(contextkeys.EmailIDKey).(string); ok {
+		templateData.EmailID = emailID
+	}
 }
 
 // SendSignupVerification prepares the HTML/Text templates and sends the signup verification email
@@ -116,8 +118,7 @@ Privacy Policy: %s/privacy`, data.Email, data.ActionURL, data.EmailID, data.Fron
 		Text:    textContent,
 	}
 	opt := &resend.SendEmailOptions{}
-	emailID := ctx.Value(contextkeys.EmailIDKey).(string)
-	if emailID != "" {
+	if emailID, ok := ctx.Value(contextkeys.EmailIDKey).(string); ok && emailID != "" {
 		opt.IdempotencyKey = emailID
 	}
 
@@ -179,8 +180,7 @@ Privacy Policy: %s/privacy`, data.Email, data.ActionURL, data.ActionRecoverURL, 
 		Text:    textContent,
 	}
 	opt := &resend.SendEmailOptions{}
-	emailID := ctx.Value(contextkeys.EmailIDKey).(string)
-	if emailID != "" {
+	if emailID, ok := ctx.Value(contextkeys.EmailIDKey).(string); ok && emailID != "" {
 		opt.IdempotencyKey = emailID
 	}
 

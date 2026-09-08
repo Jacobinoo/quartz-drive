@@ -49,6 +49,7 @@ func InitBackgroundWorkerServer(db *gorm.DB, emailClient *resend.Client, redisCl
 
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(typeSignupProcessing, processor.handleSignupProcessingTask)
+	mux.HandleFunc(typeEmailRecovery, processor.handleEmailRecoveryTask)
 
 	if err := srv.Start(mux); err != nil {
 		slog.Error("could not start background worker server", "error", err)

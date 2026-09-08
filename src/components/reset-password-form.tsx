@@ -214,6 +214,7 @@ export function ResetPasswordForm({
                 <Input
                   id="recoveryPhrase"
                   type="text"
+                  autoComplete="off"
                   placeholder="apple banana cherry..."
                   required
                   onChange={(e) => setRecoveryPhrase(e.target.value)}
@@ -223,7 +224,8 @@ export function ResetPasswordForm({
                 <FieldLabel htmlFor="newPassword">New Password</FieldLabel>
                 <Input
                     id="newPassword"
-                    type="password"
+                  type="password"
+                  autoComplete="new-password"
                     required
                     onChange={(e) => setNewPassword(e.target.value)} />
                 {newPassword && (

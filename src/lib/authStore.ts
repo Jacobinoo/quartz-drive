@@ -6,6 +6,17 @@ let memoryCsrfToken: string | null = null;
 let memoryAccountEncryptionPrivateKey: Uint8Array | null = null;
 let memoryAccountSigningPrivateKey: Uint8Array | null = null;
 
+let memoryOpaqueExportKey: string | Uint8Array | null = null;
+let memoryUserEmail: string | null = null;
+
+export function setOpaqueInitData(exportKey: string | Uint8Array | null, email: string | null) {
+  memoryOpaqueExportKey = exportKey;
+  memoryUserEmail = email;
+}
+
+export function getOpaqueExportKey() { return memoryOpaqueExportKey; }
+export function getUserEmail() { return memoryUserEmail; }
+
 export function setAuthState(token: string | null, csrf: string | null) {
   memoryAccessToken = token;
   memoryCsrfToken = csrf;

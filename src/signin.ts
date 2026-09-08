@@ -4,11 +4,14 @@ import { LoginAttestationConfirmed } from "@/LoginAttestationTypes";
 import {getSodium} from "@/lib/crypto/sodium";
 import { createDpopProof, generateAndStoreDpopKey, getDpopPrivateKey } from "@/lib/dpop";
 import { Base64String } from './UtilTypes';
-import { setAccountPrivateKeys, setAuthState } from './lib/authStore';
+import { setAccountPrivateKeys, setAuthState, setOpaqueInitData } from './lib/authStore';
 import { saveDevicePrivateKey } from './DeviceKeyStore';
 import { customFetch } from './lib/api';
 
-export async function signIn(email: string, password: string, token: string) {
+
+
+
+export async function signIn(email: string, password: string, token: string): Promise<"ok" | "noinit"> {
     if (!email || !password || !token) throw new Error("Email, password and bot verification success required");
 
     const sodium = await getSodium();
@@ -131,6 +134,13 @@ export async function signIn(email: string, password: string, token: string) {
         loginAttestationData.token,
         loginAttestationData.csrfToken
     );
+
+  // check if the keys are NOT initialized
+  if (loginAttestationData.encryptionVersion == -1) {
+    setOpaqueInitData(exportKey, loginAttestationData.email);
+    return "noinit"
+  }
+
   console.log("session priv key:", loginAttestationData.sessionPrivateKey)
     const kdfSalt = sodium.from_base64(loginAttestationData.masterKdfSalt);
 
@@ -207,6 +217,7 @@ export async function signIn(email: string, password: string, token: string) {
               }),
               credentials: "include",
           });
+    return "ok"
     }
 
 //     const kdfSalt = sodium.from_base64(loginAttestationData.masterKdfSalt);
@@ -276,11 +287,11 @@ export async function signIn(email: string, password: string, token: string) {
 
 
 // Helper to convert ArrayBuffer to Base64
-function bufferToBase64(buffer: ArrayBuffer): string {
+export function bufferToBase64(buffer: ArrayBuffer): string {
     return btoa(String.fromCharCode(...new Uint8Array(buffer)));
 }
 
-async function generateDeviceKeyPair(): Promise<{
+export async function generateDeviceKeyPair(): Promise<{
     devicePublicKey: string,
     devicePrivateKey: CryptoKey
 }> {

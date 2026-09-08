@@ -7,14 +7,11 @@ import { signOut } from "@/signout";
 import { clearAuthState } from "@/lib/authStore";
 import { deleteDpopDatabase } from "@/lib/dpop";
 import { deleteDeviceKeys } from "@/DeviceKeyStore";
-import { env } from "node:process";
-
-
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const publicPaths = ["/signin", "/signup", "/forgot-password", "/reset-password"];
+  const publicPaths = ["/signin", "/signup", "/forgot-password", "/reset-password", "/verify-email"];
 
   const [isBooting, setIsBooting] = useState(true);
 

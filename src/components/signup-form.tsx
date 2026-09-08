@@ -16,9 +16,9 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import {useRouter} from "next/navigation";
-import {FormEvent, useEffect, useState} from "react";
-import {signUp} from "@/signup";
+import { useRouter } from "next/navigation";
+import { FormEvent, useEffect, useState } from "react";
+import { signUp } from "@/signup";
 import HCaptcha from "@hcaptcha/react-hcaptcha";
 import { config } from "@/config/env";
 
@@ -34,7 +34,7 @@ export function SignupForm({
   const [passwordFeedback, setPasswordFeedback] = useState<string>("");
   const [error, setError] = useState<string>("");
 
-  const [recoveryPhrase, setRecoveryPhrase] = useState<string>("");
+  const [signupComplete, setSignupComplete] = useState<boolean>(false);
 
   useEffect(() => {
     if (!password) {
@@ -71,7 +71,6 @@ export function SignupForm({
         const matcher = matcherPwnedFactory(window.fetch);
         const zxcvbn = new ZxcvbnFactory(options, { pwned: matcher });
 
-        // Pass the user's email and app name to penalize them if they use them in the password
         zxcvbn.checkAsync(password, [email, deriveUsernameFromEmail(email), "Quartz", "QuartzDrive", "quartzapp.top"]).then((result) => {
           if (isMounted) {
             setPasswordScore(result.score);
@@ -93,24 +92,16 @@ export function SignupForm({
     };
   }, [password]);
 
-  if (recoveryPhrase) {
+  if (signupComplete) {
       return (
           <div className={cn("flex flex-col gap-6", className)} {...props}>
               <Card>
                   <CardHeader className="text-center">
-                      <CardTitle className="text-xl">Save Your Recovery Phrase</CardTitle>
+                      <CardTitle className="text-xl">Check your email</CardTitle>
                       <CardDescription>
-                          This is the <strong>ONLY</strong> way to recover your account if you forget your password. We cannot reset your password for you.
+                          We just sent a verification link to {email}.
                       </CardDescription>
                   </CardHeader>
-                  <CardContent className="flex flex-col gap-4">
-                      <div className="p-4 bg-muted text-center rounded font-mono text-lg break-all">
-                          {recoveryPhrase}
-                      </div>
-                      <Button onClick={() => router.push("/signin")}>
-                          I have saved my recovery phrase
-                      </Button>
-                  </CardContent>
               </Card>
           </div>
       )
@@ -139,8 +130,8 @@ export function SignupForm({
             }
             signUp(email, password, captchaToken)
               .then((res) => {
-                console.log("Sign up successfully");
-                setRecoveryPhrase(res.recoveryPhrase);
+                console.log("Sign up successfully.");
+                setSignupComplete(true)
               })
               .catch((err: Error) => {
                 setError(`Error occurred on sign up: ${err.message}`);
@@ -153,6 +144,7 @@ export function SignupForm({
                 <Input
                   id="email"
                   type="email"
+                  autoComplete="email"
                   placeholder="m@example.com"
                   required
                   onChange={(e) => setEmail(e.target.value)}
@@ -162,7 +154,8 @@ export function SignupForm({
                 <FieldLabel htmlFor="password">Password</FieldLabel>
                 <Input
                     id="password"
-                    type="password"
+                  type="password"
+                  autoComplete="new-password"
                     required
                     onChange={(e) => setPassword(e.target.value)} />
                 {password && (

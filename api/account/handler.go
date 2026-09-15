@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -693,4 +694,104 @@ func (h *Handler) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewInternal(err)
 	}
 	return nil
+}
+
+func (h *Handler) GetKeys(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != http.MethodGet {
+		return apperrors.NewMethodNotAllowed("method not allowed")
+	}
+
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
+	if !ok {
+		return apperrors.NewUnauthorized("unauthorized", nil)
+	}
+
+	var keyStore model.UserKeyStore
+	if err := h.db.Where("user_id = ?", userID).First(&keyStore).Error; err != nil {
+		return apperrors.NewNotFound("keys not found", err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	err := json.NewEncoder(w).Encode(dto.KeysDTO{
+		MasterKdfSalt:                                keyStore.MasterKdfSalt,
+		AccountEncryptionPublicKey:                   keyStore.AccountEncryptionPublicKey,
+		EncryptedAccountEncryptionPrivateKey:         keyStore.EncryptedAccountEncryptionPrivateKey,
+		AccountEncryptionKeyNonce:                    keyStore.AccountEncryptionKeyNonce,
+		AccountSigningPublicKey:                      keyStore.AccountSigningPublicKey,
+		EncryptedAccountSigningPrivateKey:            keyStore.EncryptedAccountSigningPrivateKey,
+		AccountSigningKeyNonce:                       keyStore.AccountSigningKeyNonce,
+		RecoveryEncryptedAccountEncryptionPrivateKey: keyStore.RecoveryEncryptedAccountEncryptionPrivateKey,
+		RecoveryAccountEncryptionKeyNonce:            keyStore.RecoveryAccountEncryptionKeyNonce,
+		RecoveryEncryptedAccountSigningPrivateKey:    keyStore.RecoveryEncryptedAccountSigningPrivateKey,
+		RecoveryAccountSigningKeyNonce:               keyStore.RecoveryAccountSigningKeyNonce,
+	})
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+	return nil
+}
+
+func (h *Handler) UpdateKeys(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != http.MethodPut {
+		return apperrors.NewMethodNotAllowed("method not allowed")
+	}
+
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
+	if !ok {
+		return apperrors.NewUnauthorized("unauthorized", nil)
+	}
+
+	var req dto.UpdateUserKeysRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return apperrors.NewBadRequest("invalid request body", err)
+	}
+
+	if req.SignatureHex == "" {
+		return apperrors.NewBadRequest("signatureHex is required", nil)
+	}
+
+	var keyStore model.UserKeyStore
+	if err := h.db.Where("user_id = ?", userID).First(&keyStore).Error; err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	// Verify the signature
+	pubKeyBytes, err := base64.RawURLEncoding.DecodeString(keyStore.AccountSigningPublicKey)
+	if err != nil {
+		pubKeyBytes, err = base64.StdEncoding.DecodeString(keyStore.AccountSigningPublicKey)
+		if err != nil {
+			pubKeyBytes, err = base64.URLEncoding.DecodeString(keyStore.AccountSigningPublicKey)
+		}
+	}
+
+	if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
+		return apperrors.NewInternal(errors.New("invalid public key stored"))
+	}
+
+	sigBytes, err := hex.DecodeString(req.SignatureHex)
+	if err != nil || len(sigBytes) != ed25519.SignatureSize {
+		return apperrors.NewBadRequest("invalid signature format", nil)
+	}
+
+	// The frontend must sign the exact concatenation of these four fields in this order
+	signedPayload := req.EncryptedAccountEncryptionPrivateKey + req.AccountEncryptionKeyNonce + req.EncryptedAccountSigningPrivateKey + req.AccountSigningKeyNonce
+
+	if !ed25519.Verify(pubKeyBytes, []byte(signedPayload), sigBytes) {
+		return apperrors.NewUnauthorized("invalid keys signature", nil)
+	}
+
+	// Signature is valid! Safe to overwrite the keys
+	updates := map[string]interface{}{
+		"encrypted_account_encryption_private_key": req.EncryptedAccountEncryptionPrivateKey,
+		"account_encryption_key_nonce":             req.AccountEncryptionKeyNonce,
+		"encrypted_account_signing_private_key":    req.EncryptedAccountSigningPrivateKey,
+		"account_signing_key_nonce":                req.AccountSigningKeyNonce,
+	}
+
+	if err := h.db.Model(&keyStore).Updates(updates).Error; err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	return json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }

@@ -16,6 +16,7 @@ type User struct {
 	EncryptedEmail     string       `gorm:"not null;"`
 	HashedEmail        string       `gorm:"not null;uniqueIndex"`
 	RegistrationRecord string       `gorm:"not null"`
+	HashedRecoveryID   *string      `gorm:"uniqueIndex;default:null"`
 
 	KdfParams         dto.KdfParams `gorm:"embedded;embeddedPrefix:kdf_"`
 	EncryptionVersion int16         `gorm:"type:smallint;default:-1;not null"`

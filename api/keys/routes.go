@@ -30,5 +30,5 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler, rdb *redis.Client) {
 		)
 	}
 
-	mux.HandleFunc("/keys", wrap(h.GetUserKeys))
+	mux.HandleFunc("GET /keys", wrap(h.GetUserKeys))
 }

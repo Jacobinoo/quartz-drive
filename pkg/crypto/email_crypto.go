@@ -129,3 +129,14 @@ func HashEmail(message []byte) (string, error) {
 	h.Write(message)
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
+
+func HashRecoveryID(recoveryIDHex string) (string, error) {
+	key, err := GetEmailHashSecretKey()
+	if err != nil {
+		return "", err
+	}
+
+	h := hmac.New(sha256.New, key)
+	h.Write([]byte(recoveryIDHex)) // We hash the hex string provided by the client
+	return hex.EncodeToString(h.Sum(nil)), nil
+}

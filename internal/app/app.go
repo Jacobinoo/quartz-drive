@@ -12,6 +12,7 @@ import (
 	"quartz/api/devices"
 	"quartz/api/files"
 	"quartz/api/keys"
+	"quartz/api/recovery"
 	"quartz/api/refresh"
 	"quartz/api/signin"
 	"quartz/api/signout"
@@ -296,6 +297,9 @@ func initV1Mux(state *ServerState) *http.ServeMux {
 
 	keysHandler := keys.NewHandler(state.DB)
 	keys.RegisterRoutes(mux, keysHandler, state.Redis)
+
+	recoveryHandler := recovery.NewHandler(state.DB, state.Redis, state.AsynqClient, state.OpaqueSetup)
+	recovery.RegisterRoutes(mux, recoveryHandler)
 
 	return mux
 }

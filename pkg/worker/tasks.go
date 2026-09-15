@@ -258,36 +258,32 @@ func (tp *TaskProcessor) handleEmailRecoveryTask(ctx context.Context, t *asynq.T
 	taskLogger.DebugContext(ctx, "user by email found, will send a reset link")
 
 	// Generate a secure password reset token
-	tokenBytes := make([]byte, 64)
+	tokenBytes := make([]byte, 32)
 	_, _ = rand.Read(tokenBytes)
 	tokenHex := fmt.Sprintf("%x", tokenBytes)
+	hashedToken, _ := crypto.HashEmail([]byte(tokenHex))
 
-	hashedTokenBytes := sha256.Sum256(tokenBytes)
-	hashedTokenHexStr := fmt.Sprintf("%x", hashedTokenBytes)
-
-	// Prepare the Redis payload
-	pendingReg := dto.RedisPendingEmailRecovery{
-		UserID:    user.ID,
-		TokenHash: hashedTokenHexStr,
+	sessionID := uuid.New().String()
+	session := dto.RecoverySession{
+		ID:           sessionID,
+		UserID:       user.ID.String(),
+		Method:       "email",
+		Capabilities: []dto.RecoveryCapability{dto.CapabilityAccount},
+		State:        dto.StatePending,
+		HashedToken:  &hashedToken,
+		ExpiresAt:    time.Now().Add(15 * time.Minute),
 	}
 
-	redisBytes, err := json.Marshal(pendingReg)
+	sessionBytes, err := json.Marshal(session)
 	if err != nil {
-		return fmt.Errorf("failed to marshal pending email recovery: %w", err)
+		return fmt.Errorf("failed to marshal recovery session: %w", err)
 	}
 
-	encryptedRedisBytes, err := crypto.EncryptRedisPayload(redisBytes)
-	if err != nil {
-		return fmt.Errorf("failed to encrypt redis payload: %w", err)
+	if err := tp.redisClient.Set(ctx, "recovery:session:"+sessionID, string(sessionBytes), 15*time.Minute).Err(); err != nil {
+		return fmt.Errorf("failed to save recovery session to redis: %w", err)
 	}
 
-	const redisPasswordResetTokenTTL = 15 * time.Minute
-	// Save to Redis
-	if err := tp.redisClient.Set(ctx, "pending_password_reset:"+hashedTokenHexStr, encryptedRedisBytes, redisPasswordResetTokenTTL).Err(); err != nil {
-		return fmt.Errorf("failed to save pending email recovery to redis: %w", err)
-	}
-
-	magicLink := fmt.Sprintf("%s/reset-password#token=%s", config.Cfg.App.FrontendURL, tokenHex)
+	magicLink := fmt.Sprintf("%s/reset-password?session_id=%s&token=%s", config.Cfg.App.FrontendURL, sessionID, tokenHex)
 
 	if config.Cfg.Env == "development" {
 		p.Email = config.Cfg.Email.LocalDeliveryAddress

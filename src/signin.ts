@@ -11,7 +11,7 @@ import { customFetch } from './lib/api';
 
 
 
-export async function signIn(email: string, password: string, token: string): Promise<"ok" | "noinit"> {
+export async function signIn(email: string, password: string, token: string): Promise<"ok" | "noinit" | "recovery_needed"> {
     if (!email || !password || !token) throw new Error("Email, password and bot verification success required");
 
     const sodium = await getSodium();
@@ -163,25 +163,36 @@ export async function signIn(email: string, password: string, token: string): Pr
         // 2. Decrypt Account Encryption Private Key
         const accountEncryptionPrivNonce = sodium.from_base64(loginAttestationData.accountEncryptionKeyNonce);
         const encryptedAccountEncryptionPrivateKey = sodium.from_base64(loginAttestationData.encryptedAccountEncryptionPrivateKey);
-        const accountEncryptionPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
-            null,
-            encryptedAccountEncryptionPrivateKey,
-            sodium.from_string(loginAttestationData.email.toLowerCase() + "_encrypt"),
-            accountEncryptionPrivNonce,
-            derivedMasterKey
-        );
+
         // 3. Decrypt Account Signing Private Key
         const accountSigningPrivNonce = sodium.from_base64(loginAttestationData.accountSigningKeyNonce);
         const encryptedAccountSigningPrivateKey = sodium.from_base64(loginAttestationData.encryptedAccountSigningPrivateKey);
-        const accountSigningPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
-            null,
-            encryptedAccountSigningPrivateKey,
-            sodium.from_string(loginAttestationData.email.toLowerCase() + "_sign"),
-            accountSigningPrivNonce,
-            derivedMasterKey
-        );
+        let accountSigningPrivateKey: Uint8Array | null = null;
+        let accountEncryptionPrivateKey: Uint8Array | null = null;
+
+        try {
+            accountEncryptionPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+                null,
+                encryptedAccountEncryptionPrivateKey,
+                sodium.from_string(loginAttestationData.email.toLowerCase() + "_encrypt"),
+                accountEncryptionPrivNonce,
+                derivedMasterKey
+            );
+
+            accountSigningPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+                null,
+                encryptedAccountSigningPrivateKey,
+                sodium.from_string(loginAttestationData.email.toLowerCase() + "_sign"),
+                accountSigningPrivNonce,
+                derivedMasterKey
+            );
+        } catch (e) {
+            console.warn("Failed to decrypt account private keys. Keys might be encrypted with an old password.");
+        }
+
         if (!accountEncryptionPrivateKey || !accountSigningPrivateKey) {
-            throw new Error("Failed to decrypt account private keys. Invalid password or corrupted key material!");
+            setOpaqueInitData(exportKey, loginAttestationData.email);
+            return "recovery_needed";
         }
         // 4. Save decrypted keys to JS memory in authStore!
         setAccountPrivateKeys(accountEncryptionPrivateKey, accountSigningPrivateKey);

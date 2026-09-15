@@ -134,7 +134,7 @@ export function LoginForm({
                   signIn(email, password, token)
                     .then((result) => {
                       console.log("Sign in successful");
-                      if (result == "ok") {
+                      if (result == "ok" || result == "recovery_needed") {
                         router.push("/drive");
                       } else {
                         console.warn("Onboarding required. Account keys not initialized!")
@@ -220,7 +220,7 @@ export function LoginForm({
                   signIn(email, password, token)
                     .then((result) => {
                       console.log("Sign in successful");
-                      if (result == "ok") {
+                      if (result == "ok" || result == "recovery_needed") {
                         router.push("/drive");
                       } else {
                         console.warn("Onboarding required. Account keys not initialized!")

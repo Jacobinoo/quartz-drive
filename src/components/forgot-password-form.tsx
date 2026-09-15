@@ -164,10 +164,10 @@ export function ForgotPasswordForm({
                         return;
                       }
 
-                      fetch(`${config.apiUrl}/v1/account/forgot-password`, {
+                      fetch(`${config.apiUrl}/v1/recovery/start`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json", "X-Verify-Token": turnstileToken },
-                        body: JSON.stringify({ email })
+                        body: JSON.stringify({ method: "email", email })
                       })
                         .then((res) => {
                           if (res.ok) {

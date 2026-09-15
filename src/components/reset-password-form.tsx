@@ -11,28 +11,26 @@ import {
 } from "@/components/ui/card"
 import {
   Field,
-  FieldDescription,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {useRouter, useSearchParams} from "next/navigation";
-import {useState, useEffect} from "react";
-import {resetPassword, VerifyResponse, verifyToken} from "@/reset-password";
+import {useState, useEffect, Suspense} from "react";
+import {resetPassword, verifyToken} from "@/reset-password";
 
 export function ResetPasswordForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
   const router = useRouter();
-  const token = window.location.hash.slice(1).split("token=").at(1)
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get("session_id");
+  const token = searchParams.get("token");
 
-
-  const [verifyResponse, setVerifyResponse] = useState<VerifyResponse | null>(null)
   const [isVerifying, setIsVerifying] = useState<boolean>(true);
   const [verifyError, setVerifyError] = useState<string>("");
 
-  const [recoveryPhrase, setRecoveryPhrase] = useState<string>("");
   const [newPassword, setNewPassword] = useState<string>("");
   const [passwordScore, setPasswordScore] = useState<number | null>(null);
   const [passwordFeedback, setPasswordFeedback] = useState<string>("");
@@ -41,24 +39,24 @@ export function ResetPasswordForm({
   const [success, setSuccess] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!token) {
+    if (!sessionId || !token) {
+      setVerifyError("Missing session ID or token.");
       setIsVerifying(false);
       return;
     }
 
-    verifyToken(token)
-      .then((d) => {
-        setVerifyResponse(d);
+    verifyToken(sessionId, token)
+      .then(() => {
         setIsVerifying(false);
       })
       .catch((err: Error) => {
         setVerifyError(err.message || "Provided token is invalid.");
         setIsVerifying(false);
       });
-  }, [token]);
+  }, [sessionId, token]);
 
   useEffect(() => {
-    if (!newPassword || !verifyResponse) {
+    if (!newPassword) {
       setPasswordScore(null);
       setPasswordFeedback("");
       return;
@@ -71,9 +69,8 @@ export function ResetPasswordForm({
         import("@zxcvbn-ts/core"),
         import("@zxcvbn-ts/language-common"),
         import("@zxcvbn-ts/language-en"),
-        import("@zxcvbn-ts/language-pl"),
         import("@zxcvbn-ts/matcher-pwned")
-      ]).then(([zxcvbnCore, common, en, pl, matcherPwned]) => {
+      ]).then(([zxcvbnCore, common, en, matcherPwned]) => {
         if (!isMounted) return;
 
         const { ZxcvbnFactory } = zxcvbnCore;
@@ -83,7 +80,6 @@ export function ResetPasswordForm({
           dictionary: {
             ...common.dictionary,
             ...en.dictionary,
-            ...pl.dictionary,
           },
           graphs: common.adjacencyGraphs,
           translations: en.translations,
@@ -92,14 +88,7 @@ export function ResetPasswordForm({
         const matcher = matcherPwnedFactory(window.fetch);
         const zxcvbn = new ZxcvbnFactory(options, { pwned: matcher });
 
-        const email = verifyResponse.email;
-        const deriveUsernameFromEmail = (email: string) => {
-            if (!email) return "";
-            return email.split("@")[0];
-        };
-
-        // Pass the user's email and app name to penalize them if they use them in the password
-        zxcvbn.checkAsync(newPassword, [email, deriveUsernameFromEmail(email), "Quartz", "QuartzDrive", "quartzapp.top"]).then((result) => {
+        zxcvbn.checkAsync(newPassword, ["Quartz", "QuartzDrive", "quartzapp.top"]).then((result) => {
           if (isMounted) {
             setPasswordScore(result.score);
             if (result.feedback.warning) {
@@ -118,7 +107,7 @@ export function ResetPasswordForm({
       isMounted = false;
       clearTimeout(timer);
     };
-  }, [newPassword, verifyResponse]);
+  }, [newPassword]);
 
   if (isVerifying) {
     return (
@@ -138,7 +127,7 @@ export function ResetPasswordForm({
     )
   }
 
-  if (!token || verifyError || !verifyResponse) {
+  if (!sessionId || !token || verifyError) {
     return (
         <div className={cn("flex flex-col gap-6", className)} {...props}>
             <Card>
@@ -165,7 +154,10 @@ export function ResetPasswordForm({
                   <CardHeader className="text-center">
                       <CardTitle className="text-xl">Password Reset Successful</CardTitle>
                       <CardDescription>
-                          Your password has been securely reset using your recovery phrase.
+                          Your password has been successfully reset. 
+                          <br /><br />
+                          <strong>Note:</strong> Since you used Email Recovery, your data remains encrypted with your old password. 
+                          You will be prompted to enter your Recovery Phrase to unlock your data after signing in.
                       </CardDescription>
                   </CardHeader>
                   <CardContent className="flex flex-col gap-4">
@@ -179,14 +171,14 @@ export function ResetPasswordForm({
   }
 
   function submitForm(){
-    if (verifyResponse == null || !token) {
+    if (!sessionId || !token) {
       throw new Error("verify response or token is missing")
     }
 
     setError("");
     setLoading(true);
 
-    resetPassword(verifyResponse, token, recoveryPhrase, newPassword)
+    resetPassword(sessionId, newPassword)
         .then(() => {
           setSuccess(true);
           setLoading(false);
@@ -201,25 +193,14 @@ export function ResetPasswordForm({
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
         <CardHeader className="text-center">
-          <CardTitle className="text-xl">Recover Account</CardTitle>
+          <CardTitle className="text-xl">Create New Password</CardTitle>
           <CardDescription>
-            Enter your 12-word recovery phrase and a new password.
+            Enter a strong new password for your account.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form action="#" method="POST" onSubmit={(e)=>e.preventDefault()}>
             <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="recoveryPhrase">Recovery Phrase (12 Words)</FieldLabel>
-                <Input
-                  id="recoveryPhrase"
-                  type="text"
-                  autoComplete="off"
-                  placeholder="apple banana cherry..."
-                  required
-                  onChange={(e) => setRecoveryPhrase(e.target.value)}
-                />
-              </Field>
               <Field>
                 <FieldLabel htmlFor="newPassword">New Password</FieldLabel>
                 <Input
@@ -264,7 +245,7 @@ export function ResetPasswordForm({
               {error && <div className="text-red-500 text-sm text-center">{error}</div>}
               <Field>
                 <Button type="submit" disabled={loading || passwordScore === null || passwordScore < 3} onClick={(e) => submitForm()}>
-                  {loading ? "Recovering..." : "Reset Password"}
+                  {loading ? "Resetting..." : "Reset Password"}
                 </Button>
               </Field>
             </FieldGroup>

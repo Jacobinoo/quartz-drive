@@ -174,7 +174,7 @@ export async function signIn(email: string, password: string, token: string): Pr
             accountEncryptionPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
                 null,
                 encryptedAccountEncryptionPrivateKey,
-                sodium.from_string(loginAttestationData.email.toLowerCase() + "_encrypt"),
+                sodium.from_base64(loginAttestationData.accountEncryptionPublicKey),
                 accountEncryptionPrivNonce,
                 derivedMasterKey
             );
@@ -182,7 +182,7 @@ export async function signIn(email: string, password: string, token: string): Pr
             accountSigningPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
                 null,
                 encryptedAccountSigningPrivateKey,
-                sodium.from_string(loginAttestationData.email.toLowerCase() + "_sign"),
+                sodium.from_base64(loginAttestationData.accountSigningPublicKey),
                 accountSigningPrivNonce,
                 derivedMasterKey
             );

@@ -61,7 +61,7 @@ export default function DriveHomePage() {
           // 1. Unwrap the moving item's Passphrase using CURRENT folder
           const fileKey = await quantumSealOpen(
               sodium.from_base64(draggedItem.encryptedNodePassphrase),
-              currentFolder.publicKey
+              currentFolder.privateKey
           );
 
 

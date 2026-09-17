@@ -1,0 +1,14 @@
+package recovery
+
+import (
+	"net/http"
+	"quartz/internal/middleware"
+	"quartz/pkg/httputils"
+)
+
+func RegisterRoutes(mux *http.ServeMux, h *Handler) {
+	mux.HandleFunc("/recovery/start", httputils.Wrap(middleware.CorsMiddleware(h.RecoveryStart)))
+	mux.HandleFunc("/recovery/session/{id}/verify", httputils.Wrap(middleware.CorsMiddleware(h.RecoveryVerify)))
+	mux.HandleFunc("/recovery/session/{id}/opaque/m1", httputils.Wrap(middleware.CorsMiddleware(h.RecoveryOpaqueM1)))
+	mux.HandleFunc("/recovery/session/{id}/complete", httputils.Wrap(middleware.CorsMiddleware(h.RecoveryComplete)))
+}

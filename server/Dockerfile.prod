@@ -1,0 +1,57 @@
+# syntax=docker/dockerfile:1
+
+# Stage 1: Build
+FROM golang:1.26-bookworm AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl build-essential \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+WORKDIR /app
+
+# 1. Cache Go dependencies in a Docker layer
+COPY go.mod go.sum ./
+RUN go mod download
+
+# 2. Cache Rust dependencies in a Docker layer
+COPY internal/bindings/opaque_rust/Cargo.toml internal/bindings/opaque_rust/Cargo.lock ./internal/bindings/opaque_rust/
+RUN cd internal/bindings/opaque_rust \
+    && mkdir src \
+    && echo "pub fn dummy() {}" > src/lib.rs \
+    && cargo build --release \
+    && rm -rf src
+
+# 3. Copy the rest of the application code
+# (.dockerignore keeps docs/CI/deploy-file changes from invalidating this layer unnecessarily)
+COPY . .
+
+# 4. Build the real Rust library (dependencies are already cached from step 2,
+#    as long as Cargo.toml/Cargo.lock didn't change)
+RUN cd internal/bindings/opaque_rust \
+    && touch src/lib.rs \
+    && cargo build --release \
+    && mkdir -p /app/build \
+    && cp target/release/libopaque_rust.so /app/build/
+
+# 5. Build the Go binary (module cache from step 1 is reused; only your own
+#    packages get compiled since GOCACHE isn't primed by go mod download alone)
+ARG BUILD_VERSION=unknown
+RUN CGO_ENABLED=1 go build -ldflags="-s -w -X 'quartz/config.BuildVersion=${BUILD_VERSION}'" -trimpath -o build/quartz-account ./cmd/app
+
+# Stage 2: Runtime
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user for security
+RUN useradd -m -s /bin/false quartzuser
+
+WORKDIR /app
+COPY --from=builder /app/build/quartz-account /usr/local/bin/quartz-account
+COPY --from=builder /app/build/libopaque_rust.so /usr/lib/
+
+# Switch to the non-root user before running the app
+USER quartzuser
+CMD ["quartz-account"]

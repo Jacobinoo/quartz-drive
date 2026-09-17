@@ -1,0 +1,16 @@
+cert
+*.pem
+*.crt
+*.key
+.env*
+build/
+.idea/
+
+.DS_Store
+*.log
+
+# Rust artifacts
+internal/bindings/opaque_rust/target/
+
+weed-data/
+qdeploy

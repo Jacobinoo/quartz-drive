@@ -50,7 +50,7 @@ To run the test suites (which execute both the Rust unit tests and the Go backen
 make test
 ```
 
-If you're making changes to the Rust bindings located in `internal/bindings/opaque_rust/`, you can rebuild them manually:
+If you're making changes to the Rust bindings located in `internal/bindings/opaque_rust`, you can rebuild them manually:
 ```bash
 make rust
 ```

@@ -417,6 +417,18 @@ func (h *Handler) InitializeKeys(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = h.db.Transaction(func(tx *gorm.DB) error {
+		
+		var hashedRecoveryID *string = nil
+		if initRequest.User.Keys.RecoveryIDHex != "" {
+			if len(initRequest.User.Keys.RecoveryIDHex) != 64 {
+				return fmt.Errorf("invalid recovery id length")
+			}
+			hash, err := crypto.HashRecoveryID(initRequest.User.Keys.RecoveryIDHex)
+			if err != nil {
+				return fmt.Errorf("failed to hash recovery id: %w", err)
+			}
+			hashedRecoveryID = &hash
+		}
 
 		// update the existing user, the encryption version is important here, because we set it to a non-negative number, depending on the config
 		// note: encryption version (-1) - means keys are not initialized, we are changing it here, to a value in the config, which must be >= 0
@@ -429,6 +441,12 @@ func (h *Handler) InitializeKeys(w http.ResponseWriter, r *http.Request) error {
 			},
 		}).Error; err != nil {
 			return fmt.Errorf("failed to update user encryption settings: %w", err)
+		}
+
+		if hashedRecoveryID != nil {
+			if err := tx.Model(&model.User{}).Where("id = ?", userID).Update("hashed_recovery_id", hashedRecoveryID).Error; err != nil {
+				return fmt.Errorf("failed to update hashed_recovery_id: %w", err)
+			}
 		}
 
 		storedUserKeyStore := model.UserKeyStore{

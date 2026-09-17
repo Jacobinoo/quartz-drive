@@ -21,6 +21,7 @@ type KeysDTO struct {
 	RecoveryAccountEncryptionKeyNonce            string `json:"recoveryAccountEncryptionKeyNonce"`
 	RecoveryEncryptedAccountSigningPrivateKey    string `json:"recoveryEncAccountSigningPrivateKey"`
 	RecoveryAccountSigningKeyNonce               string `json:"recoveryAccountSigningKeyNonce"`
+	RecoveryIDHex                                string `json:"recoveryIdHex"`
 }
 
 func (k KeysDTO) Value() (driver.Value, error) {

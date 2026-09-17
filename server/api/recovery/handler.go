@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"quartz/internal/bindings"
 	"quartz/internal/dto"
@@ -90,12 +91,31 @@ func (h *Handler) RecoveryStart(w http.ResponseWriter, r *http.Request) error {
 
 		h.redis.Set(r.Context(), "recovery:session:"+sessionID, h.toJSON(session), 15*time.Minute)
 
+		decryptedEmail, err := crypto.DecryptEmail(user.EncryptedEmail)
+		var userEmail string
+		if err == nil {
+			userEmail = string(decryptedEmail)
+		} else {
+			slog.ErrorContext(r.Context(), "failed to decrypt email for recovery", "error", err)
+		}
+
 		return json.NewEncoder(w).Encode(dto.RecoveryStartResponse{
 			SessionID:     sessionID,
 			Capabilities:  session.Capabilities,
+			Email:         userEmail,
 			Challenge:     &challengeHex,
 			EncryptedKeys: &dto.KeysDTO{
-				// Populate with user.KeyStore.RecoveryEncrypted* fields
+				MasterKdfSalt:                              user.KeyStore.MasterKdfSalt,
+				AccountEncryptionPublicKey:                 user.KeyStore.AccountEncryptionPublicKey,
+				EncryptedAccountEncryptionPrivateKey:       user.KeyStore.EncryptedAccountEncryptionPrivateKey,
+				AccountEncryptionKeyNonce:                  user.KeyStore.AccountEncryptionKeyNonce,
+				AccountSigningPublicKey:                    user.KeyStore.AccountSigningPublicKey,
+				EncryptedAccountSigningPrivateKey:          user.KeyStore.EncryptedAccountSigningPrivateKey,
+				AccountSigningKeyNonce:                     user.KeyStore.AccountSigningKeyNonce,
+				RecoveryEncryptedAccountEncryptionPrivateKey: user.KeyStore.RecoveryEncryptedAccountEncryptionPrivateKey,
+				RecoveryAccountEncryptionKeyNonce:            user.KeyStore.RecoveryAccountEncryptionKeyNonce,
+				RecoveryEncryptedAccountSigningPrivateKey:    user.KeyStore.RecoveryEncryptedAccountSigningPrivateKey,
+				RecoveryAccountSigningKeyNonce:               user.KeyStore.RecoveryAccountSigningKeyNonce,
 			},
 		})
 	}
@@ -164,7 +184,14 @@ func (h *Handler) RecoveryVerify(w http.ResponseWriter, r *http.Request) error {
 				return apperrors.NewInternal(err)
 			}
 
-			pubKeyBytes, err := hex.DecodeString(userKeyStore.AccountSigningPublicKey)
+			pubKeyBytes, err := base64.RawURLEncoding.DecodeString(userKeyStore.AccountSigningPublicKey)
+			if err != nil {
+				pubKeyBytes, err = base64.StdEncoding.DecodeString(userKeyStore.AccountSigningPublicKey)
+				if err != nil {
+					pubKeyBytes, err = base64.URLEncoding.DecodeString(userKeyStore.AccountSigningPublicKey)
+				}
+			}
+
 			if err != nil || len(pubKeyBytes) != ed25519.PublicKeySize {
 				return apperrors.NewInternal(errors.New("invalid public key stored"))
 			}

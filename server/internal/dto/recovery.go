@@ -43,6 +43,7 @@ type RecoveryStartRequest struct {
 type RecoveryStartResponse struct {
 	SessionID     string               `json:"session_id"`
 	Capabilities  []RecoveryCapability `json:"capabilities"`
+	Email         string               `json:"email,omitempty"`
 	Challenge     *string              `json:"challenge,omitempty"`      // For Decrypt-to-Prove
 	EncryptedKeys *KeysDTO             `json:"encrypted_keys,omitempty"` // Returns the keys to decrypt
 }

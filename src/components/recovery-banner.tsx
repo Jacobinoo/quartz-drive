@@ -114,7 +114,7 @@ export function RecoveryBanner() {
           accountSigningPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
             null,
             sodium.from_base64(keys.recoveryEncAccountSigningPrivateKey),
-            sodium.from_string(email.toLowerCase() + "_sign"),
+            sodium.from_base64(keys.accountSigningPublicKey),
             sodium.from_base64(keys.recoveryAccountSigningKeyNonce),
             derivedRecoveryKey
           );
@@ -122,7 +122,7 @@ export function RecoveryBanner() {
           accountEncryptionPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
             null,
             sodium.from_base64(keys.recoveryEncAccountEncryptionPrivateKey),
-            sodium.from_string(email.toLowerCase() + "_encrypt"),
+            sodium.from_base64(keys.accountEncryptionPublicKey),
             sodium.from_base64(keys.recoveryAccountEncryptionKeyNonce),
             derivedRecoveryKey
           );
@@ -148,7 +148,7 @@ export function RecoveryBanner() {
       const newAccountSigningPrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
       const newEncryptedAccountSigningPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
           accountSigningPrivateKey,
-          sodium.from_string(email.toLowerCase()+"_sign"),
+          sodium.from_base64(keys.accountSigningPublicKey),
           null,
           newAccountSigningPrivNonce,
           newDerivedMasterKey
@@ -157,7 +157,7 @@ export function RecoveryBanner() {
       const newAccountEncryptionPrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
       const newEncryptedAccountEncryptionPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
           accountEncryptionPrivateKey,
-          sodium.from_string(email.toLowerCase()+"_encrypt"),
+          sodium.from_base64(keys.accountEncryptionPublicKey),
           null,
           newAccountEncryptionPrivNonce,
           newDerivedMasterKey

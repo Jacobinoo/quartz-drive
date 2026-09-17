@@ -332,7 +332,7 @@ function SharedVolumesTree() {
     }, [isOpen, hasFetched]);
 
     return (
-        <SidebarMenuItem>
+        <SidebarMenuItem hidden>
             <Collapsible
                 className="group/collapsible [&[data-state=open]>div>button>svg]:rotate-90"
                 open={isOpen}

@@ -52,6 +52,7 @@ type KeyRegisterMaterial = {
     signedEncryptedRootNodePassphrase: Base64String;
 
     recoveryPhrase: string;
+    recoveryIdHex: string;
 
     rawAccountEncryptionPrivateKey: Uint8Array;
     rawAccountSigningPrivateKey: Uint8Array;
@@ -79,6 +80,7 @@ interface InitializeAccountKeysPayload {
             recoveryAccountEncryptionKeyNonce: Base64String;
             recoveryEncAccountSigningPrivateKey: Base64String;
             recoveryAccountSigningKeyNonce: Base64String;
+            recoveryIdHex: string;
         };
     };
     drive: {
@@ -151,7 +153,7 @@ export async function registerKeyMaterial(email: string, exportKey: string): Pro
     const accountSigningPrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
     const encryptedAccountSigningPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
         accountSigningKeyPair.privateKey,
-        sodium.from_string(email.toLowerCase()+"_sign"),
+        accountSigningKeyPair.publicKey,
         null,
         accountSigningPrivNonce,
         derivedMasterKey
@@ -160,7 +162,7 @@ export async function registerKeyMaterial(email: string, exportKey: string): Pro
     const accountEncryptionPrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
     const encryptedAccountEncryptionPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
         accountEncryptionKeyPair.privateKey,
-        sodium.from_string(email.toLowerCase()+"_encrypt"),
+        accountEncryptionKeyPair.publicKey,
         null,
         accountEncryptionPrivNonce,
         derivedMasterKey
@@ -195,7 +197,10 @@ export async function registerKeyMaterial(email: string, exportKey: string): Pro
   //     recoveryRootKey
   // );
 
-  const recoveryPhrase = bip39.generateMnemonic(128); // 12-word phrase
+  const recoveryPhrase = bip39.generateMnemonic(256); // 24-word phrase
+  
+  const recoveryIdHash = sodium.crypto_generichash(32, sodium.from_string(recoveryPhrase.trim().toLowerCase()));
+  const recoveryIdHex = sodium.to_hex(recoveryIdHash);
 
 
   const derivedRecoveryKey = sodium.crypto_pwhash(
@@ -210,7 +215,7 @@ export async function registerKeyMaterial(email: string, exportKey: string): Pro
     const recoveryAccountSigningPrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
     const recoveryEncryptedAccountSigningPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
         accountSigningKeyPair.privateKey,
-        sodium.from_string(email.toLowerCase()+"_sign"),
+        accountSigningKeyPair.publicKey,
         null,
         recoveryAccountSigningPrivNonce,
         derivedRecoveryKey
@@ -219,7 +224,7 @@ export async function registerKeyMaterial(email: string, exportKey: string): Pro
     const recoveryAccountEncryptionPrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
     const recoveryEncryptedAccountEncryptionPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
         accountEncryptionKeyPair.privateKey,
-        sodium.from_string(email.toLowerCase()+"_encrypt"),
+        accountEncryptionKeyPair.publicKey,
         null,
         recoveryAccountEncryptionPrivNonce,
         derivedRecoveryKey
@@ -304,6 +309,7 @@ export async function registerKeyMaterial(email: string, exportKey: string): Pro
         recoveryAccountEncryptionKeyNonce: sodium.to_base64(recoveryAccountEncryptionPrivNonce),
         recoveryEncAccountSigningPrivateKey: sodium.to_base64(recoveryEncryptedAccountSigningPrivateKey),
         recoveryAccountSigningKeyNonce: sodium.to_base64(recoveryAccountSigningPrivNonce),
+        recoveryIdHex: recoveryIdHex,
 
         rawAccountEncryptionPrivateKey: accountEncryptionKeyPair.privateKey,
         rawAccountSigningPrivateKey: accountSigningKeyPair.privateKey,
@@ -333,6 +339,7 @@ export async function initializeAccountKeysToServer(km: KeyRegisterMaterial, ema
                 recoveryAccountEncryptionKeyNonce: km.recoveryAccountEncryptionKeyNonce,
                 recoveryEncAccountSigningPrivateKey: km.recoveryEncAccountSigningPrivateKey,
                 recoveryAccountSigningKeyNonce: km.recoveryAccountSigningKeyNonce,
+                recoveryIdHex: km.recoveryIdHex,
             },
         },
         drive: {

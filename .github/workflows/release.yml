@@ -64,13 +64,14 @@ jobs:
           cache: true
 
       - name: Build qdeploy
+        working-directory: server
         run: |
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
             go build \
               -ldflags="-s -w" \
               -trimpath \
-              -o qdeploy \
-              ./server/cmd/deploy
+              -o ../qdeploy \
+              ./cmd/deploy
 
       - name: Copy deploy artifacts to server
         uses: appleboy/scp-action@v1.0.0

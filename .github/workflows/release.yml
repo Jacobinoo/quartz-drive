@@ -61,6 +61,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
           cache: true
 
       - name: Build qdeploy
@@ -100,7 +101,7 @@ jobs:
             # if you re-run this workflow, you get the exact same image.
             ./qdeploy \
               -f server/docker-compose.prod.yml \
-              -env-file server/.env.production \
+              -env-file .env.production \
               -service quartz-server \
               -tag ${{ github.ref_name }} \
               -timeout 90s

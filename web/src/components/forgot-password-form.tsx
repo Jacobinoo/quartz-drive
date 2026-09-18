@@ -61,7 +61,7 @@ export function ForgotPasswordForm({
       }
 
       const sodium = await getSodium();
-      const recoveryIdHash = sodium.crypto_generichash(32, sodium.from_string(recoveryPhrase.trim().toLowerCase()));
+      const recoveryIdHash = sodium.crypto_generichash(32, sodium.from_string(recoveryPhrase.trim().toLowerCase()), null);
       const recoveryIdHex = sodium.to_hex(recoveryIdHash);
 
       const res = await fetch(`${config.apiUrl}/v1/recovery/start`, {

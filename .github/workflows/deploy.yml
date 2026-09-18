@@ -4,10 +4,9 @@ on:
   push:
     branches:
       - master
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-
+    paths:
+      - 'server/**'
+      - '.github/workflows/deploy.yml'
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest

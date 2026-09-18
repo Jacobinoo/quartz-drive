@@ -22,8 +22,8 @@ jobs:
       - name: Build quartz-server image (No Push)
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: Dockerfile.prod
+          context: server
+          file: server/Dockerfile.prod
           push: false
           build-args: |
             BUILD_VERSION=pr-${{ github.event.pull_request.number }}-sha-${{ github.event.pull_request.head.sha }}

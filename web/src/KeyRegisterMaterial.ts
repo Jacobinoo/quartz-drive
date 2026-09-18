@@ -122,7 +122,7 @@ export type {
     NodeMetadata,
 }
 
-export async function registerKeyMaterial(email: string, exportKey: string): Promise<KeyRegisterMaterial> {
+export async function registerKeyMaterial(email: string, exportKey: string | Uint8Array): Promise<KeyRegisterMaterial> {
     const sodium = await getSodium();
 
     // Layer 0 - Master Key (derived from OPAQUE exportKey via fast KDF)

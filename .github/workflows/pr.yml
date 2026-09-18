@@ -6,7 +6,7 @@ on:
       - master
     paths:
       - 'server/**'
-      - '.github/workflows/deploy.yml'
+      - '.github/workflows/pr.yml'
 
 jobs:
   build-check:

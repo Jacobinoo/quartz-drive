@@ -102,12 +102,14 @@ func (d *Deployer) Run(ctx context.Context) error {
 		oldIDs = oldIDs[:1]
 	}
 
-	// 6. Scale up to exactly 2 — creates the pendulum effect.
+	// 6. Scale up to exactly oldIDs + 1 — creates the pendulum effect.
 	//    If index 1 is running, Compose creates index 2.
 	//    If index 2 is running, Compose creates index 1!
+	//    If nothing is running, it creates exactly 1.
 	//    --no-recreate ensures existing containers are NOT touched.
-	d.log.Info("Starting new container alongside old one...", "pendulum_scale", 2)
-	scaleUp := fmt.Sprintf("%s=2", d.cfg.Service)
+	targetScale := len(oldIDs) + 1
+	d.log.Info("Starting new container alongside old one...", "pendulum_scale", targetScale)
+	scaleUp := fmt.Sprintf("%s=%d", d.cfg.Service, targetScale)
 	if err := compose(ctx, d.cfg.ComposeFile, d.cfg.EnvFile, "up", "-d",
 		"--scale", scaleUp,
 		"--no-recreate",

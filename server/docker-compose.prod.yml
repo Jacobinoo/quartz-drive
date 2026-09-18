@@ -33,6 +33,9 @@ services:
       - "--entrypoints.web.http.encodedCharacters.allowEncodedHash=false"
     logging:
       driver: "nanoandrew4/ngcplogs:linux-amd64-v1.3.0"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     ports:
       - "80:80"
       - "443:443"
@@ -67,6 +70,9 @@ services:
     image: ${DOCKERHUB_USERNAME}/quartz-server:${DEPLOY_TAG:-latest}
     logging:
       driver: "nanoandrew4/ngcplogs:linux-amd64-v1.3.0"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     env_file:
       - .env.production
     depends_on:

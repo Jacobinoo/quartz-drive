@@ -46,8 +46,8 @@ jobs:
       - name: Build and push release image
         uses: docker/build-push-action@v5
         with:
-          context: .
-          file: Dockerfile.prod
+          context: server
+          file: server/Dockerfile.prod
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -60,7 +60,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: server/go.mod
           cache: true
 
       - name: Build qdeploy
@@ -70,7 +70,7 @@ jobs:
               -ldflags="-s -w" \
               -trimpath \
               -o qdeploy \
-              ./cmd/deploy
+              ./server/cmd/deploy
 
       - name: Copy deploy artifacts to server
         uses: appleboy/scp-action@v1.0.0
@@ -78,8 +78,8 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "qdeploy,docker-compose.prod.yml"
-          target: "~/QuartzAccountGo/"
+          source: "qdeploy,server/docker-compose.prod.yml"
+          target: "~/quartz-drive/"
 
       - name: Deploy release
         uses: appleboy/ssh-action@v1.2.5
@@ -90,7 +90,7 @@ jobs:
           command_timeout: 5m
           script: |
             set -euo pipefail
-            cd ~/QuartzAccountGo
+            cd ~/quartz-drive
 
             chmod +x qdeploy
 
@@ -98,8 +98,8 @@ jobs:
             # Using the semver tag (not :latest) guarantees reproducibility —
             # if you re-run this workflow, you get the exact same image.
             ./qdeploy \
-              -f docker-compose.prod.yml \
-              -env-file .env.production \
+              -f server/docker-compose.prod.yml \
+              -env-file server/.env.production \
               -service quartz-server \
               -tag ${{ github.ref_name }} \
               -timeout 90s

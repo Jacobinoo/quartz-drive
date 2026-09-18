@@ -60,7 +60,7 @@ export function LoginForm({
             name="session-checkbox-desc"
             checked={checked}
             className="cursor-pointer"
-            onCheckedChange={setChecked}
+            onCheckedChange={(checked) => setChecked(checked === true)}
           />
           <FieldContent className="gap-0">
             <FieldLabel htmlFor="session-checkbox-desc" className="cursor-pointer">

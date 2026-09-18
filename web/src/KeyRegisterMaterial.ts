@@ -122,7 +122,7 @@ export type {
     NodeMetadata,
 }
 
-export async function registerKeyMaterial(email: string, exportKey: string): Promise<KeyRegisterMaterial> {
+export async function registerKeyMaterial(email: string, exportKey: string | Uint8Array): Promise<KeyRegisterMaterial> {
     const sodium = await getSodium();
 
     // Layer 0 - Master Key (derived from OPAQUE exportKey via fast KDF)
@@ -199,7 +199,7 @@ export async function registerKeyMaterial(email: string, exportKey: string): Pro
 
   const recoveryPhrase = bip39.generateMnemonic(256); // 24-word phrase
   
-  const recoveryIdHash = sodium.crypto_generichash(32, sodium.from_string(recoveryPhrase.trim().toLowerCase()));
+  const recoveryIdHash = sodium.crypto_generichash(32, sodium.from_string(recoveryPhrase.trim().toLowerCase()), null);
   const recoveryIdHex = sodium.to_hex(recoveryIdHash);
 
 

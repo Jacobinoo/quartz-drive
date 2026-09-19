@@ -52,11 +52,11 @@ Privacy Policy: %s/privacy`, data.Email, data.ActionURL, data.FrontendURL, data.
 		Text:    textContent,
 	}
 
-	// should this be sent asynchronously? are we blocking the request?
-	// TODO: support idempotency keys to avoid duplicates
-	opt := &resend.SendEmailOptions{
-		//IdempotencyKey: "",
+	opt := &resend.SendEmailOptions{}
+	if emailID, ok := ctx.Value(contextkeys.EmailIDKey).(string); ok && emailID != "" {
+		opt.IdempotencyKey = emailID
 	}
+
 	_, err = emailClient.Emails.SendWithOptions(ctx, params, opt)
 	if err != nil {
 		return fmt.Errorf("resend api failed to send email: %w", err)

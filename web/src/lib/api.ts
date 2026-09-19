@@ -118,9 +118,10 @@ export async function customFetch(
     return await fetch(input, config);
 
   } catch (err: any) {
+    isRefreshing = false;
+
     if (err.message === "NETWORK_ERROR") {
       console.warn("Backend is offline. Pausing requests.");
-      isRefreshing = false;
       const queued = refreshQueue;
       refreshQueue = [];
       // Pass the error to all queued fetch calls so they fail gracefully rather than hanging forever
@@ -128,13 +129,21 @@ export async function customFetch(
       throw err;
     }
 
-    // Refresh completely failed (token expired or reuse detection triggered!)
-    console.error("Silent refresh failed. Logging out.", err);
-    isRefreshing = false;
-    refreshQueue = []; // Clear queue
+    if (err.message === "SESSION_EXPIRED") {
+      // Server explicitly rejected the session (401/403). This is unrecoverable.
+      console.error("Session expired (server returned 401/403). Logging out.");
+      refreshQueue = [];
+      await signOut();
+      window.location.href = "/signin";
+      throw err;
+    }
 
-    await signOut();
-    window.location.href = "/signout";
+    // Any other error (DPoP failure, JSON parse, etc.) is transient.
+    // Do NOT destroy the session — just propagate the error to the caller.
+    console.warn("Refresh failed with non-fatal error. Not logging out.", err.message);
+    const queued = refreshQueue;
+    refreshQueue = [];
+    queued.forEach((callback) => callback(err));
     throw err;
   }
 }

@@ -38,11 +38,17 @@ export async function refreshSession(): Promise<RefreshSessionResponse> {
         throw new Error("NETWORK_ERROR");
     }
 
+    // 401/403 = server explicitly rejected the session (expired, revoked, reuse detection)
+    // We should force a full sign-out.
+    if (refreshRes.status === 401 || refreshRes.status === 403) {
+        throw new Error("SESSION_EXPIRED");
+    }
+
     const resData: RefreshSessionResponse = await refreshRes.json();
 
   if (resData.status === "ok") {
     setAuthState(resData.token || "", resData.csrfToken || "")
-    // --- NEW: Split-Key Session Unwrapping from IndexedDB ---
+    // Split-Key Session Unwrapping from IndexedDB
     try {
         if (resData.wrappedAccountKeys) {
             const devicePrivateKey = await loadDevicePrivateKey();

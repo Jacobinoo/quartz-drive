@@ -41,6 +41,7 @@ export function LoginForm({
   const turnstileRef = useRef<TurnstileInstance | null>(null)
   const [checked, setChecked] = React.useState(false)
   const [emailVerified, setEmailVerified] = useState(false)
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!params.get("verified")) return;
@@ -87,6 +88,11 @@ export function LoginForm({
         <CardContent className={"mt-3"}>
           <form action="#" method="POST">
             <FieldGroup>
+              {error && (
+                <div className="text-sm font-medium text-destructive text-center bg-destructive/10 p-2 rounded-md">
+                  {error}
+                </div>
+              )}
               <Field className={"hidden"}>
                 <Input
                   id="email"
@@ -125,6 +131,7 @@ export function LoginForm({
               <Field>
                 <Button type="submit" onClick={(e)=> {
                   e.preventDefault()
+                  setError(null)
 
                   const token = turnstileRef.current?.getResponse()
                   if (!token) {
@@ -143,6 +150,7 @@ export function LoginForm({
                       })
                       .catch((err: Error) => {
                         console.error(`Error occured on sign in: ${err.message}`);
+                        setError(err.message);
                       })
                       .finally(() => {
                         turnstileRef.current?.reset() // Reset after submission
@@ -173,6 +181,11 @@ export function LoginForm({
         <CardContent>
           <form action="#" method="POST">
             <FieldGroup>
+              {error && (
+                <div className="text-sm font-medium text-destructive text-center bg-destructive/10 p-2 rounded-md">
+                  {error}
+                </div>
+              )}
               <Field>
                 <FieldLabel htmlFor="email">Email</FieldLabel>
                 <Input
@@ -211,6 +224,7 @@ export function LoginForm({
               <Field>
                 <Button type="submit" onClick={(e)=> {
                   e.preventDefault()
+                  setError(null)
 
                   const token = turnstileRef.current?.getResponse()
                   if (!token) {
@@ -229,6 +243,7 @@ export function LoginForm({
                       })
                       .catch((err: Error) => {
                         console.error(`Error occured on sign in: ${err.message}`);
+                        setError(err.message);
                       })
                       .finally(() => {
                         turnstileRef.current?.reset() // Reset after submission

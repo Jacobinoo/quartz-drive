@@ -11,7 +11,7 @@ import { deleteDeviceKeys } from "@/DeviceKeyStore";
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const publicPaths = ["/signin", "/signup", "/forgot-password", "/reset-password", "/verify-email"];
+  const publicPaths = ["/signin", "/signup", "/forgot-password", "/reset-password", "/verify-email", "/onboarding"];
 
   const [isBooting, setIsBooting] = useState(true);
 
@@ -41,9 +41,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // This hits /v1/refresh and automatically populates your authStore in memory!
         await refreshSession();
 
+        // User is authenticated. If they're on a public auth page, redirect to drive.
         if (publicPaths.includes(pathname)) {
            router.push("/drive");
-           return;
         }
         setIsBooting(false);
       } catch (err: any) {
@@ -60,16 +60,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        console.warn("Silent boot failed (cookie missing/expired).");
-
-        if (publicPaths.includes(pathname)) {
+        // SESSION_EXPIRED = server explicitly rejected the session (401/403).
+        // Force a full sign-out.
+        if (err.message === "SESSION_EXPIRED") {
+          console.warn("Session expired (server returned 401/403). Signing out.");
+          if (publicPaths.includes(pathname)) {
             clearAuthState();
             deleteDpopDatabase().catch(() => {});
             deleteDeviceKeys().catch(() => {});
             setIsBooting(false);
-        } else {
+          } else {
             await signOut();
             router.push("/signin");
+            setIsBooting(false);
+          }
+          return;
+        }
+
+        // Any other error (DPoP failure, IndexedDB hiccup, JSON parse error, etc.)
+        // is transient — do NOT destroy the session.
+        console.warn("Boot failed with non-fatal error:", err.message);
+        if (publicPaths.includes(pathname)) {
+          // On public pages, just show the page (e.g., the login form)
+          setIsBooting(false);
+        } else {
+          // On protected pages, show offline screen so user can retry
+          setIsOffline(true);
+          setIsBooting(false);
         }
       }
     }

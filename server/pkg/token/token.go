@@ -46,7 +46,8 @@ func IssueAccessToken(withKeysInitialized bool, fgpHash string, dpopJkt string, 
 		s          string
 		exp        time.Time
 	)
-	exp = time.Now().Add(65 * time.Second)
+	const accessTokenLifetime = time.Minute * 5
+	exp = time.Now().Add(accessTokenLifetime)
 	//private key from env
 	privateKeyHex := config.Cfg.JWT.SecretKey
 	privateKeyBytes, _ := hex.DecodeString(privateKeyHex)

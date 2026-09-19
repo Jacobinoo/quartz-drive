@@ -11,7 +11,7 @@ import { customFetch } from './lib/api';
 
 
 
-export async function signIn(email: string, password: string, token: string): Promise<"ok" | "noinit" | "recovery_needed"> {
+export async function signIn(email: string, password: string, token: string, persistSession: boolean): Promise<"ok" | "noinit" | "recovery_needed"> {
     if (!email || !password || !token) throw new Error("Email, password and bot verification success required");
 
     const sodium = await getSodium();
@@ -81,6 +81,7 @@ export async function signIn(email: string, password: string, token: string): Pr
     const m3 = {
       finishLoginRequest: finishLoginRequest,
       nonce: loginNonce,
+        persistSession: persistSession,
     }
 
     // send opaque m3

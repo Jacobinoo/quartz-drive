@@ -186,6 +186,8 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
+	slog.DebugContext(r.Context(), "persistSession", m3.PersistSession)
+
 	// Fetch from Redis
 	encryptedNonceJSON, err := h.redis.Get(context.Background(), "login:nonce:"+m3.Nonce).Result()
 	if err != nil {
@@ -288,12 +290,24 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 	refreshToken := token.IssueRefreshToken()
 	newCsrfToken := token.IssueCsrfToken()
 
+	const persistedRefreshTokenLifetime = 7 * 24 * time.Hour // default 7 days
+	const transientRefreshTokenLifetime = 24 * time.Hour     // default 24 hours
+
+	var refreshTokenLifetime time.Duration
+	if m3.PersistSession == true {
+		refreshTokenLifetime = persistedRefreshTokenLifetime
+	} else {
+		refreshTokenLifetime = transientRefreshTokenLifetime
+	}
+
+	expiresAt := time.Now().Add(refreshTokenLifetime)
+
 	refreshTokenEntry := model.GormRefreshToken{
 		UserID:        trustedUserInfo.ID,
 		TokenHash:     refreshToken.TokenSha256Hash,
 		FamilyID:      familyID,
 		IsRevoked:     false,
-		ExpiresAt:     time.Now().Add(7 * 24 * time.Hour), // default 7 days
+		ExpiresAt:     expiresAt,
 		CsrfTokenHash: newCsrfToken.TokenSha256Hash,
 		Session:       newSessionEntry,
 		DpopJKT:       thumbprint,
@@ -319,15 +333,28 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "__Secure-Auth",
-		Value:    refreshToken.Token,
-		HttpOnly: true,
-		Path:     "/",
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-		Expires:  time.Now().Add(7 * 24 * time.Hour),
-	})
+	if m3.PersistSession == true {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "__Secure-Auth",
+			Value:    refreshToken.Token,
+			HttpOnly: true,
+			Path:     "/",
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
+			MaxAge:   int(persistedRefreshTokenLifetime / time.Second),
+			Expires:  time.Now().Add(persistedRefreshTokenLifetime),
+		})
+	} else {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "__Secure-Auth",
+			Value:    refreshToken.Token,
+			HttpOnly: true,
+			Path:     "/",
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
+			//don't set MaxAge or Expires
+		})
+	}
 
 	if err := h.db.Create(&refreshTokenEntry).Error; err != nil {
 		return apperrors.NewInternal(err)

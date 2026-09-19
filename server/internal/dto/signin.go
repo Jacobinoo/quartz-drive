@@ -57,7 +57,8 @@ type M1Login struct {
 
 type M3Login struct {
 	FinishLoginRequest string `json:"finishLoginRequest"`
-	Nonce              string
+	Nonce              string `json:"nonce"`
+	PersistSession     bool   `json:"persistSession"`
 }
 
 type RegisterDeviceRequest struct {

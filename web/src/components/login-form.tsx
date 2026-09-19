@@ -138,7 +138,7 @@ export function LoginForm({
                     throw new Error("turnstile verification error")
                   }
 
-                  signIn(email, password, token)
+                  signIn(email, password, token, checked)
                     .then((result) => {
                       console.log("Sign in successful");
                       if (result == "ok" || result == "recovery_needed") {
@@ -231,7 +231,7 @@ export function LoginForm({
                     throw new Error("turnstile verification error")
                   }
 
-                  signIn(email, password, token)
+                  signIn(email, password, token, checked)
                     .then((result) => {
                       console.log("Sign in successful");
                       if (result == "ok" || result == "recovery_needed") {

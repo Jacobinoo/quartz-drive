@@ -98,6 +98,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 			Path:     "/",
 			Secure:   true,
 			SameSite: http.SameSiteLaxMode,
+			MaxAge:   int(-1),
 			Expires:  time.Unix(0, 0),
 		})
 
@@ -141,6 +142,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 			Path:     "/",
 			Secure:   true,
 			SameSite: http.SameSiteLaxMode,
+			MaxAge:   int(-1),
 			Expires:  time.Unix(0, 0),
 		})
 
@@ -183,15 +185,31 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 
-		newToken := model.GormRefreshToken{
-			TokenHash:     newRefreshToken.TokenSha256Hash,
-			UserID:        storedToken.UserID,
-			FamilyID:      storedToken.FamilyID,
-			IsRevoked:     false,
-			ExpiresAt:     time.Now().Add(7 * 24 * time.Hour),
-			CsrfTokenHash: newCsrfToken.TokenSha256Hash,
-			DpopJKT:       storedToken.DpopJKT,
-			SessionID:     storedToken.SessionID,
+		var newToken model.GormRefreshToken
+		// is this a transient session
+		// We check < 25 hours (instead of 24) to account for minor millisecond differences between time.Now() and GORM's CreatedAt
+		if storedToken.ExpiresAt.Sub(storedToken.CreatedAt) < time.Hour*25 {
+			newToken = model.GormRefreshToken{
+				TokenHash:     newRefreshToken.TokenSha256Hash,
+				UserID:        storedToken.UserID,
+				FamilyID:      storedToken.FamilyID,
+				IsRevoked:     false,
+				ExpiresAt:     time.Now().Add(24 * time.Hour),
+				CsrfTokenHash: newCsrfToken.TokenSha256Hash,
+				DpopJKT:       storedToken.DpopJKT,
+				SessionID:     storedToken.SessionID,
+			}
+		} else {
+			newToken = model.GormRefreshToken{
+				TokenHash:     newRefreshToken.TokenSha256Hash,
+				UserID:        storedToken.UserID,
+				FamilyID:      storedToken.FamilyID,
+				IsRevoked:     false,
+				ExpiresAt:     time.Now().Add(7 * 24 * time.Hour),
+				CsrfTokenHash: newCsrfToken.TokenSha256Hash,
+				DpopJKT:       storedToken.DpopJKT,
+				SessionID:     storedToken.SessionID,
+			}
 		}
 
 		if err := tx.Create(&newToken).Error; err != nil {
@@ -215,15 +233,30 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "__Secure-Auth",
-		Value:    newRefreshToken.Token,
-		HttpOnly: true,
-		Path:     "/",
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-		Expires:  time.Now().Add(7 * 24 * time.Hour),
-	})
+	// is this a transient session
+	// We check < 25 hours (instead of 24) to account for minor millisecond differences between time.Now() and GORM's CreatedAt
+	if storedToken.ExpiresAt.Sub(storedToken.CreatedAt) < time.Hour*25 {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "__Secure-Auth",
+			Value:    newRefreshToken.Token,
+			HttpOnly: true,
+			Path:     "/",
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
+			// transient session, don't add MaxAge or Expires
+		})
+	} else {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "__Secure-Auth",
+			Value:    newRefreshToken.Token,
+			HttpOnly: true,
+			Path:     "/",
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
+			Expires:  time.Now().Add(7 * 24 * time.Hour),
+			MaxAge:   int(maxAge.Seconds()),
+		})
+	}
 
 	var refreshResponse = RefreshResponse{
 		Status:             "ok",

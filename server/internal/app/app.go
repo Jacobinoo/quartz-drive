@@ -19,6 +19,7 @@ import (
 	"quartz/api/signup"
 	"quartz/config"
 	"quartz/internal/bindings"
+	"quartz/internal/middleware"
 	"quartz/pkg/database"
 	"quartz/pkg/httputils"
 	"quartz/pkg/storage"
@@ -87,7 +88,10 @@ func Run() {
 
 	router := initRouter(state)
 
-	finalHandler := httputils.RequestIDMiddleware(router)
+	// Limit request body size for security & abuse prevention
+	bodyLimitedHandler := middleware.LimitBodySize(router)
+
+	finalHandler := httputils.RequestIDMiddleware(bodyLimitedHandler)
 	sentryHandler := sentryhttp.New(sentryhttp.Options{})
 
 	server := &http.Server{

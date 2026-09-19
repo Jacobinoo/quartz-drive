@@ -13,9 +13,11 @@ import (
 	"quartz/internal/dto"
 	"quartz/internal/model"
 	apperrors "quartz/pkg/app-errors"
+	"quartz/pkg/captcha"
 	"quartz/pkg/contextkeys"
 	"quartz/pkg/crypto"
 	"quartz/pkg/worker"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,9 +38,23 @@ func NewHandler(db *gorm.DB, redisClient *redis.Client, asynqClient *asynq.Clien
 }
 
 func (h *Handler) RecoveryStart(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != http.MethodPost {
+		return apperrors.NewMethodNotAllowed("method not allowed")
+	}
+
 	var req dto.RecoveryStartRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return apperrors.NewBadRequest("invalid request body", err)
+	}
+
+	success, errArr, err := captcha.VerifyTurnstileTokenInRequest(r)
+	if err != nil {
+		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","), "error", err)
+		return apperrors.NewBadRequest("invalid token", err)
+	}
+	if !success {
+		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","))
+		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
 	sessionID := uuid.New().String()
@@ -100,18 +116,18 @@ func (h *Handler) RecoveryStart(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		return json.NewEncoder(w).Encode(dto.RecoveryStartResponse{
-			SessionID:     sessionID,
-			Capabilities:  session.Capabilities,
-			Email:         userEmail,
-			Challenge:     &challengeHex,
+			SessionID:    sessionID,
+			Capabilities: session.Capabilities,
+			Email:        userEmail,
+			Challenge:    &challengeHex,
 			EncryptedKeys: &dto.KeysDTO{
-				MasterKdfSalt:                              user.KeyStore.MasterKdfSalt,
-				AccountEncryptionPublicKey:                 user.KeyStore.AccountEncryptionPublicKey,
-				EncryptedAccountEncryptionPrivateKey:       user.KeyStore.EncryptedAccountEncryptionPrivateKey,
-				AccountEncryptionKeyNonce:                  user.KeyStore.AccountEncryptionKeyNonce,
-				AccountSigningPublicKey:                    user.KeyStore.AccountSigningPublicKey,
-				EncryptedAccountSigningPrivateKey:          user.KeyStore.EncryptedAccountSigningPrivateKey,
-				AccountSigningKeyNonce:                     user.KeyStore.AccountSigningKeyNonce,
+				MasterKdfSalt:                                user.KeyStore.MasterKdfSalt,
+				AccountEncryptionPublicKey:                   user.KeyStore.AccountEncryptionPublicKey,
+				EncryptedAccountEncryptionPrivateKey:         user.KeyStore.EncryptedAccountEncryptionPrivateKey,
+				AccountEncryptionKeyNonce:                    user.KeyStore.AccountEncryptionKeyNonce,
+				AccountSigningPublicKey:                      user.KeyStore.AccountSigningPublicKey,
+				EncryptedAccountSigningPrivateKey:            user.KeyStore.EncryptedAccountSigningPrivateKey,
+				AccountSigningKeyNonce:                       user.KeyStore.AccountSigningKeyNonce,
 				RecoveryEncryptedAccountEncryptionPrivateKey: user.KeyStore.RecoveryEncryptedAccountEncryptionPrivateKey,
 				RecoveryAccountEncryptionKeyNonce:            user.KeyStore.RecoveryAccountEncryptionKeyNonce,
 				RecoveryEncryptedAccountSigningPrivateKey:    user.KeyStore.RecoveryEncryptedAccountSigningPrivateKey,
@@ -129,6 +145,10 @@ func (h *Handler) toJSON(v any) string {
 }
 
 func (h *Handler) RecoveryVerify(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != http.MethodPost {
+		return apperrors.NewMethodNotAllowed("method not allowed")
+	}
+
 	sessionID := r.PathValue("id")
 	if sessionID == "" {
 		return apperrors.NewBadRequest("missing session id", nil)
@@ -224,6 +244,10 @@ func (h *Handler) RecoveryVerify(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Handler) RecoveryOpaqueM1(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != http.MethodPost {
+		return apperrors.NewMethodNotAllowed("method not allowed")
+	}
+
 	sessionID := r.PathValue("id")
 	if sessionID == "" {
 		return apperrors.NewBadRequest("missing session id", nil)
@@ -271,6 +295,10 @@ func (h *Handler) RecoveryOpaqueM1(w http.ResponseWriter, r *http.Request) error
 }
 
 func (h *Handler) RecoveryComplete(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != http.MethodPost {
+		return apperrors.NewMethodNotAllowed("method not allowed")
+	}
+
 	sessionID := r.PathValue("id")
 	if sessionID == "" {
 		return apperrors.NewBadRequest("missing session id", nil)

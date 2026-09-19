@@ -73,35 +73,72 @@ jobs:
               -trimpath \
               -o ../qdeploy \
               ./cmd/deploy
-
-      - name: Copy deploy artifacts to server
-        uses: appleboy/scp-action@v1.0.0
+          
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USERNAME }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "qdeploy,server/docker-compose.prod.yml"
-          target: "~/quartz-drive/"
+          # Using Workload Identity Federation
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Deploy release
-        uses: appleboy/ssh-action@v1.2.5
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USERNAME }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          command_timeout: 5m
-          script: |
-            set -euo pipefail
-            cd ~/quartz-drive
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+      - name: Copy deploy artifacts to server (via IAP)
+        run: |
+          # Use gcloud compute scp with the --tunnel-through-iap flag
+          gcloud compute scp qdeploy server/docker-compose.prod.yml \
+            ${{ secrets.SERVER_USERNAME }}@${{ secrets.GCP_VM_INSTANCE_NAME }}:~/quartz-drive/ \
+            --zone=${{ secrets.GCP_ZONE }} \
+            --tunnel-through-iap
 
-            chmod +x qdeploy
+      - name: Deploy release (via IAP)
+        run: |
+          # Use gcloud compute ssh to execute your deployment script
+          gcloud compute ssh ${{ secrets.SERVER_USERNAME }}@${{ secrets.GCP_VM_INSTANCE_NAME }} \
+            --zone=${{ secrets.GCP_ZONE }} \
+            --tunnel-through-iap \
+            --command="
+              set -euo pipefail
+              cd ~/quartz-drive
+              chmod +x qdeploy
+          
+              ./qdeploy \
+                -f server/docker-compose.prod.yml \
+                -env-file .env.production \
+                -service quartz-server \
+                -tag ${{ github.ref_name }} \
+                -timeout 90s
+            "
 
-            # Deploy the exact semver tag that triggered this release.
-            # Using the semver tag (not :latest) guarantees reproducibility —
-            # if you re-run this workflow, you get the exact same image.
-            ./qdeploy \
-              -f server/docker-compose.prod.yml \
-              -env-file .env.production \
-              -service quartz-server \
-              -tag ${{ github.ref_name }} \
-              -timeout 90s
+#      - name: Copy deploy artifacts to server
+#        uses: appleboy/scp-action@v1.0.0
+#        with:
+#          host: ${{ secrets.SERVER_HOST }}
+#          username: ${{ secrets.SERVER_USERNAME }}
+#          key: ${{ secrets.SERVER_SSH_KEY }}
+#          source: "qdeploy,server/docker-compose.prod.yml"
+#          target: "~/quartz-drive/"
+#
+#      - name: Deploy release
+#        uses: appleboy/ssh-action@v1.2.5
+#        with:
+#          host: ${{ secrets.SERVER_HOST }}
+#          username: ${{ secrets.SERVER_USERNAME }}
+#          key: ${{ secrets.SERVER_SSH_KEY }}
+#          command_timeout: 5m
+#          script: |
+#            set -euo pipefail
+#            cd ~/quartz-drive
+#
+#            chmod +x qdeploy
+#
+#            # Deploy the exact semver tag that triggered this release.
+#            # Using the semver tag (not :latest) guarantees reproducibility —
+#            # if you re-run this workflow, you get the exact same image.
+#            ./qdeploy \
+#              -f server/docker-compose.prod.yml \
+#              -env-file .env.production \
+#              -service quartz-server \
+#              -tag ${{ github.ref_name }} \
+#              -timeout 90s

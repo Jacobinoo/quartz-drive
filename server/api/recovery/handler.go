@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-redis/redis_rate/v10"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
@@ -66,6 +67,38 @@ func (h *Handler) RecoveryStart(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if req.Method == "email" {
+		req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+		emailHash, err := crypto.HashEmail([]byte(req.Email))
+		if err != nil {
+			return apperrors.NewInternal(err)
+		}
+
+		limiter := redis_rate.NewLimiter(h.redis)
+
+		// 1 per 1 minute
+		res1m, err := limiter.Allow(r.Context(), "recovery:1m:"+emailHash, redis_rate.Limit{Rate: 1, Burst: 1, Period: time.Minute})
+		if err != nil {
+			slog.Error("rate limiter error", "err", err)
+		} else if res1m.Allowed == 0 {
+			slog.InfoContext(r.Context(), "Rate limit (1m) exceeded for recovery.", "emailHash", emailHash)
+
+			return json.NewEncoder(w).Encode(dto.RecoveryStartResponse{
+				Capabilities: []dto.RecoveryCapability{dto.CapabilityAccount},
+			})
+		}
+
+		// 3 per 24 hours
+		res24h, err := limiter.Allow(r.Context(), "recovery:24h:"+emailHash, redis_rate.Limit{Rate: 3, Burst: 3, Period: 24 * time.Hour})
+		if err != nil {
+			slog.Error("rate limiter error", "err", err)
+		} else if res24h.Allowed == 0 {
+			slog.InfoContext(r.Context(), "Rate limit (24h) exceeded for recovery.", "emailHash", emailHash)
+
+			return json.NewEncoder(w).Encode(dto.RecoveryStartResponse{
+				Capabilities: []dto.RecoveryCapability{dto.CapabilityAccount},
+			})
+		}
+
 		reqIDStr, _ := r.Context().Value(contextkeys.RequestIDKey).(string)
 		cfRay, _ := r.Context().Value(contextkeys.CFRayKey).(string)
 		emailID := uuid.NewString()

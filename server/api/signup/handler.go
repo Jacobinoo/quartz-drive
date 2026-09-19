@@ -25,6 +25,7 @@ import (
 
 	// pb "quartz/proto"
 
+	"github.com/go-redis/redis_rate/v10"
 	"github.com/hibiken/asynq"
 	"github.com/redis/go-redis/v9"
 
@@ -105,6 +106,26 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) error {
 	hashedEmailHex, err := crypto.HashEmail([]byte(m1.Email))
 	if err != nil {
 		return apperrors.NewInternal(err)
+	}
+
+	limiter := redis_rate.NewLimiter(h.redis)
+
+	// 1 per 1 minute
+	res1m, err := limiter.Allow(r.Context(), "signup:1m:"+hashedEmailHex, redis_rate.Limit{Rate: 1, Burst: 1, Period: time.Minute})
+	if err != nil {
+		slog.Error("rate limiter error", "err", err)
+	} else if res1m.Allowed == 0 {
+		slog.Debug("Rate limit (1m) exceeded for signup.", "emailHash", hashedEmailHex)
+		return apperrors.NewRateLimited("You are being ratelimited. Try again in a minute.")
+	}
+
+	// 3 per 24 hours
+	res24h, err := limiter.Allow(r.Context(), "signup:24h:"+hashedEmailHex, redis_rate.Limit{Rate: 3, Burst: 3, Period: 24 * time.Hour})
+	if err != nil {
+		slog.Error("rate limiter error", "err", err)
+	} else if res24h.Allowed == 0 {
+		slog.Debug("Rate limit (24h) exceeded for signup.", "emailHash", hashedEmailHex)
+		return apperrors.NewRateLimited("You are being ratelimited. Try again in a minute.")
 	}
 	userId := uuid.New().String()
 

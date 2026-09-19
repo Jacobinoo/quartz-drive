@@ -61,6 +61,9 @@ type (
 
 		SignupIPRate  int `env:"RL_SIGNUP_IP_RATE" envDefault:"5"`
 		SignupIPBurst int `env:"RL_SIGNUP_IP_BURST" envDefault:"2"`
+
+		RecoveryIPRate  int `env:"RL_RECOVERY_IP_RATE" envDefault:"5"`
+		RecoveryIPBurst int `env:"RL_RECOVERY_IP_BURST" envDefault:"2"`
 	}
 
 	Email struct {

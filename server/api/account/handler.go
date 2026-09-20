@@ -19,6 +19,7 @@ import (
 	"quartz/pkg/captcha"
 	"quartz/pkg/contextkeys"
 	"quartz/pkg/crypto"
+	"quartz/pkg/discord"
 	"quartz/pkg/worker"
 	"strings"
 	"time"
@@ -417,7 +418,7 @@ func (h *Handler) InitializeKeys(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	err = h.db.Transaction(func(tx *gorm.DB) error {
-		
+
 		var hashedRecoveryID *string = nil
 		if initRequest.User.Keys.RecoveryIDHex != "" {
 			if len(initRequest.User.Keys.RecoveryIDHex) != 64 {
@@ -630,6 +631,12 @@ func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	w.WriteHeader(http.StatusOK)
+
+	domain := "@unknown"
+	if parts := strings.Split(decryptedEmailStr, "@"); len(parts) == 2 {
+		domain = "@" + parts[1]
+	}
+	discord.Notify(r.Context(), "✅ User Verified Email", "A new user ("+domain+") successfully verified their email address!", 3066993) // Green color
 
 	res := VerifyEmailResponse{
 		Email: decryptedEmailStr,

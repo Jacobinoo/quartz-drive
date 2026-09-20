@@ -67,7 +67,9 @@ func main() {
 	d := &Deployer{cfg: cfg, log: log}
 
 	if cfg.Watch {
-		if err := d.Watch(ctx); err != nil {
+		go StartMonitor(context.Background(), cfg, log)
+
+		if err := d.Watch(context.Background()); err != nil {
 			log.Error("Watch mode failed", "error", err)
 			os.Exit(1)
 		}

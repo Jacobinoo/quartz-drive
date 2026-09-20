@@ -14,6 +14,7 @@ import (
 	"quartz/internal/model"
 	"quartz/pkg/contextkeys"
 	"quartz/pkg/crypto"
+	"quartz/pkg/discord"
 	"quartz/pkg/email"
 	"strings"
 	"time"
@@ -174,6 +175,12 @@ func (tp *TaskProcessor) handleSignupProcessingTask(ctx context.Context, t *asyn
 	}
 
 	magicLink := fmt.Sprintf("%s/verify-email#token=%s", config.Cfg.App.FrontendURL, tokenHex)
+
+	domain := "@unknown"
+	if parts := strings.Split(p.M3.User.Email, "@"); len(parts) == 2 {
+		domain = "@" + parts[1]
+	}
+	discord.Notify(ctx, "🎉 New User Registered!", "A new user just completed the signup flow and an email verification link was sent to `"+domain+"`.", 3066993) // Green color
 
 	// Fallback for local development
 	if config.Cfg.Env == "development" {

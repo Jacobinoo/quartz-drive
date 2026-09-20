@@ -28,6 +28,28 @@ func compose(ctx context.Context, composeFile, envFile string, args ...string) e
 	return nil
 }
 
+// dockerAutoLogin attempts to log into Docker Hub if DOCKERHUB_USERNAME and DOCKERHUB_TOKEN are set in the environment.
+func dockerAutoLogin(ctx context.Context, log *slog.Logger) {
+	username := os.Getenv("DOCKERHUB_USERNAME")
+	token := os.Getenv("DOCKERHUB_TOKEN")
+
+	if username == "" || token == "" {
+		return // Silently skip if no credentials provided
+	}
+
+	log.Info("Found Docker Hub credentials, attempting automatic login...")
+
+	cmd := exec.CommandContext(ctx, "docker", "login", "--username", username, "--password-stdin")
+	cmd.Stdin = strings.NewReader(token)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Warn("Failed to automatically log into Docker Hub", "error", err, "output", strings.TrimSpace(string(out)))
+	} else {
+		log.Info("Successfully logged into Docker Hub")
+	}
+}
+
 // listServiceContainerIDs returns the full container IDs currently
 // running for a given compose service. Returns nil (not an error)
 // if no containers are running yet.

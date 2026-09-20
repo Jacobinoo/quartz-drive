@@ -32,15 +32,8 @@ func (d *Deployer) Run(ctx context.Context) error {
 	//    have access to variables like DOMAIN_NAME, ACME_EMAIL, etc.
 	//    Resolve the env file path relative to the compose file's directory,
 	//    since both files live together on the server.
-	if d.cfg.EnvFile != "" {
-		envPath := d.cfg.EnvFile
-		if !filepath.IsAbs(envPath) {
-			envPath = filepath.Join(filepath.Dir(d.cfg.ComposeFile), envPath)
-		}
-		if err := loadEnvFile(envPath); err != nil {
-			return fmt.Errorf("loading env file %q: %w", envPath, err)
-		}
-		d.log.Info("Env file loaded", "path", envPath)
+	if err := d.loadEnv(); err != nil {
+		return err
 	}
 
 	// 1b. Set DEPLOY_TAG so docker-compose.prod.yml uses the correct image tag.
@@ -262,4 +255,19 @@ func loadEnvFile(path string) error {
 	}
 
 	return scanner.Err()
+}
+
+func (d *Deployer) loadEnv() error {
+	if d.cfg.EnvFile == "" {
+		return nil
+	}
+	envPath := d.cfg.EnvFile
+	if !filepath.IsAbs(envPath) {
+		envPath = filepath.Join(filepath.Dir(d.cfg.ComposeFile), envPath)
+	}
+	if err := loadEnvFile(envPath); err != nil {
+		return fmt.Errorf("loading env file %q: %w", envPath, err)
+	}
+	d.log.Info("Env file loaded", "path", envPath)
+	return nil
 }

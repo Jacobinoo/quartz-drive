@@ -27,6 +27,7 @@ type Config struct {
 	Watch         bool
 	WatchInterval time.Duration
 	GitHubRepo    string
+	GitHubToken   string
 }
 
 func main() {
@@ -43,6 +44,7 @@ func main() {
 	flag.BoolVar(&cfg.Watch, "watch", false, "Run in background and poll for new GitHub releases")
 	flag.DurationVar(&cfg.WatchInterval, "watch-interval", 3*time.Minute, "How often to poll GitHub for new releases")
 	flag.StringVar(&cfg.GitHubRepo, "github-repo", "Jacobinoo/quartz-drive", "GitHub repository to poll for latest release")
+	flag.StringVar(&cfg.GitHubToken, "github-token", os.Getenv("GITHUB_TOKEN"), "GitHub Personal Access Token (for private repos)")
 	flag.Parse()
 
 	if cfg.PrintVersion {

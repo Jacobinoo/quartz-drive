@@ -21,6 +21,14 @@ func (d *Deployer) Watch(ctx context.Context) error {
 	ticker := time.NewTicker(d.cfg.WatchInterval)
 	defer ticker.Stop()
 
+	// Load environment variables so we have DOCKERHUB_USERNAME and DOCKERHUB_TOKEN
+	if err := d.loadEnv(); err != nil {
+		d.log.Warn("Failed to load env file in watch mode", "error", err)
+	}
+
+	// Attempt automatic docker login
+	dockerAutoLogin(ctx, d.log)
+
 	// Initial poll immediately
 	d.pollLatestRelease(ctx)
 
@@ -41,6 +49,10 @@ func (d *Deployer) pollLatestRelease(ctx context.Context) {
 	if err != nil {
 		d.log.Error("Failed to create request for GitHub releases", "error", err)
 		return
+	}
+
+	if d.cfg.GitHubToken != "" {
+		req.Header.Set("Authorization", "Bearer "+d.cfg.GitHubToken)
 	}
 
 	resp, err := http.DefaultClient.Do(req)

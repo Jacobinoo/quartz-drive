@@ -10,8 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: 'write'
 
     steps:
       - name: Check out code
@@ -62,7 +61,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Create GitHub Pre-Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           prerelease: true

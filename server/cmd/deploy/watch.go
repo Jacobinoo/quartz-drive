@@ -122,16 +122,24 @@ func (d *Deployer) pollLatestRelease(ctx context.Context) {
 	oldTag := d.cfg.DeployTag
 	d.cfg.DeployTag = latestTag
 
+	// Grab webhook URL, fallback to env just in case loadEnv populated it after flag parsing
+	webhook := d.cfg.WebhookURL
+	if webhook == "" {
+		webhook = os.Getenv("WEBHOOK_URL")
+	}
+
 	if err := d.Run(ctx); err != nil {
 		d.log.Error("Deployment failed for new release", "tag", latestTag, "error", err)
 		// Write to failed state to prevent infinite crash loop
 		d.writeLocalState(".qdeploy_failed", latestTag)
+		notifyDiscord(ctx, webhook, d.cfg.GitHubRepo, latestTag, err, d.log)
 	} else {
 		d.log.Info("Deployment succeeded for new release", "tag", latestTag)
 		// Write to success state
 		d.writeLocalState(".qdeploy_version", latestTag)
 		// Clear failed state just in case
 		_ = os.Remove(".qdeploy_failed")
+		notifyDiscord(ctx, webhook, d.cfg.GitHubRepo, latestTag, nil, d.log)
 	}
 
 	// Restore original

@@ -28,6 +28,7 @@ type Config struct {
 	WatchInterval time.Duration
 	GitHubRepo    string
 	GitHubToken   string
+	WebhookURL    string
 }
 
 func main() {
@@ -45,6 +46,7 @@ func main() {
 	flag.DurationVar(&cfg.WatchInterval, "watch-interval", 3*time.Minute, "How often to poll GitHub for new releases")
 	flag.StringVar(&cfg.GitHubRepo, "github-repo", "Jacobinoo/quartz-drive", "GitHub repository to poll for latest release")
 	flag.StringVar(&cfg.GitHubToken, "github-token", os.Getenv("GITHUB_TOKEN"), "GitHub Personal Access Token (for private repos)")
+	flag.StringVar(&cfg.WebhookURL, "webhook-url", os.Getenv("WEBHOOK_URL"), "Discord/Slack Webhook URL for deployment alerts")
 	flag.Parse()
 
 	if cfg.PrintVersion {

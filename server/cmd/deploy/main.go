@@ -23,6 +23,10 @@ type Config struct {
 	HealthTimeout time.Duration
 	DryRun        bool
 	PrintVersion  bool
+
+	Watch         bool
+	WatchInterval time.Duration
+	GitHubRepo    string
 }
 
 func main() {
@@ -35,6 +39,10 @@ func main() {
 	flag.DurationVar(&cfg.HealthTimeout, "timeout", 90*time.Second, "Max time to wait for new container to become healthy")
 	flag.BoolVar(&cfg.DryRun, "dry-run", false, "Preview what would happen without making any changes")
 	flag.BoolVar(&cfg.PrintVersion, "version", false, "Print version and exit")
+
+	flag.BoolVar(&cfg.Watch, "watch", false, "Run in background and poll for new GitHub releases")
+	flag.DurationVar(&cfg.WatchInterval, "watch-interval", 3*time.Minute, "How often to poll GitHub for new releases")
+	flag.StringVar(&cfg.GitHubRepo, "github-repo", "Jacobinoo/quartz-drive", "GitHub repository to poll for latest release")
 	flag.Parse()
 
 	if cfg.PrintVersion {
@@ -53,8 +61,16 @@ func main() {
 	defer cancel()
 
 	d := &Deployer{cfg: cfg, log: log}
-	if err := d.Run(ctx); err != nil {
-		log.Error("Deployment failed", "error", err)
-		os.Exit(1)
+
+	if cfg.Watch {
+		if err := d.Watch(ctx); err != nil {
+			log.Error("Watch mode failed", "error", err)
+			os.Exit(1)
+		}
+	} else {
+		if err := d.Run(ctx); err != nil {
+			log.Error("Deployment failed", "error", err)
+			os.Exit(1)
+		}
 	}
 }

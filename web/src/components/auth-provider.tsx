@@ -61,7 +61,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         // SESSION_EXPIRED = server explicitly rejected the session (401/403).
-        // Force a full sign-out.
+        // Force a full sign-out. Use hard navigation to guarantee redirect
+        // and keep the loading screen up (don't setIsBooting(false)) so the
+        // protected page never renders.
         if (err.message === "SESSION_EXPIRED") {
           console.warn("Session expired (server returned 401/403). Signing out.");
           if (publicPaths.includes(pathname)) {
@@ -71,8 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setIsBooting(false);
           } else {
             await signOut();
-            router.push("/signin");
-            setIsBooting(false);
+            window.location.href = "/signin";
           }
           return;
         }

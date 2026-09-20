@@ -394,6 +394,17 @@ func (h *Handler) RecoveryComplete(w http.ResponseWriter, r *http.Request) error
 				return err
 			}
 		}
+
+		// Revoke ALL existing sessions for this user.
+		// A password reset is a destructive auth event — all other devices
+		// must be forcefully logged out so they can't use stale credentials.
+		if err := tx.Where("user_id = ?", session.UserID).Delete(&model.GormRefreshToken{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ?", session.UserID).Delete(&model.Session{}).Error; err != nil {
+			return err
+		}
+
 		return nil
 	})
 

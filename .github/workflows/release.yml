@@ -93,26 +93,35 @@ jobs:
         run: pipx install numpy
 
       - name: Copy deploy artifacts to server (via IAP)
+        env:
+          CLOUDSDK_PYTHON_SITEPACKAGES: "1"
         run: |
           gcloud compute scp qdeploy server/docker-compose.prod.yml \
-            ${{ secrets.SERVER_USERNAME }}@${{ secrets.GCP_VM_INSTANCE_NAME }}:~/quartz-drive/ \
+            ${{ secrets.GCP_VM_INSTANCE_NAME }}::/tmp/ \
             --zone=${{ secrets.GCP_ZONE }} \
             --tunnel-through-iap \
             --strict-host-key-checking=no
 
       - name: Deploy release (via IAP)
+        env:
+          CLOUDSDK_PYTHON_SITEPACKAGES: "1"
         run: |
-          gcloud compute ssh ${{ secrets.SERVER_USERNAME }}@${{ secrets.GCP_VM_INSTANCE_NAME }} \
+          gcloud compute ssh ${{ secrets.GCP_VM_INSTANCE_NAME }} \
             --zone=${{ secrets.GCP_ZONE }} \
             --tunnel-through-iap \
             --strict-host-key-checking=no
             --command="
               set -euo pipefail
-              cd ~/quartz-drive
+          
+              sudo mv /tmp/qdeploy /tmp/docker-compose.prod.yml /home/kuba/quartz-drive/
+              sudo chown kuba:kuba /home/kuba/quartz-drive/qdeploy /home/kuba/quartz-drive/docker-compose.prod.yml
+          
+              sudo -u kuba bash -c '
+              cd /home/kuba/quartz-drive
               chmod +x qdeploy
           
               ./qdeploy \
-                -f server/docker-compose.prod.yml \
+                -f docker-compose.prod.yml \
                 -env-file .env.production \
                 -service quartz-server \
                 -tag ${{ github.ref_name }} \

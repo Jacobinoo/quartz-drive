@@ -93,6 +93,7 @@ func monitorResources(ctx context.Context, cfg *Config, log *slog.Logger) {
 	defer ticker.Stop()
 
 	highMemCount := 0
+	highLoadCount := 0
 
 	for {
 		select {
@@ -103,11 +104,11 @@ func monitorResources(ctx context.Context, cfg *Config, log *slog.Logger) {
 			memTotal, memAvail := getMemoryStats()
 			if memTotal > 0 {
 				usedPercent := 100.0 * (1.0 - float64(memAvail)/float64(memTotal))
-				if usedPercent > 85.0 {
+				if usedPercent > 80.0 {
 					highMemCount++
-					if highMemCount >= 5 {
+					if highMemCount >= 2 {
 						log.Warn("High memory usage detected!", "percent", usedPercent)
-						notifyDiscord(ctx, cfg.WebhookURL, "Infrastructure Warning", "Resource Alert", fmt.Errorf("High Memory Usage: %.1f%% for 5 minutes", usedPercent), log)
+						notifyDiscord(ctx, cfg.WebhookURL, "Infrastructure Warning", "Resource Alert", fmt.Errorf("High Memory Usage: %.1f%% for 2 minutes", usedPercent), log)
 						highMemCount = 0 // Reset to avoid spam
 					}
 				} else {
@@ -115,9 +116,34 @@ func monitorResources(ctx context.Context, cfg *Config, log *slog.Logger) {
 				}
 			}
 
-			// TODO: Add simple load average check
+			// 2. Check Load Average using /proc/loadavg
+			loadAvg, err := getLoadAvg()
+			if err == nil {
+				if loadAvg > 1.0 {
+					highLoadCount++
+					if highLoadCount >= 2 {
+						log.Warn("High CPU load detected!", "load1m", loadAvg)
+						notifyDiscord(ctx, cfg.WebhookURL, "Infrastructure Warning", "Resource Alert", fmt.Errorf("High CPU Load Average: %.2f for 2 minutes", loadAvg), log)
+						highLoadCount = 0 // Reset to avoid spam
+					}
+				} else {
+					highLoadCount = 0
+				}
+			}
 		}
 	}
+}
+
+func getLoadAvg() (float64, error) {
+	data, err := os.ReadFile("/proc/loadavg")
+	if err != nil {
+		return 0, err
+	}
+	fields := strings.Fields(string(data))
+	if len(fields) < 1 {
+		return 0, fmt.Errorf("invalid format")
+	}
+	return strconv.ParseFloat(fields[0], 64)
 }
 
 func getMemoryStats() (total, available uint64) {

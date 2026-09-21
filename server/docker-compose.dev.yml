@@ -19,7 +19,6 @@ services:
         condition: service_healthy
       seaweedfs:
         condition: service_started
-    platform: linux/arm64
 
   postgres:
     image: postgres:18-alpine

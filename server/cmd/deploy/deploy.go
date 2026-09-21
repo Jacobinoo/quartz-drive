@@ -36,6 +36,9 @@ func (d *Deployer) Run(ctx context.Context) error {
 		return err
 	}
 
+	// Attempt automatic docker login using credentials from .env
+	dockerAutoLogin(ctx, d.log)
+
 	// 1b. Set DEPLOY_TAG so docker-compose.prod.yml uses the correct image tag.
 	//     The compose file uses ${DEPLOY_TAG:-latest}, so if -tag is empty we
 	//     leave the env var unset and Compose falls back to :latest automatically.

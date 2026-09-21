@@ -207,10 +207,18 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
+	version := "unknown"
+	commitHash := "unknown"
+	buildNumber := "unknown"
+
 	buildVerArr := strings.Split(config.BuildVersion, "-")
-	version := buildVerArr[0]
-	commitHash := buildVerArr[1] + "-" + buildVerArr[2]
-	buildNumber := buildVerArr[4]
+	if len(buildVerArr) >= 5 {
+		version = buildVerArr[0]
+		commitHash = buildVerArr[1] + "-" + buildVerArr[2]
+		buildNumber = buildVerArr[4]
+	} else if config.BuildVersion != "" {
+		version = config.BuildVersion
+	}
 
 	response := struct {
 		Service            string

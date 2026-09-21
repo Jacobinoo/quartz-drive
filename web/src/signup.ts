@@ -24,6 +24,10 @@ export async function signUp(email: string, password: string, captchaToken:strin
     });
 
     const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error(data.Message || "An error occurred during signup");
+    }
     let registrationResponse: string;
     let registrationNonce: string;
 

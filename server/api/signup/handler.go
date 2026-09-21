@@ -67,6 +67,11 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("some fields are missing", fmt.Errorf("some fields are missing"))
 	}
 
+	// Kill Switch: Pause signups via Redis
+	if h.redis.Get(r.Context(), "admin:disable_registration").Val() == "true" {
+		return apperrors.NewForbidden("Registrations are currently disabled. Please check back later.", nil)
+	}
+
 	regReqBytes, err := base64.RawURLEncoding.DecodeString(m1.RegistrationRequest)
 	if err != nil {
 		slog.WarnContext(r.Context(), "registration request base64 decode error",
@@ -201,6 +206,10 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 	if err := json.NewDecoder(r.Body).Decode(&m3); err != nil {
 		slog.WarnContext(r.Context(), "decode m3 payload error", "error", err)
 		return apperrors.NewBadRequest("invalid request", err)
+	}
+
+	if h.redis.Get(r.Context(), "admin:disable_registration").Val() == "true" {
+		return apperrors.NewForbidden("Registrations are currently disabled. Please check back later.", nil)
 	}
 
 	err := validateM3Payload(&m3)

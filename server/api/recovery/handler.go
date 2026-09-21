@@ -43,6 +43,11 @@ func (h *Handler) RecoveryStart(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
+	// Kill Switch: Pause account recovery via Redis
+	if h.redis.Get(r.Context(), "admin:disable_recovery").Val() == "true" {
+		return apperrors.NewForbidden("Account recovery is currently disabled. Please check back later.", nil)
+	}
+
 	var req dto.RecoveryStartRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return apperrors.NewBadRequest("invalid request body", err)

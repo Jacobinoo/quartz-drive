@@ -72,7 +72,7 @@ export function ForgotPasswordForm({
 
       if (!res.ok) {
         const body = await res.json();
-        throw new Error(body.message || "Failed to find account");
+        throw new Error(body.Message || body.message || "Failed to find account");
       }
 
       const data = await res.json();
@@ -438,7 +438,7 @@ export function ForgotPasswordForm({
                           } else {
                             const body = res.json()
                             body.then((d) => {
-                              setError(`Failed to send reset link: ${d.message}`);
+                              setError(`Failed to send reset link: ${d.Message || d.message || "Unknown error"}`);
                               turnstileRef.current?.reset();
                             })
                           }

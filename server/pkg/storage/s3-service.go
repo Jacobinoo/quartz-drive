@@ -133,7 +133,7 @@ func (s *S3Service) GenerateUploadUrl(ctx context.Context, objectKey string, exp
 // Funkcja generująca Download Presigned URLs
 func (s *S3Service) GenerateDownloadUrls(ctx context.Context, objectKeys []string) ([]string, error) {
 	var urls []string
-	expiry := time.Minute * 10 // Safe expiry for downloads
+	expiry := time.Minute * 1 // Safe expiry for downloads
 
 	var clientToUse *minio.Client = s.client
 	if config.Cfg.Env == "development" && s.devPresignClient != nil {

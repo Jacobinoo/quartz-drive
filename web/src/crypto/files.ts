@@ -13,7 +13,9 @@ export async function fetchFiles(folderId?: string) {
 }
 
 export async function getDownloadUrls(nodeId: string): Promise<string[]> {
-    const res = await customFetch(`${config.apiUrl}/v1/files/download?nodeId=${nodeId}`, { method: "GET" });
+    const res = await customFetch(`${config.apiUrl}/v1/files/download`, { method: "POST", body: JSON.stringify({
+            nodeId,
+        }) });
     if (!res.ok) throw new Error("Failed to get download URLs");
 
     const data = await res.json();

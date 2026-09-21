@@ -26,3 +26,14 @@ type FileListResponseItem struct {
 	AuthorEmail            string `json:"authorEmail"`
 	AuthorSigningPublicKey string `json:"authorSigningPublicKey"`
 }
+
+type DownloadUrlsRequest struct {
+	NodeID       string `json:"nodeId"`
+	ChunkIndices []int  `json:"chunkIndices;omitempty"`
+}
+
+type DownloadUrlResponseItem struct {
+	Index     int    `json:"index"`
+	URL       string `json:"url"`
+	SizeBytes int64  `json:"sizeBytes"`
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -757,7 +758,22 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("missing nodeId", nil)
 	}
 
-	// 1. Verify ownership/access here later. For MVP, we just fetch blocks:
+	userIDStr, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
+	if !ok {
+		return apperrors.NewUnauthorized("unauthorized", nil)
+	}
+	userID, err := uuid.Parse(userIDStr.String())
+	if err != nil {
+		return apperrors.NewUnauthorized("unauthorized", err)
+	}
+
+	if err := h.db.Where("node_id = ? and owner_id = ?", nodeID, userID).First(&model.Node{}).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewForbidden("insufficient permissions to reach this node", nil)
+		}
+		return apperrors.NewInternal(err)
+	}
+
 	var blocks []model.FileBlock
 	if err := h.db.Where("node_id = ?", nodeID).Order("index asc").Find(&blocks).Error; err != nil {
 		return apperrors.NewNotFound("file blocks not found", nil)
@@ -781,6 +797,191 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(map[string]interface{}{
 		"presignedUrls": urls,
+	})
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+	return nil
+}
+
+func (h *Handler) DownloadUrls(w http.ResponseWriter, r *http.Request) error {
+	if r.Method != http.MethodPost {
+		return apperrors.NewMethodNotAllowed("method not allowed")
+	}
+
+	var req dto.DownloadUrlsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return apperrors.NewBadRequest("invalid JSON payload", err)
+	}
+
+	if req.NodeID == "" {
+		return apperrors.NewBadRequest("missing nodeId", nil)
+	}
+
+	var useOldCode bool
+
+	if len(req.ChunkIndices) == 0 {
+		//TODO: for now if chunk indices are empty, we will just return all urls (using old code)
+		//return apperrors.NewBadRequest("chunkIndices cannot be empty", nil)
+		useOldCode = true
+	} else {
+		useOldCode = false
+	}
+
+	if useOldCode {
+
+		userIDStr, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
+		if !ok {
+			return apperrors.NewUnauthorized(userIDStr.String(), nil)
+		}
+		userID, err := uuid.Parse(userIDStr.String())
+		if err != nil {
+			return apperrors.NewUnauthorized("unauthorized", err)
+		}
+
+		if err := h.db.Where("id = ? and owner_id = ?", req.NodeID, userID).First(&model.Node{}).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return apperrors.NewForbidden("insufficient permissions to reach this node", nil)
+			}
+			return apperrors.NewInternal(err)
+		}
+
+		var blocks []model.FileBlock
+		if err := h.db.Where("node_id = ?", req.NodeID).Order("index asc").Find(&blocks).Error; err != nil {
+			return apperrors.NewNotFound("file blocks not found", nil)
+		}
+
+		if len(blocks) == 0 {
+			return apperrors.NewNotFound("no chunks found for this file", nil)
+		}
+
+		// 2. Extract Object Keys and Generate URLs
+		var objectKeys []string
+		for _, block := range blocks {
+			objectKeys = append(objectKeys, block.ObjectKey)
+		}
+
+		urls, err := h.storage.GenerateDownloadUrls(r.Context(), objectKeys)
+		if err != nil {
+			return apperrors.NewInternal(fmt.Errorf("failed to generate download links"))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		err = json.NewEncoder(w).Encode(map[string]interface{}{
+			"presignedUrls": urls,
+		})
+		if err != nil {
+			return apperrors.NewInternal(err)
+		}
+
+		return nil
+	}
+
+	if len(req.ChunkIndices) > 10 {
+		return apperrors.NewBadRequest("maximum 10 chunks allowed per request", nil)
+	}
+
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
+	if !ok {
+		return apperrors.NewUnauthorized("unauthorized", nil)
+	}
+
+	// Rate limit: 4 requests per minute per (userID, nodeID)
+	reqRateKey := fmt.Sprintf("rl:dl:req:1m:%s:%s", userID.String(), req.NodeID)
+	reqCount, err := h.rdb.Incr(r.Context(), reqRateKey).Result()
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+	if reqCount == 1 {
+		h.rdb.Expire(r.Context(), reqRateKey, time.Minute)
+	}
+	if reqCount > 4 {
+		return apperrors.NewRateLimited("too many download requests for this file. please slow down.")
+	}
+
+	if err := h.db.Where("id = ? and owner_id = ?", req.NodeID, userID).First(&model.Node{}).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewForbidden("insufficient permissions to reach this node", nil)
+		}
+		return apperrors.NewInternal(err)
+	}
+
+	// Fetch requested blocks
+	var blocks []model.FileBlock
+	if err := h.db.Where("id = ? AND index IN ?", req.NodeID, req.ChunkIndices).Find(&blocks).Error; err != nil {
+		return apperrors.NewInternal(err)
+	}
+	if len(blocks) == 0 {
+		return apperrors.NewNotFound("no matching chunks found for this file", nil)
+	}
+
+	// Verify all requested indices were found
+	foundIndices := make(map[int]bool)
+	for _, b := range blocks {
+		foundIndices[b.Index] = true
+	}
+	for _, idx := range req.ChunkIndices {
+		if !foundIndices[idx] {
+			return apperrors.NewBadRequest(fmt.Sprintf("chunk index %d not found", idx), nil)
+		}
+	}
+
+	// Chunk-level anti-replay limit
+	hash1h := fmt.Sprintf("dl:stats:1h:%s:%s", req.NodeID, userID.String())
+	hash24h := fmt.Sprintf("dl:stats:24h:%s:%s", req.NodeID, userID.String())
+
+	pipe := h.rdb.Pipeline()
+	cmds1h := make(map[int]*redis.IntCmd)
+	cmds24h := make(map[int]*redis.IntCmd)
+
+	for _, idx := range req.ChunkIndices {
+		field := fmt.Sprintf("chunk:%d", idx)
+		cmds1h[idx] = pipe.HIncrBy(r.Context(), hash1h, field, 1)
+		cmds24h[idx] = pipe.HIncrBy(r.Context(), hash24h, field, 1)
+	}
+
+	pipe.Expire(r.Context(), hash1h, time.Hour)
+	pipe.Expire(r.Context(), hash24h, 24*time.Hour)
+
+	_, err = pipe.Exec(r.Context())
+	if err != nil {
+		return apperrors.NewInternal(err)
+	}
+
+	for idx, cmd := range cmds1h {
+		if count, err := cmd.Result(); err == nil && count > 3 {
+			return apperrors.NewRateLimited(fmt.Sprintf("chunk %d requested too many times in the last hour", idx))
+		}
+	}
+	for idx, cmd := range cmds24h {
+		if count, err := cmd.Result(); err == nil && count > 9 {
+			return apperrors.NewRateLimited(fmt.Sprintf("chunk %d requested too many times in the last 24 hours", idx))
+		}
+	}
+
+	// 2. Extract Object Keys and Generate URLs
+	var objectKeys []string
+	for _, block := range blocks {
+		objectKeys = append(objectKeys, block.ObjectKey)
+	}
+
+	urls, err := h.storage.GenerateDownloadUrls(r.Context(), objectKeys)
+	if err != nil {
+		return apperrors.NewInternal(fmt.Errorf("failed to generate download links"))
+	}
+
+	var responseChunks []dto.DownloadUrlResponseItem
+	for i, block := range blocks {
+		responseChunks = append(responseChunks, dto.DownloadUrlResponseItem{
+			Index:     block.Index,
+			URL:       urls[i],
+			SizeBytes: int64(block.Size),
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(map[string]interface{}{
+		"chunks": responseChunks,
 	})
 	if err != nil {
 		return apperrors.NewInternal(err)

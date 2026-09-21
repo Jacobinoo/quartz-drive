@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -757,7 +758,22 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("missing nodeId", nil)
 	}
 
-	// 1. Verify ownership/access here later. For MVP, we just fetch blocks:
+	userIDStr, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
+	if !ok {
+		return apperrors.NewUnauthorized("unauthorized", nil)
+	}
+	userID, err := uuid.Parse(userIDStr.String())
+	if err != nil {
+		return apperrors.NewUnauthorized("unauthorized", err)
+	}
+
+	if err := h.db.Where("id = ? and owner_id = ?", nodeID, userID).First(&model.Node{}).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewForbidden("insufficient permissions to reach this node", nil)
+		}
+		return apperrors.NewInternal(err)
+	}
+
 	var blocks []model.FileBlock
 	if err := h.db.Where("node_id = ?", nodeID).Order("index asc").Find(&blocks).Error; err != nil {
 		return apperrors.NewNotFound("file blocks not found", nil)

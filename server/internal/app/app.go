@@ -249,13 +249,8 @@ func healthHandler(state *ServerState) http.HandlerFunc {
 
 		status := "healthy"
 
-		// Check Database
-		sqlDB, err := state.DB.DB()
-		if err != nil || sqlDB.Ping() != nil {
-			status = "unhealthy (db)"
-			w.WriteHeader(http.StatusServiceUnavailable)
-		} else if state.Redis.Ping(r.Context()).Err() != nil {
-			// Check Redis/Valkey
+		// Check Redis/Valkey
+		if state.Redis.Ping(r.Context()).Err() != nil {
 			status = "unhealthy (redis)"
 			w.WriteHeader(http.StatusServiceUnavailable)
 		} else {

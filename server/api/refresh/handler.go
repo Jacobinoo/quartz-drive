@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -56,8 +57,20 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 	refreshTokenHash := hex.EncodeToString(refreshTokenHashBytes[:])
 
 	var storedToken model.GormRefreshToken
-	h.db.Where("token_hash = ?", refreshTokenHash).First(&storedToken)
-	h.db.Preload("Session").Where("token_hash = ?", refreshTokenHash).First(&storedToken)
+	err = h.db.Where("token_hash = ?", refreshTokenHash).First(&storedToken).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewUnauthorized("unauthorized", err)
+		}
+		return apperrors.NewInternal(err)
+	}
+	err = h.db.Preload("Session").Where("token_hash = ?", refreshTokenHash).First(&storedToken).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewUnauthorized("unauthorized", err)
+		}
+		return apperrors.NewInternal(err)
+	}
 
 	slog.Debug("Stored Token:", storedToken.TokenHash)
 	slog.Debug("Provided token hash:", refreshTokenHash)

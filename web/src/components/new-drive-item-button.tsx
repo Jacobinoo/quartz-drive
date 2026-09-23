@@ -119,47 +119,61 @@ export function NewDriveItemButton(){
           );
           const signedEncryptedNodePassphrase = sodium.to_base64(signature);
 
-          const res: {
-            uploadId: UUID,
-            nodeId: UUID,
-            expiresAt: number
-          } | null = await initFileUpload({
-            totalFileSize: declaredFileSize,
-            totalChunks: chunks,
-
-            parentNodeId: parentNodeId,
-            encryptedName: sodium.to_base64(encryptedName),
-            nameNonce: sodium.to_base64(nameNonce),
-            encryptedNodePassphrase: sodium.to_base64(encryptedNodePassphrase),
-            signedEncryptedNodePassphrase: signedEncryptedNodePassphrase,
-            nodePublicKey: nodePublicKey,
-            wrappedNodeKey: wrappedNodeKey,
-            nodePrivNonce: nodePrivNonce,
-
-            encryptedMetadata: sodium.to_base64(encryptedMetadata),
-            metadataNonce: sodium.to_base64(metadataNonce),
-            })
-
-          if (res == null) {
-            throw new Error("init file upload failed")
-          }
-
-          console.log(`file "${file.name}" (size: ${file.size}) will be split by ${chunks} chunks, will request presigned urls for upload ${res.uploadId} with nodeID ${res.nodeId}, session will expire on ${res.expiresAt}`);
-
-
-            // 3. Dodanie do reaktywnego Store'a
-            console.log("will be adding to queue")
-          addToQueue({
+          const jobId = addToQueue({
             file,
-            uploadId: res.uploadId,
-            nodeId: res.nodeId,
+            uploadId: "", // Will be filled after init
+            nodeId: "", // Will be filled after init
             fileKey,
             parentNodeId,
             encryptedName: sodium.to_base64(encryptedName),
             totalChunks: chunks,
             nameNonce: sodium.to_base64(nameNonce),
             encryptedNodePassphrase: sodium.to_base64(encryptedNodePassphrase)
-          });
+          }, 'INIT');
+
+          try {
+              const res: {
+                uploadId: UUID,
+                nodeId: UUID,
+                expiresAt: number
+              } | null = await initFileUpload({
+                totalFileSize: declaredFileSize,
+                totalChunks: chunks,
+
+                parentNodeId: parentNodeId,
+                encryptedName: sodium.to_base64(encryptedName),
+                nameNonce: sodium.to_base64(nameNonce),
+                encryptedNodePassphrase: sodium.to_base64(encryptedNodePassphrase),
+                signedEncryptedNodePassphrase: signedEncryptedNodePassphrase,
+                nodePublicKey: nodePublicKey,
+                wrappedNodeKey: wrappedNodeKey,
+                nodePrivNonce: nodePrivNonce,
+
+                encryptedMetadata: sodium.to_base64(encryptedMetadata),
+                metadataNonce: sodium.to_base64(metadataNonce),
+              })
+
+              if (res == null) {
+                throw new Error("init file upload failed")
+              }
+
+              console.log(`file "${file.name}" initialized. NodeID: ${res.nodeId}`);
+
+              // 3. Mark as IDLE so the background worker picks it up
+              useUploadStore.getState().updateJob(jobId, {
+                  uploadId: res.uploadId,
+                  nodeId: res.nodeId,
+                  status: 'IDLE'
+              });
+          } catch (e: any) {
+              if (e.message === "QUOTA_EXCEEDED") {
+                  useUploadStore.getState().updateJob(jobId, { status: 'ERROR', errorMessage: "Not enough storage space" });
+                  // Don't break, allow the user to see which files failed
+              } else {
+                  console.error("Failed to init upload for file", file.name, e);
+                  useUploadStore.getState().updateJob(jobId, { status: 'ERROR', errorMessage: "Initialization failed" });
+              }
+          }
         }
     };
     const handleCreateFolder = async () => {
@@ -173,26 +187,25 @@ export function NewDriveItemButton(){
             if (!currentFolder) throw new Error("Drive keys not initialized");
 
 
-            const token = getAccessToken(); // Replace with however you get your token
+            const token = getAccessToken();
             if (!token) throw new Error("No token");
-            // 1. Split the token and decode the middle part (the payload)
+
             const payloadBase64 = token.split('.')[1];
             const decodedPayload = JSON.parse(atob(payloadBase64));
 
-            // For MVP, we'll extract the author ID from the token (like you did for email earlier!)
-            // Or you can hardcode a UUID if you haven't wired that up yet.
-            const authorId = decodedPayload.sub; // Replace with your real User UUID!
 
-            // Generate the massive crypto payload
+            const authorId = decodedPayload.sub;
+
+
             const payload = await createEncryptedFolderPayload(
                 folderName,
-                currentFolder.nodeId, // Parent is currently the Root
+                currentFolder.nodeId,
                 currentFolder.publicKey,
                 currentFolder.privateKey,
                 authorId
             );
 
-            // Send it to the Go backend
+
             const res = await customFetch(`${config.apiUrl}/v1/files/folder`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

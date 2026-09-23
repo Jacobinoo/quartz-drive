@@ -44,6 +44,21 @@ export async function initFileUpload(payload: {
     }),
   })
 
+  if (!res.ok) {
+    let code = "UNKNOWN_ERROR";
+    try {
+        const errJson = await res.json();
+        code = errJson.code;
+    } catch (e) {
+        // ignore JSON parse error
+    }
+    
+    if (res.status === 422 && code === "QUOTA_EXCEEDED") {
+        throw new Error("QUOTA_EXCEEDED");
+    }
+    throw new Error(`Upload init failed with status: ${res.status}`);
+  }
+
   const uploadRes = await res.json();
   if (uploadRes.uploadId && uploadRes.nodeId && uploadRes.expiresAt) {
     return {

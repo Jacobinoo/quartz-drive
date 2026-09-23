@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TransferList } from "@/components/transfer-list";
 import { UploadManager } from "@/components/upload-manager";
+import { DownloadManager } from "@/components/download-manager";
 import { Button } from "@/components/ui/button";
 import { FormEvent, useEffect, useState } from "react";
 import { redirect, useRouter } from "next/navigation";
@@ -181,6 +182,7 @@ export default function DriveHomePage() {
           {/*<div className="bg-muted/50 min-h-[100vh] flex-1 rounded-xl md:min-h-min">*/}
           {/*</div>*/}
           <UploadManager />
+          <DownloadManager />
           <TransferList />
         </div>
       </>

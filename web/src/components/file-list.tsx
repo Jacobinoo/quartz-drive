@@ -23,6 +23,7 @@ import { formatBytes } from "@/lib/utils/size";
 import { addSingleSearchItem, removeSearchItem } from "@/lib/SearchIndexStore";
 import { FilePreviewModal } from "./file-preview-modal";
 import { ShareModal } from "./share-modal";
+import { useDownloadStore } from "@/hooks/use-download-store";
 import { quantumSeal, quantumSealOpen } from "@/crypto/kem";
 
 export function FileList() {
@@ -451,21 +452,27 @@ const handleDownload = async (file: any, withResult = false, onProgress?: (perce
         const currentFolder = useDriveStore.getState().getCurrentFolder();
         if (!currentFolder) throw new Error("Drive keys not initialized");
 
-
         const fileKey = await quantumSealOpen(
             sodium.from_base64(file.encryptedNodePassphrase),
-            
             currentFolder.privateKey
         );
 
         if (!fileKey) throw new Error("Failed to unwrap fileKey!");
 
-        console.log("Fetching S3 URLs...");
+        if (!withResult) {
+            useDownloadStore.getState().addToQueue({
+                file,
+                nodeId: file.nodeId,
+                fileKey
+            });
+            return;
+        }
+
+        console.log("Fetching S3 URLs for preview...");
         const urls = await getDownloadUrls(file.nodeId);
 
-        console.log("Starting Decryption Worker...");
+        console.log("Starting Decryption Worker for preview...");
       const worker = new Worker(new URL('@/workers/decrypt.worker.ts', import.meta.url));
-
 
       return await new Promise<string | void>((resolve, reject) => {
         worker.postMessage({ urls, fileKey, nodeId: file.nodeId });
@@ -484,26 +491,10 @@ const handleDownload = async (file: any, withResult = false, onProgress?: (perce
                 // 2. Create a temporary invisible Object URL
                 const downloadUrl = URL.createObjectURL(blob);
 
-                if (withResult) {
-                  console.log("Returning image url");
-                  worker.terminate();
-                  resolve(downloadUrl);
-                  return;
-                }
-
-                console.log("Triggering browser download...");
-                // 3. Create a temporary anchor tag to trigger the download
-                const a = document.createElement("a");
-                a.href = downloadUrl;
-                a.download = file.plaintextName; // Suggest the decrypted filename
-                document.body.appendChild(a);
-                a.click();
-
-                // 4. Clean up
-                a.remove();
-                URL.revokeObjectURL(downloadUrl);
-              worker.terminate();
-              resolve();
+                console.log("Returning image url");
+                worker.terminate();
+                resolve(downloadUrl);
+                return;
             }
             else if (e.data.type === 'ERROR') {
                 console.error("Worker error:", e.data.message);

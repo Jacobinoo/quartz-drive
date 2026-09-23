@@ -15,6 +15,7 @@ import (
 	"quartz/internal/model"
 	apperrors "quartz/pkg/app-errors"
 	"quartz/pkg/contextkeys"
+	"quartz/pkg/crypto"
 	"quartz/pkg/storage"
 	"time"
 
@@ -737,6 +738,12 @@ func (h *Handler) Files(w http.ResponseWriter, r *http.Request) error {
 			}
 		}
 
+		decryptedEmail, err := crypto.DecryptEmail(link.Author.EncryptedEmail)
+		emailStr := "Unknown"
+		if err == nil {
+			emailStr = string(decryptedEmail)
+		}
+
 		response = append(response, dto.FileListResponseItem{
 			NodeID:                        link.ChildNodeID.String(),
 			Type:                          string(link.ChildNode.Type),
@@ -756,7 +763,7 @@ func (h *Handler) Files(w http.ResponseWriter, r *http.Request) error {
 			EncryptedMetadata: link.ChildNode.EncryptedMetadata,
 			MetadataNonce:     link.ChildNode.MetadataNonce,
 
-			AuthorEmail:            link.Author.EncryptedEmail,
+			AuthorEmail:            emailStr,
 			AuthorSigningPublicKey: link.Author.KeyStore.AccountSigningPublicKey,
 		})
 	}
@@ -1297,6 +1304,12 @@ func (h *Handler) GetAllFiles(w http.ResponseWriter, r *http.Request) error {
 			childIDStr = link.ChildNodeID.String()
 		}
 
+		decryptedEmail, err := crypto.DecryptEmail(link.Author.EncryptedEmail)
+		emailStr := "Unknown"
+		if err == nil {
+			emailStr = string(decryptedEmail)
+		}
+
 		response = append(response, dto.FileListResponseItem{
 			NodeID:                        childIDStr,
 			ParentNodeID:                  parentIDStr, // <-- Now safe from panics!
@@ -1315,7 +1328,7 @@ func (h *Handler) GetAllFiles(w http.ResponseWriter, r *http.Request) error {
 			EncryptedMetadata: link.ChildNode.EncryptedMetadata,
 			MetadataNonce:     link.ChildNode.MetadataNonce,
 
-			AuthorEmail:            link.Author.EncryptedEmail,
+			AuthorEmail:            emailStr,
 			AuthorSigningPublicKey: link.Author.KeyStore.AccountSigningPublicKey,
 		})
 	}

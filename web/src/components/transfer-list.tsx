@@ -12,7 +12,7 @@ export function TransferList() {
 
     return (
         <div className="fixed bottom-4 right-4 w-80 bg-background border rounded-lg shadow-lg p-4">
-            <h3 className="font-bold mb-4">Transfery ({jobs.length})</h3>
+            <h3 className="font-bold mb-4">Transfers ({jobs.length})</h3>
 
             <div className="flex flex-col gap-3 max-h-64 overflow-y-auto">
                 {jobs.map((job) => (

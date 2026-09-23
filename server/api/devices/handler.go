@@ -3,7 +3,6 @@ package devices
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"quartz/internal/dto"
 	"quartz/internal/model"
@@ -29,27 +28,21 @@ func (h *Handler) RegisterDevice(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
-	// 1. Get the current User ID from your Auth Middleware Context!
-	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
-	slog.Debug("context2")
+	sessionID, ok := r.Context().Value(contextkeys.SessionIDKey).(uuid.UUID)
 	if !ok {
 		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
 
-	// 2. Decode the Payload
 	var req dto.RegisterDeviceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return apperrors.NewBadRequest("invalid json payload", err)
 	}
 
-	// 3. Find the most recent active session for this user
-	// (If you have a way to extract the exact Session ID from the JWT, use that instead of First!)
 	var session model.Session
-	if err := h.db.Where("user_id = ?", userID).Order("created_at desc").First(&session).Error; err != nil {
+	if err := h.db.Where("id = ?", sessionID).First(&session).Error; err != nil {
 		return apperrors.NewNotFound("no active session found", err)
 	}
 
-	// 4. Update the Session with the Ciphertext and Public Key!
 	session.DevicePublicKey = req.DevicePublicKey
 	session.WrappedAccountKeys = req.WrappedAccountKeys
 

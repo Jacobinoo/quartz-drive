@@ -682,15 +682,36 @@ func (h *Handler) Files(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 
-	// TODO: For MVP, we will fetch the dummy parent folder we used during upload:
-	// "229474bd-9982-4999-bbc7-9bcd8577791c"
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
+	if !ok {
+		return apperrors.NewUnauthorized("unauthorized", nil)
+	}
+
 	parentFolderID := r.URL.Query().Get("folderId")
 	if parentFolderID == "" {
 		// If no folderId is passed, fetch the root folder for this user!
-		// For now, grab the first Folder node:
-		var rootNode model.Node
-		h.db.Where("type = ?", model.NodeTypeFolder).First(&rootNode)
-		parentFolderID = rootNode.ID.String()
+		var shareMember model.ShareMember
+		err := h.db.Preload("Share").
+			Joins("JOIN shares ON shares.id = share_members.share_id").
+			Where("share_members.user_id = ? AND shares.type = ?", userID, model.ShareTypeDefault).
+			First(&shareMember).Error
+		if err != nil {
+			return apperrors.NewNotFound("share member not found", nil)
+		}
+
+		var rootLink model.Link
+		if err := h.db.Preload("ChildNode").Where("id = ?", shareMember.Share.TargetLinkID).First(&rootLink).Error; err != nil {
+			return apperrors.NewNotFound("root link not found", nil)
+		}
+		parentFolderID = rootLink.ChildNode.ID.String()
+	} else {
+		// Verify ownership/permissions for the provided folderId
+		if err := h.db.Where("id = ? and owner_id = ?", parentFolderID, userID).First(&model.Node{}).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return apperrors.NewForbidden("insufficient permissions to reach this node", nil)
+			}
+			return apperrors.NewInternal(err)
+		}
 	}
 
 	var links []model.Link
@@ -855,6 +876,20 @@ func (h *Handler) CreateFolder(w http.ResponseWriter, r *http.Request) error {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return apperrors.NewBadRequest("invalid request body", nil)
 	}
+
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
+	if !ok {
+		return apperrors.NewUnauthorized("unauthorized", nil)
+	}
+
+	// check if user has permissions to write to parent node
+	if err := h.db.Where("id = ? and owner_id = ?", req.Link.ParentNodeID, userID).First(&model.Node{}).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewForbidden("insufficient permissions to reach the provided parent node", nil)
+		}
+		return apperrors.NewInternal(err)
+	}
+
 	nodeUUID := uuid.New()
 	linkUUID := uuid.New()
 	// 1. Prepare the Folder Node
@@ -907,6 +942,19 @@ func (h *Handler) TrashFile(w http.ResponseWriter, r *http.Request) error {
 	nodeID := r.URL.Query().Get("nodeId")
 	parentFolderID := r.URL.Query().Get("parentFolderId")
 
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
+	if !ok {
+		return apperrors.NewUnauthorized("unauthorized", nil)
+	}
+
+	// check if user has permissions to trash the node
+	if err := h.db.Where("id = ? and owner_id = ?", nodeID, userID).First(&model.Node{}).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewForbidden("insufficient permissions to trash the provided node", nil)
+		}
+		return apperrors.NewInternal(err)
+	}
+
 	if nodeID == "" || parentFolderID == "" {
 		return apperrors.NewBadRequest("missing parameters", nil)
 	}
@@ -928,6 +976,19 @@ func (h *Handler) RestoreFile(w http.ResponseWriter, r *http.Request) error {
 
 	nodeID := r.URL.Query().Get("nodeId")
 	parentFolderID := r.URL.Query().Get("parentFolderId")
+
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
+	if !ok {
+		return apperrors.NewUnauthorized("unauthorized", nil)
+	}
+
+	// check if user has permissions to restore the node
+	if err := h.db.Where("id = ? and owner_id = ?", nodeID, userID).First(&model.Node{}).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewForbidden("insufficient permissions to restore the provided node", nil)
+		}
+		return apperrors.NewInternal(err)
+	}
 
 	// Restore the item itself AND all its trashed ancestor folders using a recursive CTE.
 	// This prevents the item from being stranded inside a still-trashed parent folder.
@@ -976,6 +1037,19 @@ func (h *Handler) RenameFile(w http.ResponseWriter, r *http.Request) error {
 	var req dto.RenameRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return apperrors.NewBadRequest("invalid body", nil)
+	}
+
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
+	if !ok {
+		return apperrors.NewUnauthorized("unauthorized", nil)
+	}
+
+	// check if user has permissions to rename the file
+	if err := h.db.Where("id = ? and owner_id = ?", nodeID, userID).First(&model.Node{}).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewForbidden("insufficient permissions to rename the file", nil)
+		}
+		return apperrors.NewInternal(err)
 	}
 
 	err := h.db.Model(&model.Link{}).
@@ -1130,6 +1204,27 @@ func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid request", nil)
 	}
 
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
+	if !ok {
+		return apperrors.NewUnauthorized("unauthorized", nil)
+	}
+
+	// check if user has permissions to the node
+	if err := h.db.Where("id = ? and owner_id = ?", req.NodeID, userID).First(&model.Node{}).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewForbidden("insufficient permissions to reach this node", nil)
+		}
+		return apperrors.NewInternal(err)
+	}
+
+	// check if user has permissions to the new parent folder
+	if err := h.db.Where("id = ? and owner_id = ?", req.NewParentFolderID, userID).First(&model.Node{}).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewForbidden("insufficient permissions to reach this node", nil)
+		}
+		return apperrors.NewInternal(err)
+	}
+
 	// 1. Validate UUIDs
 	nodeUUID, err1 := uuid.Parse(req.NodeID)
 	oldParentUUID, err2 := uuid.Parse(req.OldParentFolderID)
@@ -1142,6 +1237,10 @@ func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) error {
 	var link model.Link
 	if err := h.db.Where("child_node_id = ? AND parent_node_id = ?", nodeUUID, oldParentUUID).First(&link).Error; err != nil {
 		return apperrors.NewNotFound("file not found in the specified source folder", nil)
+	}
+
+	if link.AuthorID != userID {
+		return apperrors.NewForbidden("insufficient permissions to reach this node", nil)
 	}
 
 	// 3. Cryptographic Re-link! Update the parent and overwrite all crypto fields
@@ -1238,10 +1337,17 @@ func (h *Handler) GetFilePath(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("missing nodeId", nil)
 	}
 
-	// Verify the user is authenticated (ensure they own the nodes later!)
-	_, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
+	// Verify the user is authenticated
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
 	if !ok {
 		return apperrors.NewUnauthorized("unauthorized", nil)
+	}
+
+	if err := h.db.Where("id = ? and owner_id = ?", nodeID, userID).First(&model.Node{}).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewForbidden("insufficient permissions to reach this node", nil)
+		}
+		return apperrors.NewInternal(err)
 	}
 
 	var response []dto.FileListResponseItem
@@ -1331,6 +1437,14 @@ func (h *Handler) ShareFolder(w http.ResponseWriter, r *http.Request) error {
 		NameNonce                     string `json:"nameNonce"`
 	}
 
+	// check if author has permissions to the node
+	if err := h.db.Where("id = ? and owner_id = ?", req.TargetNodeID, authorID).First(&model.Node{}).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return apperrors.NewForbidden("insufficient permissions to reach this node", nil)
+		}
+		return apperrors.NewInternal(err)
+	}
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return apperrors.NewBadRequest("bad request", nil)
 	}
@@ -1342,7 +1456,7 @@ func (h *Handler) ShareFolder(w http.ResponseWriter, r *http.Request) error {
 		// 1. Create a NEW Link that acts as a "Root" (ParentNodeID = null) for the recipient
 		newLink := model.Link{
 			ID:                      uuid.New(),
-			ParentNodeID:            nil, // IT IS A ROOT NOW!
+			ParentNodeID:            nil,
 			ChildNodeID:             &targetNodeUUID,
 			EncryptedName:           req.EncryptedName,
 			NameNonce:               req.NameNonce,

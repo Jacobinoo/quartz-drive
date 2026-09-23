@@ -74,7 +74,7 @@ func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if user.StorageUsed+uploadRequest.TotalFileSize > user.StorageQuota {
-		return apperrors.NewForbidden("quota exceeded", nil)
+		return apperrors.NewQuotaExceeded("quota exceeded")
 	}
 
 	minPlausibleChunks := int(math.Ceil(float64(uploadRequest.TotalFileSize) / float64(maxChunkSize)))
@@ -233,7 +233,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) error {
 
 	if user.StorageUsed+uploadRequest.DeclaredSize > user.StorageQuota {
 		slog.InfoContext(r.Context(), "quota exceeded")
-		return apperrors.NewForbidden("quota exceeded", nil)
+		return apperrors.NewQuotaExceeded("quota exceeded")
 	}
 
 	var chunkRow model.UploadChunk

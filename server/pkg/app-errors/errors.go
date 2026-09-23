@@ -117,7 +117,7 @@ func NewQuotaExceeded(msg string) *AppError {
 	return &AppError{
 		Code:    CodeQuotaExceeded,
 		Message: msg,
-		Status:  http.StatusTooManyRequests,
+		Status:  http.StatusUnprocessableEntity,
 		Err:     nil,
 	}
 }

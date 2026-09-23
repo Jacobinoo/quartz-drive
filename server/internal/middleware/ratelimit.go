@@ -6,12 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis_rate/v10"
-	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 	"quartz/pkg/app-errors"
 	"quartz/pkg/contextkeys"
 	"quartz/pkg/httputils"
+
+	"github.com/go-redis/redis_rate/v10"
+	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 // extractIP gets the true IP address even behind proxies
@@ -57,7 +58,7 @@ func RateLimitIP(rdb *redis.Client, name string, requests int, per time.Duration
 			}
 
 			if res.Allowed == 0 {
-				return apperrors.NewQuotaExceeded("429 Too Many Requests")
+				return apperrors.NewRateLimited("429 Too Many Requests")
 			}
 
 			return next(w, r)
@@ -94,7 +95,7 @@ func RateLimitUser(rdb *redis.Client, name string, requests int, per time.Durati
 			}
 
 			if res.Allowed == 0 {
-				return apperrors.NewQuotaExceeded("429 Too Many Requests")
+				return apperrors.NewRateLimited("429 Too Many Requests")
 			}
 
 			return next(w, r)

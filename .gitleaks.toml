@@ -1,0 +1,7 @@
+# .gitleaks.toml
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Ignore example env values"
+paths = ['''example.env''']

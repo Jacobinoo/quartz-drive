@@ -58,9 +58,15 @@ export function FileList() {
 
     useEffect(() => {
         if (!currentFolder) return;
+
+        // Stale-While-Revalidate: Immediately show cached files if available
+        const folderCache = useDriveStore.getState().folderCache;
+        if (folderCache[currentFolder.nodeId]) {
+            setFiles(folderCache[currentFolder.nodeId]);
+        }
+
         async function loadAndDecrypt() {
             try {
-                // Fetch files from the API and download/compile the WebAssembly binary IN PARALLEL!
                 const [rawFiles, sodium] = await Promise.all([
                     fetchFiles(currentFolder!.nodeId),
                     getSodium()
@@ -68,6 +74,7 @@ export function FileList() {
 
                 if (!rawFiles || rawFiles.length === 0) {
                     setFiles([]);
+                    useDriveStore.getState().setFolderCache(currentFolder!.nodeId, []);
                     return;
                 }
 
@@ -121,7 +128,14 @@ export function FileList() {
                         return { ...file, plaintextName: "Decryption Failed", signatureVerified: false };
                     }
                 }));
-                setFiles(decryptedFiles);
+
+                // Compare stringified versions to avoid unnecessary re-renders
+                const currentCache = useDriveStore.getState().folderCache[currentFolder!.nodeId];
+                if (!currentCache || JSON.stringify(currentCache) !== JSON.stringify(decryptedFiles)) {
+                    setFiles(decryptedFiles);
+                    useDriveStore.getState().setFolderCache(currentFolder!.nodeId, decryptedFiles);
+                }
+
             } catch (err) {
                 console.error(err);
             }
@@ -305,7 +319,7 @@ export function FileList() {
                     {files.map(file => (
                         <div
                             key={file.nodeId}
-                            className={`group grid grid-cols-[minmax(0,1fr)_120px_40px] items-center px-3 py-1.5 rounded-md transition-colors cursor-pointer
+                            className={`group grid grid-cols-[minmax(0,1fr)_120px_40px] items-center px-3 py-1.5 rounded-md transition-colors cursor-pointer animate-in fade-in slide-in-from-bottom-1 duration-300 ease-out
                                 ${draggedItem?.nodeId === file.nodeId
                                     ? 'opacity-40 bg-accent'
                                     : 'hover:bg-accent/60'

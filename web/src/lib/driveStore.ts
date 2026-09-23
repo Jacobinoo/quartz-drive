@@ -17,10 +17,12 @@ interface DriveState {
   draggedItem: any | null;
   refreshTrigger: number;
 
-    // Helper to get the keys for whatever folder you are currently viewing
     getCurrentFolder: () => FolderKey | null;
 
-    // Core actions
+    folderCache: Record<string, any[]>;
+    setFolderCache: (nodeId: string, files: any[]) => void;
+    clearFolderCache: (nodeId: string) => void;
+
     setRootFolder: (folder: FolderKey) => void;
     pushFolder: (folder: FolderKey) => void;
   popFolder: () => void;
@@ -42,6 +44,16 @@ export const useDriveStore = create<DriveState>((set, get) => ({
         const stack = get().breadcrumbs;
         return stack.length > 0 ? stack[stack.length - 1] : null;
     },
+
+    folderCache: {},
+    setFolderCache: (nodeId, files) => set((state) => ({
+        folderCache: { ...state.folderCache, [nodeId]: files }
+    })),
+    clearFolderCache: (nodeId) => set((state) => {
+        const newCache = { ...state.folderCache };
+        delete newCache[nodeId];
+        return { folderCache: newCache };
+    }),
 
     setRootFolder: (folder) => set({ breadcrumbs: [folder] }),
     pushFolder: (folder) => set((state) => ({ breadcrumbs: [...state.breadcrumbs, folder] })),

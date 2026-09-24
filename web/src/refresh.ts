@@ -73,13 +73,17 @@ export async function refreshSession(): Promise<RefreshSessionResponse> {
 
                     setAccountPrivateKeys(encryptionKey, signingKey);
                     console.log("Successfully restored zero-knowledge account keys from Non-Extractable Device Key!");
+                } else {
+                    throw new Error("Unwrapped keys are invalid length.");
                 }
             } else {
                 console.warn("Device Private Key not found in IndexedDB! User is logged out on this specific device.");
+                throw new Error("SESSION_EXPIRED"); // Force re-login so device keys are regenerated
             }
         }
     } catch (err) {
-        console.warn("Could not unwrap Root Keys using Device Key:", err);
+        console.error("Could not unwrap Root Keys using Device Key:", err);
+        throw new Error("SESSION_EXPIRED"); // Force re-login
     }
     } else {
         throw new Error("Could not refresh session:" + refreshRes.body);

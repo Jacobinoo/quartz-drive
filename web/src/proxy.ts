@@ -16,12 +16,14 @@ export function proxy(request: NextRequest) {
   ]
 
   const connectSrc = isDev
-    ? ["'self'", ...devOrigins, s3Endpoint, passwordPwnedCheckApi, "https://*.hcaptcha.com "].join(' ')
-    : ["'self'", apiOrigin, s3Endpoint, passwordPwnedCheckApi, "https://*.hcaptcha.com"].join(' ')
+    ? ["'self'", ...devOrigins, s3Endpoint, passwordPwnedCheckApi, "https://*.hcaptcha.com", "https://challenges.cloudflare.com", "https://*.challenges.cloudflare.com"].join(' ')
+    : ["'self'", apiOrigin, s3Endpoint, passwordPwnedCheckApi, "https://*.hcaptcha.com", "https://challenges.cloudflare.com", "https://*.challenges.cloudflare.com"].join(' ')
 
   const cspHeader = `
     default-src 'self';
-    script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://js.hcaptcha.com https://*.hcaptcha.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com ${isDev ? "'unsafe-eval'" : ""};
+    script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://js.hcaptcha.com https://*.hcaptcha.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com ${isDev ? "'unsafe-eval'" : ""};
+    worker-src 'self' blob:;
+    child-src 'self' blob:;
     style-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com;
     img-src 'self' blob: data:;
     font-src 'self';

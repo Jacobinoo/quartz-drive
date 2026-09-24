@@ -47,8 +47,8 @@ func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
-	userID := r.Context().Value(contextkeys.UserIDKey)
-	if userID == nil {
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
+	if !ok {
 		return apperrors.NewUnauthorized("access token invalid", nil)
 	}
 
@@ -68,12 +68,12 @@ func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewNotFound("parent folder not found", nil)
 	}
 
-	var user model.User
-	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
-		return apperrors.NewUnauthorized("user not found", nil)
+	var volume model.Volume
+	if err := h.db.First(&volume, "id = ?", parentNode.VolumeID).Error; err != nil {
+		return apperrors.NewNotFound("volume not found", nil)
 	}
 
-	if user.StorageUsed+uploadRequest.TotalFileSize > user.StorageQuota {
+	if volume.StorageUsed+uploadRequest.TotalFileSize > volume.StorageQuota {
 		return apperrors.NewQuotaExceeded("quota exceeded")
 	}
 
@@ -107,7 +107,7 @@ func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) error {
 			ID:         id,
 			UploadID:   uploadID,
 			ChunkIndex: i,
-			ObjectKey:  fmt.Sprintf("%s/authors/%s/uploads/%s/chunk_%d", nodeID.String(), user.ID.String(), uploadID.String(), i),
+			ObjectKey:  fmt.Sprintf("%s/authors/%s/uploads/%s/chunk_%d", nodeID.String(), userID, uploadID.String(), i),
 			Status:     model.ChunkUploadStatusPending,
 		})
 	}
@@ -115,7 +115,7 @@ func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) error {
 	err = h.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&model.Upload{
 			ID:                uploadID,
-			UserID:            user.ID,
+			UserID:            userID,
 			NodeID:            nodeID,
 			TotalChunks:       uploadRequest.TotalChunks,
 			ReportedTotalSize: uploadRequest.TotalFileSize,
@@ -231,7 +231,19 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewForbidden("requested chunk index out of allowed range", nil)
 	}
 
-	if user.StorageUsed+uploadRequest.DeclaredSize > user.StorageQuota {
+	// During upload chunk, the parent volume quota should be re-checked.
+	// But UploadSession does not store VolumeID directly, it stores ParentNodeID.
+	var parentNode model.Node
+	if err := h.db.First(&parentNode, "id = ?", uploadSession.ParentNodeID).Error; err != nil {
+		return apperrors.NewNotFound("parent folder not found", nil)
+	}
+
+	var volume model.Volume
+	if err := h.db.First(&volume, "id = ?", parentNode.VolumeID).Error; err != nil {
+		return apperrors.NewNotFound("volume not found", nil)
+	}
+
+	if volume.StorageUsed+uploadRequest.DeclaredSize > volume.StorageQuota {
 		slog.InfoContext(r.Context(), "quota exceeded")
 		return apperrors.NewQuotaExceeded("quota exceeded")
 	}
@@ -449,6 +461,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 		EncryptedMetadata: uploadSession.EncryptedMetadata,
 		MetadataNonce:     uploadSession.MetadataNonce,
 		OwnerID:           ownerID,
+		VolumeID:          parentNode.VolumeID,
 		NodePublicKey:     uploadSession.NodePublicKey,
 		WrappedNodeKey:    uploadSession.WrappedNodeKey,
 		NodePrivNonce:     uploadSession.NodePrivNonce,
@@ -513,9 +526,9 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 			return err
 		}
 
-		// Increment the user's storage quota safely (atomic)
+		// Increment the volume's storage quota safely (atomic)
 		if trueTotalSize > 0 {
-			if err := tx.Model(&model.User{}).Where("id = ?", ownerID).UpdateColumn("storage_used", gorm.Expr("storage_used + ?", trueTotalSize)).Error; err != nil {
+			if err := tx.Model(&model.Volume{}).Where("id = ?", parentNode.VolumeID).UpdateColumn("storage_used", gorm.Expr("storage_used + ?", trueTotalSize)).Error; err != nil {
 				return err
 			}
 		}
@@ -889,8 +902,8 @@ func (h *Handler) CreateFolder(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
 
-	// check if user has permissions to write to parent node
-	if err := h.db.Where("id = ? and owner_id = ?", req.Link.ParentNodeID, userID).First(&model.Node{}).Error; err != nil {
+	var parentNode model.Node
+	if err := h.db.Where("id = ? and owner_id = ?", req.Link.ParentNodeID, userID).First(&parentNode).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return apperrors.NewForbidden("insufficient permissions to reach the provided parent node", nil)
 		}
@@ -904,6 +917,7 @@ func (h *Handler) CreateFolder(w http.ResponseWriter, r *http.Request) error {
 		ID:             nodeUUID,
 		Type:           model.NodeTypeFolder,
 		OwnerID:        req.Link.AuthorID, // The creator owns the node
+		VolumeID:       parentNode.VolumeID,
 		NodePublicKey:  req.Node.NodePublicKey,
 		WrappedNodeKey: req.Node.WrappedNodeKey,
 		NodePrivNonce:  req.Node.NodePrivNonce,
@@ -1185,15 +1199,15 @@ func (h *Handler) GetQuota(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewUnauthorized("unauthorized", nil)
 	}
 
-	var user model.User
-	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
-		return apperrors.NewNotFound("user not found", nil)
+	var volume model.Volume
+	if err := h.db.First(&volume, "owner_user_id = ? AND type = ?", userID, model.VolumeTypePrivate).Error; err != nil {
+		return apperrors.NewNotFound("volume not found", nil)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	err := json.NewEncoder(w).Encode(map[string]interface{}{
-		"usedBytes": user.StorageUsed,
-		"maxBytes":  user.StorageQuota,
+		"usedBytes": volume.StorageUsed,
+		"maxBytes":  volume.StorageQuota,
 	})
 	if err != nil {
 		return apperrors.NewInternal(err)

@@ -480,12 +480,24 @@ func (h *Handler) InitializeKeys(w http.ResponseWriter, r *http.Request) error {
 			SharePrivNonce:         initRequest.Drive.DefaultShare.PrivKeyNonce,
 		}
 
+		volumeUUID := uuid.New()
+
+		storedVolume := model.Volume{
+			ID:           volumeUUID,
+			Type:         model.VolumeTypePrivate,
+			OwnerUserID:  &userID,
+			RootNodeID:   nodeUUID,
+			StorageQuota: 104857600, // 100MiB default
+			StorageUsed:  0,
+		}
+
 		storedNode := model.Node{
 			ID:                nodeUUID,
 			Type:              model.NodeTypeFolder,
 			EncryptedMetadata: "",
 			MetadataNonce:     "",
 			OwnerID:           userID,
+			VolumeID:          volumeUUID,
 			NodePublicKey:     initRequest.Drive.RootNode.PublicKey,
 			WrappedNodeKey:    initRequest.Drive.RootNode.WrappedPrivateKey,
 			NodePrivNonce:     initRequest.Drive.RootNode.PrivKeyNonce,
@@ -513,6 +525,10 @@ func (h *Handler) InitializeKeys(w http.ResponseWriter, r *http.Request) error {
 
 		if err := tx.Create(&storedUserKeyStore).Error; err != nil {
 			return fmt.Errorf("cannot initialize keys: %w", err)
+		}
+
+		if err := tx.Create(&storedVolume).Error; err != nil {
+			return fmt.Errorf("cannot initialize volume: %w", err)
 		}
 
 		if err := tx.Create(&storedNode).Error; err != nil {

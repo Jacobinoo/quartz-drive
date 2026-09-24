@@ -329,12 +329,12 @@ func (h *Handler) wipeTrashedLinks(ctx context.Context, links []model.Link) {
 			sweepLog.Printf("Failed to query nodes %v: %v", nodeIDsToWipe, err)
 			continue
 		}
-		nodeOwners := make(map[string]uuid.UUID)
+		nodeVolumes := make(map[string]uuid.UUID)
 		for _, n := range nodes {
-			nodeOwners[n.ID.String()] = n.OwnerID
+			nodeVolumes[n.ID.String()] = n.VolumeID
 		}
 
-		freedPerOwner := make(map[uuid.UUID]int64)
+		freedPerVolume := make(map[uuid.UUID]int64)
 		var successfulBlocks []string
 		failedNodeIDs := map[string]bool{}
 		for _, block := range blocks {
@@ -343,8 +343,8 @@ func (h *Handler) wipeTrashedLinks(ctx context.Context, links []model.Link) {
 					// If it's already gone from S3, consider it a successful wipe
 					successfulBlocks = append(successfulBlocks, block.ObjectKey)
 					if !accountedBlocks[block.ObjectKey] {
-						if owner, ok := nodeOwners[block.NodeID.String()]; ok {
-							freedPerOwner[owner] += int64(block.Size)
+						if volID, ok := nodeVolumes[block.NodeID.String()]; ok {
+							freedPerVolume[volID] += int64(block.Size)
 						}
 						accountedBlocks[block.ObjectKey] = true
 					}
@@ -356,8 +356,8 @@ func (h *Handler) wipeTrashedLinks(ctx context.Context, links []model.Link) {
 			}
 			successfulBlocks = append(successfulBlocks, block.ObjectKey)
 			if !accountedBlocks[block.ObjectKey] {
-				if owner, ok := nodeOwners[block.NodeID.String()]; ok {
-					freedPerOwner[owner] += int64(block.Size)
+				if volID, ok := nodeVolumes[block.NodeID.String()]; ok {
+					freedPerVolume[volID] += int64(block.Size)
 				}
 				accountedBlocks[block.ObjectKey] = true
 			}
@@ -382,9 +382,9 @@ func (h *Handler) wipeTrashedLinks(ctx context.Context, links []model.Link) {
 				}
 
 				// Decrement storage quota safely (atomic)
-				for ownerID, sizeFreed := range freedPerOwner {
+				for volID, sizeFreed := range freedPerVolume {
 					if sizeFreed > 0 {
-						if err := tx.Model(&model.User{}).Where("id = ?", ownerID).UpdateColumn("storage_used", gorm.Expr("storage_used - ?", sizeFreed)).Error; err != nil {
+						if err := tx.Model(&model.Volume{}).Where("id = ?", volID).UpdateColumn("storage_used", gorm.Expr("storage_used - ?", sizeFreed)).Error; err != nil {
 							return err
 						}
 					}

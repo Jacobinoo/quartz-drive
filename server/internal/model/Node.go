@@ -21,7 +21,8 @@ type Node struct {
 	EncryptedMetadata string `gorm:"type:text"`
 	MetadataNonce     string `gorm:"type:text"`
 
-	OwnerID uuid.UUID `gorm:"type:uuid;not null;index"`
+	OwnerID  uuid.UUID `gorm:"type:uuid;not null;index"`
+	VolumeID uuid.UUID `gorm:"type:uuid;not null;index"`
 
 	NodePublicKey  string `gorm:"type:text;not null"`
 	WrappedNodeKey string `gorm:"type:text;not null"`

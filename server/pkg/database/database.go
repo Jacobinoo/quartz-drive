@@ -51,6 +51,7 @@ func New() (db *gorm.DB, err error) {
 				log.Println("auto migration is running...")
 				err = db.AutoMigrate(
 					&model.User{},
+					&model.Volume{},
 					&model.UserKeyStore{},
 					&model.GormRefreshToken{},
 					&model.FileBlock{},

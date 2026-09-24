@@ -27,6 +27,5 @@ type User struct {
 
 	ShareMemberships []ShareMember `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 
-	StorageQuota int64 `gorm:"not null;default:104857600"` //104857600 = 100MiB
-	StorageUsed  int64 `gorm:"not null;default:0"`
+	Volumes []Volume `gorm:"foreignKey:OwnerUserID;constraint:OnDelete:CASCADE"`
 }

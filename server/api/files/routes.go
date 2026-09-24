@@ -48,6 +48,6 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler, rdb *redis.Client) {
 	mux.HandleFunc("/files/move", wrap(h.MoveFile))
 	mux.HandleFunc("/files/all", wrap(h.GetAllFiles))
 	mux.HandleFunc("/files/path", wrap(h.GetFilePath))
-	mux.HandleFunc("/files/share", wrap(h.ShareFolder))
-	mux.HandleFunc("/files/shared", wrap(h.GetSharedFolders))
+	//mux.HandleFunc("/files/share", wrap(h.ShareFolder))
+	//mux.HandleFunc("/files/shared", wrap(h.GetSharedFolders))
 }

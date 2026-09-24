@@ -34,7 +34,10 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: 'write'
+      contents: read
+      security-events: write
+      actions: read
+      pull-requests: write
 
     steps:
       - name: Check out code
@@ -50,7 +53,25 @@ jobs:
           severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
+
+      - name: Run Trivy vulnerability scanner (Table Output for Job Summary)
+        uses: aquasecurity/trivy-action@master
+        if: always()
+        with:
+          scan-type: 'fs'
+          ignore-unfixed: true
+          format: 'table'
+          output: 'trivy-table.txt'
+          severity: 'CRITICAL,HIGH'
+          
+      - name: Write Trivy Summary to Job
+        if: always()
+        run: |
+          echo "### Trivy Vulnerability Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat trivy-table.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

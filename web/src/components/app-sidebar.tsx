@@ -40,6 +40,7 @@ import { quantumSealOpen } from "@/crypto/kem";
 function StorageQuota() {
     const [used, setUsed] = useState(0);
     const [max, setMax] = useState(15 * 1024 * 1024 * 1024);
+    const refreshTrigger = useDriveStore((s) => s.refreshTrigger);
 
     useEffect(() => {
         async function fetchQuota() {
@@ -56,7 +57,7 @@ function StorageQuota() {
             }
         }
         fetchQuota();
-    }, []);
+    }, [refreshTrigger]);
 
     const percentage = Math.min(100, Math.round((used / max) * 100));
 

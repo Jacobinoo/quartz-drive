@@ -2,11 +2,13 @@
 
 **Zero-Knowledge, End-to-End Encrypted (E2EE) Cloud Storage Platform**
 
+**Quartz Drive** is a cloud storage application engineered with a strict **Zero-Knowledge Architecture**. The server never receives, processes, or stores raw user passwords, plaintext encryption keys, or unencrypted file contents.
+
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 
 ---
 
-**Quartz Drive** is a cloud storage application engineered with a strict **Zero-Knowledge Architecture**. The server never receives, processes, or stores raw user passwords, plaintext encryption keys, or unencrypted file contents.
+https://github.com/user-attachments/assets/94c30515-74fe-46cc-98d9-3583b534595b
 
 > Check out the live demo [here](https://quartzapp.top).
 

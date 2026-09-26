@@ -325,8 +325,11 @@ export function FileList() {
                                     : 'hover:bg-accent/60'
                                 }`}
                             onClick={() => {
-                                if (file.type !== 'FILE') return;
-                                handlePreview(file);
+                                if (file.type === 'FOLDER') {
+                                    handleFolderClick(file);
+                                } else {
+                                    handlePreview(file);
+                                }
                             }}
                             draggable={true}
                             onDragStart={(e) => {
@@ -350,11 +353,6 @@ export function FileList() {
                             {/* Name cell */}
                             <div
                                 className="flex items-center gap-2 min-w-0"
-                                onClick={(e) => {
-                                    if (file.type !== 'FOLDER') return;
-                                    e.stopPropagation();
-                                    handleFolderClick(file);
-                                }}
                             >
                                 {file.type === 'FOLDER'
                                     ? <FolderIcon className="w-4 h-4 shrink-0 text-blue-500 fill-blue-500/20" />

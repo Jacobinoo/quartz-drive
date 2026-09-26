@@ -72,8 +72,8 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewInternal(err)
 	}
 
-	slog.Debug("Stored Token:", storedToken.TokenHash)
-	slog.Debug("Provided token hash:", refreshTokenHash)
+	slog.Debug("Stored Token:", "hash", storedToken.TokenHash)
+	slog.Debug("Provided token hash:", "hash", refreshTokenHash)
 
 	if storedToken.IsRevoked == true {
 		slog.Info("token reuse detection triggered",

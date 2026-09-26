@@ -720,7 +720,7 @@ func (h *Handler) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	)
 
 	if err != nil {
-		slog.DebugContext(r.Context(), "bindings StartLogin call failed: %v", err)
+		slog.DebugContext(r.Context(), "bindings StartLogin call failed", "error", err)
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 

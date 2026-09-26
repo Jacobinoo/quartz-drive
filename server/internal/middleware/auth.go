@@ -89,7 +89,7 @@ func AccessTokenMiddleware(next httputils.APIHandler) httputils.APIHandler {
 		ctx = context.WithValue(ctx, contextkeys.FamilyIDKey, familyId)
 		ctx = context.WithValue(ctx, contextkeys.KeysInitializedKey, keysInitializedStr)
 
-		slog.DebugContext(r.Context(), "email", email, "user_id", userID)
+		slog.DebugContext(r.Context(), "email", "email", email, "user_id", userID)
 
 		// Move to the next handler
 		return next(w, r.WithContext(ctx))

@@ -149,7 +149,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 			Nonce:         nonce,
 		}
 	} else {
-		slog.DebugContext(r.Context(), "bindings StartLogin call failed: %v", err)
+		slog.DebugContext(r.Context(), "bindings StartLogin call failed", "error", err)
 		w.WriteHeader(http.StatusBadRequest)
 		m2 = dto.M2Login{
 			Status:        "not_ok",
@@ -186,7 +186,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
-	slog.DebugContext(r.Context(), "persistSession", m3.PersistSession)
+	slog.DebugContext(r.Context(), "persistSession", "session", m3.PersistSession)
 
 	// Fetch from Redis
 	encryptedNonceJSON, err := h.redis.Get(context.Background(), "login:nonce:"+m3.Nonce).Result()
@@ -234,7 +234,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 	if err != nil || isFake {
 		// Both wrong-password (err != nil) and fake sessions (isFake)
 		// return the identical error — attacker cannot distinguish them
-		slog.DebugContext(r.Context(), "bindings FinishLogin call failed: %v", err)
+		slog.DebugContext(r.Context(), "bindings FinishLogin call failed", "error", err)
 		return apperrors.NewUnauthorized(genericLoginError, err)
 	}
 

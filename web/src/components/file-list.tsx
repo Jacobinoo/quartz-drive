@@ -447,6 +447,7 @@ export function FileList() {
                     unsupported={previewFile.unsupported}
                     onClose={() => setPreviewFile(null)}
                     onDownload={() => handleDownload(previewFile.file)}
+                    breadcrumbs={useDriveStore.getState().breadcrumbs}
                 />
             )}
 

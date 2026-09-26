@@ -42,9 +42,6 @@ The demo is available [here](https://quartzapp.top).
 
 Quartz Drive protects user data even under complete server compromise or database leaks, for example: users' email addresses are never stored in plaintext, they're encrypted and hashed, which protects PII even in case of a database breach.
 
-
----
-
 ## Technology Used
 
 | Layer                | Technologies & Libraries                                       |
@@ -54,8 +51,6 @@ Quartz Drive protects user data even under complete server compromise or databas
 | **Cryptography**     | Libsodium (`libsodium-wrappers-sumo`), OPAQUE PAKE, Web Crypto |
 | **Database & Cache** | PostgreSQL 18, Valkey (Redis fork)                             |
 | **Storage & Edge**   | S3-compatible storage, Traefik Reverse Proxy, Docker           |
-
----
 
 ## System Topology Overview
 
@@ -78,7 +73,6 @@ graph TD
 
 > For more details on architecture, cryptography, and key management specifications, see [ARCHITECTURE.md](ARCHITECTURE.md) (Work in Progress).
 
----
 ## Local Development
 
 ### Prerequisites
@@ -115,7 +109,6 @@ npm run dev
 
 The application will be accessible at `http://localhost:3000`.
 
----
 ## License
 Distributed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. See [`LICENSE`](LICENSE) for more details.
 

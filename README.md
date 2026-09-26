@@ -27,7 +27,7 @@
 > * Sessions can expire at any time without notice.
 > * Storage quota is limited to 100MB and APIs are heavily rate limited.
 > * Every demo session contains files already uploaded earlier for test purposes. You can delete them, or upload new files.
-> * 
+>
 > Terms are subject to change.
 
 The demo is available [here](https://quartzapp.top).

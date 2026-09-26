@@ -19,7 +19,7 @@ const (
 
 type UploadChunk struct {
 	gorm.Model
-	ID         uuid.UUID `gorm:"primarykey;not null;default:gen_random_uuid()"`
+	ID         uuid.UUID `gorm:"primarykey;not null"`
 	UploadID   uuid.UUID `gorm:"index;type:uuid;not null"`
 	ChunkIndex int64     `gorm:"index;not null"`
 	//"authors/X/uploads/X/nodes/X/chunk_n"

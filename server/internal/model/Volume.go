@@ -14,7 +14,7 @@ const (
 )
 
 type Volume struct {
-	ID   uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	ID   uuid.UUID  `gorm:"type:uuid;primaryKey"`
 	Type VolumeType `gorm:"type:varchar(20);not null"`
 
 	// Relationships

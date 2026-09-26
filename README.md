@@ -4,11 +4,11 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 
-> Check out the live demo [here](https://quartzapp.top).
-
 ---
 
 **Quartz Drive** is a cloud storage application engineered with a strict **Zero-Knowledge Architecture**. The server never receives, processes, or stores raw user passwords, plaintext encryption keys, or unencrypted file contents.
+
+> Check out the live demo [here](https://quartzapp.top).
 
 > [!CAUTION]
 > Quartz Drive is currently in the **alpha** stage and is not production-ready. Do not upload data as the application is unstable and data loss can occur without notice.

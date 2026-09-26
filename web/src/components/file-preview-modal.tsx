@@ -417,10 +417,10 @@ export function FilePreviewModal({ file, url, loading, progress, tooLarge, unsup
                     <div className="col-span-2 text-gray-400 font-mono">{file.metadata?.mimeType || 'application/octet-stream'}</div>
 
                     <div className="text-gray-300 font-medium col-span-1 mt-4">Original Size</div>
-                    <div className="col-span-2 text-gray-900 dark:text-gray-200 mt-4">{formattedOriginalSize}</div>
+                    <div className="col-span-2 text-gray-200 mt-4">{formattedOriginalSize}</div>
 
                     <div className="text-gray-300 font-medium col-span-1 mt-4">Encrypted Size</div>
-                    <div className="col-span-2 text-gray-900 dark:text-gray-200 flex items-center gap-2">
+                    <div className="col-span-2 text-gray-200 flex items-center gap-2">
                       {formattedEncryptedSize}
                       <TooltipProvider>
                         <Tooltip>
@@ -442,12 +442,12 @@ export function FilePreviewModal({ file, url, loading, progress, tooLarge, unsup
                 <div className="mt-4 border-t pt-4 border-white/30">
                   <div className="grid grid-cols-3 gap-y-2 text-sm">
                     <div className="text-gray-300 font-medium col-span-1">Raw Encrypted</div>
-                    <div className="col-span-2 text-gray-900 dark:text-gray-200 font-mono text-xs">
+                    <div className="col-span-2 text-gray-200 font-mono text-xs">
                       {file.sizeBytes ? file.sizeBytes.toLocaleString() : '--'} bytes
                     </div>
 
                     <div className="text-gray-300 font-medium col-span-1">Raw Original</div>
-                    <div className="col-span-2 text-gray-900 dark:text-gray-200 font-mono text-xs">
+                    <div className="col-span-2 text-gray-200 font-mono text-xs">
                       {file.metadata?.originalSizeBytes ? file.metadata.originalSizeBytes.toLocaleString() : '--'} bytes
                     </div>
                   </div>

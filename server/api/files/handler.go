@@ -197,7 +197,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) error {
 	var user model.User
 	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
 		slog.WarnContext(r.Context(), "user not found")
-		return apperrors.NewUnauthorized("user not found", nil)
+		return apperrors.NewForbidden("user not found", nil)
 	}
 
 	var uploadSession model.Upload
@@ -250,7 +250,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) error {
 
 	var chunkRow model.UploadChunk
 	if err := h.db.First(&chunkRow, "upload_id = ? AND chunk_index = ?", uploadRequest.UploadID, uploadRequest.ChunkIndex).Error; err != nil {
-		slog.WarnContext(r.Context(), "failed to find chunk row %s", err)
+		slog.WarnContext(r.Context(), "failed to find chunk row", "error", err)
 		return apperrors.NewForbidden("requested chunk not found", nil)
 	}
 
@@ -307,7 +307,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 	var user model.User
 	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
 		slog.WarnContext(r.Context(), "user not found", "queried_user_id", userID, "error", err)
-		return apperrors.NewUnauthorized("user not found", nil)
+		return apperrors.NewForbidden("user not found", nil)
 	}
 
 	var uploadSession model.Upload

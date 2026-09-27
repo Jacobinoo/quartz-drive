@@ -11,7 +11,7 @@ import { deleteDeviceKeys } from "@/DeviceKeyStore";
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const publicPaths = ["/signin", "/signup", "/forgot-password", "/reset-password", "/verify-email", "/onboarding"];
+  const publicPaths = ["/signin", "/signup", "/forgot-password", "/reset-password", "/verify-email", "/onboarding", "/terms", "/privacy"];
 
   const [isBooting, setIsBooting] = useState(true);
 
@@ -49,14 +49,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (err: any) {
         if (err.message === "NETWORK_ERROR") {
           console.warn("Backend is offline during boot. Halting boot sequence without logging out.");
-          setIsOffline(true);
-          setIsBooting(false);
+          if (publicPaths.includes(pathname)) {
+            setIsBooting(false);
+          } else {
+            setIsOffline(true);
+            setIsBooting(false);
+          }
           return;
         }
         if (err.message === "RATE_LIMIT_ERROR") {
           console.warn("Backend rate limit exceeded during boot.");
-          setIsRateLimited(true);
-          setIsBooting(false);
+          if (publicPaths.includes(pathname)) {
+            setIsBooting(false);
+          } else {
+            setIsRateLimited(true);
+            setIsBooting(false);
+          }
           return;
         }
 

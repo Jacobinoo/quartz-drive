@@ -28,4 +28,6 @@ type User struct {
 	ShareMemberships []ShareMember `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 
 	Volumes []Volume `gorm:"foreignKey:OwnerUserID;constraint:OnDelete:CASCADE"`
+
+	IsDemo bool `gorm:"default:false"`
 }

@@ -14,7 +14,11 @@ export function PostHogProvider({ children }: { children: React.ReactNode }) {
         posthog.init(config.posthogToken as string, {
             cookieless_mode: "always",
             api_host: config.posthogHost,
-            defaults: '2026-05-30'
+            defaults: '2026-05-30',
+            autocapture: false,
+            disable_session_recording: true,
+            enable_heatmaps: false,
+            capture_dead_clicks: false,
         })
     }, [])
 

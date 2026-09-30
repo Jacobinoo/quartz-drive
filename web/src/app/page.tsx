@@ -1,14 +1,25 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export default function Home() {
+function RedirectToDrive() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   
   useEffect(() => {
-    router.push("/drive");
-  }, [router]);
+    const params = searchParams.toString();
+    const query = params ? `?${params}` : "";
+    router.push(`/drive${query}`);
+  }, [router, searchParams]);
 
   return null;
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={null}>
+      <RedirectToDrive />
+    </Suspense>
+  );
 }

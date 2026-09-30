@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // User is authenticated. If they're on a public auth page, redirect to drive.
         if (publicPaths.includes(pathname)) {
-           router.push("/drive");
+           router.push("/drive" + window.location.search);
         }
         setIsBooting(false);
       } catch (err: any) {
@@ -81,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setIsBooting(false);
           } else {
             await signOut();
-            window.location.href = "/signin";
+            window.location.href = "/signin" + window.location.search;
           }
           return;
         }

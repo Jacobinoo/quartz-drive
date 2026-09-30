@@ -187,7 +187,12 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 		withKeysInitialized = true
 	}
 
-	newAccessToken, expTime := token.IssueAccessToken(withKeysInitialized, fingerprintHash, storedToken.DpopJKT, storedToken.UserID.String(), string(decryptedEmail), storedToken.SessionID.String(), storedToken.FamilyID.String())
+	var demoExpiresAtUnix int64 = 0
+	if user.IsDemo {
+		demoExpiresAtUnix = storedToken.ExpiresAt.Unix()
+	}
+
+	newAccessToken, expTime := token.IssueAccessToken(withKeysInitialized, fingerprintHash, storedToken.DpopJKT, storedToken.UserID.String(), string(decryptedEmail), storedToken.SessionID.String(), storedToken.FamilyID.String(), user.IsDemo, demoExpiresAtUnix)
 	maxAge := time.Until(expTime)
 
 	newCsrfToken := token.IssueCsrfToken()
@@ -199,6 +204,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		var newToken model.GormRefreshToken
+
 		// is this a transient session
 		// We check < 25 hours (instead of 24) to account for minor millisecond differences between time.Now() and GORM's CreatedAt
 		if storedToken.ExpiresAt.Sub(storedToken.CreatedAt) < time.Hour*25 {
@@ -219,6 +225,20 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 				FamilyID:      storedToken.FamilyID,
 				IsRevoked:     false,
 				ExpiresAt:     time.Now().Add(7 * 24 * time.Hour),
+				CsrfTokenHash: newCsrfToken.TokenSha256Hash,
+				DpopJKT:       storedToken.DpopJKT,
+				SessionID:     storedToken.SessionID,
+			}
+		}
+
+		//is this a demo user
+		if user.IsDemo {
+			newToken = model.GormRefreshToken{
+				TokenHash:     newRefreshToken.TokenSha256Hash,
+				UserID:        storedToken.UserID,
+				FamilyID:      storedToken.FamilyID,
+				IsRevoked:     false,
+				ExpiresAt:     storedToken.ExpiresAt,
 				CsrfTokenHash: newCsrfToken.TokenSha256Hash,
 				DpopJKT:       storedToken.DpopJKT,
 				SessionID:     storedToken.SessionID,
@@ -267,6 +287,19 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 			Secure:   true,
 			SameSite: http.SameSiteLaxMode,
 			Expires:  time.Now().Add(7 * 24 * time.Hour),
+			MaxAge:   int(maxAge.Seconds()),
+		})
+	}
+
+	if user.IsDemo {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "__Secure-Auth",
+			Value:    newRefreshToken.Token,
+			HttpOnly: true,
+			Path:     "/",
+			Secure:   true,
+			SameSite: http.SameSiteLaxMode,
+			Expires:  storedToken.ExpiresAt,
 			MaxAge:   int(maxAge.Seconds()),
 		})
 	}

@@ -39,7 +39,7 @@ func IssueRefreshToken() GeneratedRefreshToken {
 	}
 }
 
-func IssueAccessToken(withKeysInitialized bool, fgpHash string, dpopJkt string, userID string, email string, sessionId string, familyId string) (string, time.Time) {
+func IssueAccessToken(withKeysInitialized bool, fgpHash string, dpopJkt string, userID string, email string, sessionId string, familyId string, isDemo bool, demoExpiresAt int64) (string, time.Time) {
 	var (
 		privateKey *ecdsa.PrivateKey
 		t          *jwt.Token
@@ -53,7 +53,7 @@ func IssueAccessToken(withKeysInitialized bool, fgpHash string, dpopJkt string, 
 	privateKeyBytes, _ := hex.DecodeString(privateKeyHex)
 	privateKey, _ = x509.ParseECPrivateKey(privateKeyBytes)
 
-	t = jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{
+	claims := jwt.MapClaims{
 		"fh":    fgpHash,
 		"sub":   userID,
 		"email": email,
@@ -64,7 +64,14 @@ func IssueAccessToken(withKeysInitialized bool, fgpHash string, dpopJkt string, 
 		"sessionId":       sessionId,
 		"familyId":        familyId,
 		"keysInitialized": withKeysInitialized,
-	})
+		"isDemo":          isDemo,
+	}
+
+	if isDemo {
+		claims["demoExpiresAt"] = demoExpiresAt
+	}
+
+	t = jwt.NewWithClaims(jwt.SigningMethodES256, claims)
 	s, _ = t.SignedString(privateKey)
 
 	return s, exp

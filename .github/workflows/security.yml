@@ -10,6 +10,11 @@ on:
     branches:
       - master
 
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+  pull-requests: write
 
 jobs:
   govulncheck:
@@ -32,12 +37,6 @@ jobs:
 
   trivy-fs:
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      security-events: write
-      actions: read
-      pull-requests: write
 
     steps:
       - name: Check out code

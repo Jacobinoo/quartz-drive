@@ -19,7 +19,8 @@ export function DownloadManager() {
             updateJob(job.id, { status: 'DOWNLOADING', activity: 'Fetching URLs...' });
 
             try {
-                const urls = await getDownloadUrls(job.nodeId);
+                const { urls, encryptingNodeId } = await getDownloadUrls(job.nodeId);
+                const decryptNodeId = encryptingNodeId || job.nodeId;
 
                 const worker = new Worker(new URL('@/workers/decrypt.worker.ts', import.meta.url), { type: 'module' });
                 workerInstances.current.set(job.id, worker);
@@ -71,7 +72,7 @@ export function DownloadManager() {
                 worker.postMessage({
                     urls,
                     fileKey: job.fileKey,
-                    nodeId: job.nodeId
+                    nodeId: decryptNodeId
                 });
 
             } catch (err: any) {

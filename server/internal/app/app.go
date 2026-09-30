@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"quartz/api/account"
+	"quartz/api/demo"
 	"quartz/api/dev"
 	"quartz/api/devices"
 	"quartz/api/files"
@@ -285,6 +286,10 @@ func initV1Mux(state *ServerState) *http.ServeMux {
 
 	signinHandler := signin.NewHandler(state.DB, state.Redis, state.OpaqueSetup, state.FakeOpaqueRegistrationRecord)
 	signin.RegisterRoutes(mux, signinHandler, state.Redis)
+
+	demoHandler := demo.NewHandler(state.DB, state.Redis, state.AsynqClient, state.StorageService)
+	go demoHandler.StartSweepScheduler(context.Background())
+	demo.RegisterRoutes(mux, demoHandler)
 
 	signoutHandler := signout.NewHandler(state.DB)
 	signout.RegisterRoutes(mux, signoutHandler, state.Redis)

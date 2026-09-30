@@ -16,21 +16,22 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler, rdb *redis.Client) {
 	limitKeys := middleware.RateLimitUser(rdb, "account_keys", 5, time.Second, 10)
 
 	mux.HandleFunc("/account/initialize-keys", httputils.Wrap(middleware.CorsMiddleware(middleware.DpopMiddleware(middleware.AccessTokenMiddleware(
-		limitInitKeys(
-			middleware.LastActivityTracker(h.db, h.InitializeKeys),
-		),
+		middleware.ForbidDemoMiddleware(
+			limitInitKeys(
+				middleware.LastActivityTracker(h.db, h.InitializeKeys),
+			)),
 	)))))
 
 	mux.HandleFunc("/account/verify-email", httputils.Wrap(middleware.CorsMiddleware(h.VerifyEmail)))
 
-	mux.HandleFunc("/account/reauth", httputils.Wrap(middleware.CorsMiddleware(middleware.DpopMiddleware(middleware.AccessTokenMiddleware(
+	mux.HandleFunc("/account/reauth", httputils.Wrap(middleware.CorsMiddleware(middleware.DpopMiddleware(middleware.AccessTokenMiddleware(middleware.ForbidDemoMiddleware(
 		limitReauth(
 			middleware.LastActivityTracker(h.db, h.Reauthenticate),
 		),
-	)))))
+	))))))
 
 	mux.HandleFunc("/account/keys", httputils.Wrap(func(w http.ResponseWriter, r *http.Request) error {
-		handler := middleware.CorsMiddleware(middleware.DpopMiddleware(middleware.AccessTokenMiddleware(
+		handler := middleware.CorsMiddleware(middleware.DpopMiddleware(middleware.AccessTokenMiddleware(middleware.ForbidDemoMiddleware(
 			limitKeys(
 				middleware.LastActivityTracker(h.db, func(w http.ResponseWriter, r *http.Request) error {
 					if r.Method == http.MethodGet {
@@ -41,7 +42,7 @@ func RegisterRoutes(mux *http.ServeMux, h *Handler, rdb *redis.Client) {
 					return apperrors.NewMethodNotAllowed("method not allowed")
 				}),
 			),
-		)))
+		))))
 		return handler(w, r)
 	}))
 }

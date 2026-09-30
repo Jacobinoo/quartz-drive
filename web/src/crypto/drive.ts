@@ -34,7 +34,10 @@ export async function initializeDriveKeys() {
         // 1. Split the token and decode the middle part (the payload)
         const payloadBase64 = token.split('.')[1];
         const decodedPayload = JSON.parse(atob(payloadBase64));
-        const userEmail = decodedPayload.email;
+        let userEmail = decodedPayload.email;
+        if (decodedPayload.isDemo) {
+            userEmail = "demo@quartz.local"; // Demo accounts use a fixed AD since keys are hardcoded
+        }
 
         // 4. LAYER 2: Decrypt the Default Share Private Key
         const sharePrivKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
@@ -42,7 +45,7 @@ export async function initializeDriveKeys() {
             sodium.from_base64(rootData.wrappedSharePrivateKey),
             // Important: This AD must match what signup.ts used! ("DefaultShare:" + email)
             // If you don't have email in context here, you might need to fetch it from authStore
-            sodium.from_string("DefaultShare:" + userEmail), // TODO: replace with actual email
+            sodium.from_string("DefaultShare:" + userEmail),
             sodium.from_base64(rootData.sharePrivNonce),
             sharePassphrase
         );
@@ -58,7 +61,7 @@ export async function initializeDriveKeys() {
         const rootNodePrivKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
             null,
             sodium.from_base64(rootData.wrappedNodePrivateKey),
-            sodium.from_string("RootNode:" + userEmail), // TODO: replace with actual email
+            sodium.from_string("RootNode:" + userEmail),
             sodium.from_base64(rootData.nodePrivNonce),
             rootNodePassphrase
         );

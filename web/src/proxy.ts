@@ -16,12 +16,14 @@ export function proxy(request: NextRequest) {
   ]
 
   const connectSrc = isDev
-    ? ["'self'", ...devOrigins, s3Endpoint, passwordPwnedCheckApi, "https://*.hcaptcha.com", "https://challenges.cloudflare.com", "https://*.challenges.cloudflare.com"].join(' ')
-    : ["'self'", apiOrigin, s3Endpoint, passwordPwnedCheckApi, "https://*.hcaptcha.com", "https://challenges.cloudflare.com", "https://*.challenges.cloudflare.com"].join(' ')
+    ? ["'self'", ...devOrigins, s3Endpoint, passwordPwnedCheckApi, "https://*.hcaptcha.com", "https://challenges.cloudflare.com", "https://*.challenges.cloudflare.com", "https://eu-assets.i.posthog.com", "https://eu.i.posthog.com"].join(' ')
+    : ["'self'", apiOrigin, s3Endpoint, passwordPwnedCheckApi, "https://*.hcaptcha.com", "https://challenges.cloudflare.com", "https://*.challenges.cloudflare.com", "https://eu-assets.i.posthog.com", "https://eu.i.posthog.com"].join(' ')
+
+  const reportUri = process.env.NEXT_PUBLIC_CSP_REPORT_URI || '/api/csp-report'
 
   const cspHeader = `
     default-src 'self';
-    script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://js.hcaptcha.com https://*.hcaptcha.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com ${isDev ? "'unsafe-eval'" : ""};
+    script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://js.hcaptcha.com https://*.hcaptcha.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://eu-assets.i.posthog.com ${isDev ? "'unsafe-eval'" : ""};
     worker-src 'self' blob:;
     child-src 'self' blob:;
     style-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com;
@@ -34,6 +36,8 @@ export function proxy(request: NextRequest) {
     frame-src 'self' https://*.hcaptcha.com https://hcaptcha.com https://*.challenges.cloudflare.com https://challenges.cloudflare.com;
     frame-ancestors 'none';
     upgrade-insecure-requests;
+    report-uri ${reportUri};
+    report-to csp-endpoint;
   `
   // Replace newline characters and spaces
   const contentSecurityPolicyHeaderValue = cspHeader
@@ -46,6 +50,10 @@ export function proxy(request: NextRequest) {
     'Content-Security-Policy',
     contentSecurityPolicyHeaderValue
   )
+  requestHeaders.set(
+    'Report-To',
+    `{"group":"csp-endpoint","max_age":10886400,"endpoints":[{"url":"${reportUri}"}]}`
+  )
 
   const response = NextResponse.next({
     request: {
@@ -55,6 +63,10 @@ export function proxy(request: NextRequest) {
   response.headers.set(
     'Content-Security-Policy',
     contentSecurityPolicyHeaderValue
+  )
+  response.headers.set(
+    'Report-To',
+    `{"group":"csp-endpoint","max_age":10886400,"endpoints":[{"url":"${reportUri}"}]}`
   )
 
   return response

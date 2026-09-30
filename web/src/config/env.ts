@@ -8,6 +8,7 @@ const envSchema = z.object({
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().min(1),
   NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: z.string().min(1),
   NEXT_PUBLIC_POSTHOG_HOST: z.string().min(1),
+  NEXT_PUBLIC_CSP_REPORT_URI: z.string().optional(),
 });
 
 const parsedEnv = envSchema.safeParse({
@@ -17,7 +18,8 @@ const parsedEnv = envSchema.safeParse({
   NEXT_PUBLIC_CAPTCHA_SITE_KEY: process.env.NEXT_PUBLIC_CAPTCHA_SITE_KEY,
   NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
   NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN,
-  NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST
+  NEXT_PUBLIC_POSTHOG_HOST: process.env.NEXT_PUBLIC_POSTHOG_HOST,
+  NEXT_PUBLIC_CSP_REPORT_URI: process.env.NEXT_PUBLIC_CSP_REPORT_URI
 });
 
 if (!parsedEnv.success) {
@@ -32,5 +34,6 @@ export const config = {
   captchaSitekey: parsedEnv.data.NEXT_PUBLIC_CAPTCHA_SITE_KEY,
   turnstileSitekey: parsedEnv.data.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
   posthogToken: parsedEnv.data.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN,
-  posthogHost: parsedEnv.data.NEXT_PUBLIC_POSTHOG_HOST
+  posthogHost: parsedEnv.data.NEXT_PUBLIC_POSTHOG_HOST,
+  cspReportUri: parsedEnv.data.NEXT_PUBLIC_CSP_REPORT_URI
 };

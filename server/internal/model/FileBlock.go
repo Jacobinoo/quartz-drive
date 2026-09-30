@@ -18,6 +18,12 @@ type FileBlock struct {
 
 	ObjectKey string `gorm:"size:255;not null;uniqueIndex"`
 
+	// EncryptingNodeID stores the original node ID used in the AEAD Additional Data
+	// during encryption. For directly uploaded files this equals NodeID.
+	// For cloned/template files this preserves the original template node ID so
+	// the decrypt worker can reconstruct the correct AD.
+	EncryptingNodeID *uuid.UUID `gorm:"type:uuid"`
+
 	//Header string // secretstream header
 	Size int `gorm:"not null"`
 }

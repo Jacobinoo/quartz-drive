@@ -5,7 +5,7 @@ Quartz Drive takes security very seriously. As an End-to-End Encrypted (E2EE), Z
 ## Reporting a Vulnerability
 
 If you believe you've found a security issue in Quartz Drive, please **DO NOT** open a public GitHub issue.
-We encourage you instead to notify us privately by email instead: **[security@quartzapp.top](mailto:security@quartzapp.top)**
+We encourage you instead to notify us privately by email instead: **[help@quartzapp.top](mailto:help@quartzapp.top)**
 
 We will endeavor to respond to your report within 48 hours. Please include:
 - A detailed description of the vulnerability.

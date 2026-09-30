@@ -482,13 +482,14 @@ const handleDownload = async (file: any, withResult = false, onProgress?: (perce
         }
 
         console.log("Fetching S3 URLs for preview...");
-        const urls = await getDownloadUrls(file.nodeId);
+        const { urls, encryptingNodeId } = await getDownloadUrls(file.nodeId);
+        const decryptNodeId = encryptingNodeId || file.nodeId;
 
         console.log("Starting Decryption Worker for preview...");
       const worker = new Worker(new URL('@/workers/decrypt.worker.ts', import.meta.url));
 
       return await new Promise<string | void>((resolve, reject) => {
-        worker.postMessage({ urls, fileKey, nodeId: file.nodeId });
+        worker.postMessage({ urls, fileKey, nodeId: decryptNodeId });
 
         worker.onmessage = async (e) => {
             if (e.data.type === 'PROGRESS') {

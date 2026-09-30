@@ -10,10 +10,10 @@
 
 https://github.com/user-attachments/assets/94c30515-74fe-46cc-98d9-3583b534595b
 
-> Check out the live demo [here](https://quartzapp.top).
+> Check out the live demo [here](https://quartzapp.top?utm_medium=github_repo_readme1&utm_medium=link).
 
 > [!CAUTION]
-> Quartz Drive is currently in the **alpha** stage and is not production-ready. Do not upload data as the application is unstable and data loss can occur without notice.
+> Quartz Drive is currently in the **alpha** stage and is not production-ready. Do not upload sensitive or important data as the application is unstable and data loss can occur without notice.
 > 
 > Cryptography was tested, however beware that the code has not  been audited by the community or security experts.
 > We are not liable for any data loss or data leakage during the alpha stage. You are using Quartz Drive at your own risk.
@@ -32,7 +32,7 @@ https://github.com/user-attachments/assets/94c30515-74fe-46cc-98d9-3583b534595b
 >
 > Terms are subject to change.
 
-The demo is available [here](https://quartzapp.top).
+The demo is available [here](https://quartzapp.top?utm_medium=github_repo_readme2&utm_medium=link).
 
 ### Architecture & Security Highlights
 

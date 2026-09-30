@@ -168,3 +168,33 @@ func (s *S3Service) GetChunkSize(ctx context.Context, objectKey string) (int64, 
 	}
 	return stat.Size, stat.ETag, stat.ChecksumSHA256, nil
 }
+
+// Copies an object directly inside S3 without downloading it
+func (s *S3Service) CopyChunk(ctx context.Context, srcObjectKey string, destObjectKey string) error {
+	srcOpts := minio.CopySrcOptions{
+		Bucket: s.bucket,
+		Object: srcObjectKey,
+	}
+
+	destOpts := minio.CopyDestOptions{
+		Bucket: s.bucket,
+		Object: destObjectKey,
+	}
+
+	_, err := s.client.CopyObject(ctx, destOpts, srcOpts)
+	return err
+}
+
+// Applies an S3 Legal Hold to an object to make it immutable
+func (s *S3Service) ApplyLegalHold(ctx context.Context, objectKey string, status bool) error {
+	holdStatus := minio.LegalHoldEnabled
+	if !status {
+		holdStatus = minio.LegalHoldDisabled
+	}
+
+	opts := minio.PutObjectLegalHoldOptions{
+		Status: &holdStatus,
+	}
+
+	return s.client.PutObjectLegalHold(ctx, s.bucket, objectKey, opts)
+}

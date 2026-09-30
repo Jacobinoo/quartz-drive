@@ -1,18 +1,29 @@
 import { config } from "@/config/env";
 // src/signout.ts
-import { getCsrfToken, clearAuthState } from "./lib/authStore";
+import {getCsrfToken, clearAuthState, getAccessToken} from "./lib/authStore";
 import { deleteDpopDatabase } from "./lib/dpop";
+import {customFetch} from "@/lib/api";
 
 export async function signOut() {
   try {
+    let endpoint = "/v1/signout";
+    
+    // Check if user is a demo user by reading the JWT
+    const token = getAccessToken();
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (payload.isDemo === true) {
+          endpoint = "/v1/demo/finish";
+        }
+      } catch (e) {
+        // ignore decode errors
+      }
+    }
+
     // 1. Tell Go server to destroy the session in DB and wipe HttpOnly cookies
-    await fetch(`${config.apiUrl}/v1/signout`, {
+    await customFetch(`${config.apiUrl}${endpoint}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRF-Token": getCsrfToken() || "",
-      },
-      credentials: "include",
     });
   } catch (err) {
     console.error("Failed to reach server during signout:", err);

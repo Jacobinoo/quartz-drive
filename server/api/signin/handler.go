@@ -320,7 +320,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 	fingerprintHashBytes := sha256.Sum256(fingerprintBytes)
 	fingerprintHash := hex.EncodeToString(fingerprintHashBytes[:])
 
-	accessToken, expTime := token.IssueAccessToken(false, fingerprintHash, thumbprint, trustedUserInfo.ID.String(), trustedUserInfo.Email, generatedNewSessionID.String(), familyID.String())
+	accessToken, expTime := token.IssueAccessToken(false, fingerprintHash, thumbprint, trustedUserInfo.ID.String(), trustedUserInfo.Email, generatedNewSessionID.String(), familyID.String(), false, 0)
 	maxAge := time.Until(expTime)
 
 	http.SetCookie(w, &http.Cookie{

@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [master, feature/**]
 
+permissions:
+    contents: read
+    pull-requests: read
+
 jobs:
   gitleaks:
     runs-on: ubuntu-latest

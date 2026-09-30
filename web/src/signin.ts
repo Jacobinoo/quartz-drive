@@ -3,7 +3,6 @@ import * as opaque from '@serenity-kit/opaque'
 import { LoginAttestationConfirmed } from "@/LoginAttestationTypes";
 import {getSodium} from "@/lib/crypto/sodium";
 import { createDpopProof, generateAndStoreDpopKey, getDpopPrivateKey } from "@/lib/dpop";
-import { Base64String } from './UtilTypes';
 import { setAccountPrivateKeys, setAuthState, setOpaqueInitData } from './lib/authStore';
 import { saveDevicePrivateKey } from './DeviceKeyStore';
 import { customFetch } from './lib/api';
@@ -231,72 +230,6 @@ export async function signIn(email: string, password: string, token: string, per
           });
     return "ok"
     }
-
-//     const kdfSalt = sodium.from_base64(loginAttestationData.masterKdfSalt);
-//     // const accountNonce = sodium.from_base64(loginAttestationData.);
-//     // const encryptedAccountPrivateKey = sodium.from_base64(loginAttestationData.encryptedAccountPrivateKey);
-
-//     // console.log(`Encrypted Account Private Key: ${loginAttestationData.encryptedAccountPrivateKey}`);
-
-//     // derive master key
-//     const derivedMasterKey = sodium.crypto_pwhash(
-//         sodium.crypto_secretbox_KEYBYTES,
-//         password,
-//         kdfSalt,
-//         sodium.crypto_pwhash_OPSLIMIT_INTERACTIVE,
-//         sodium.crypto_pwhash_MEMLIMIT_INTERACTIVE,
-//         sodium.crypto_pwhash_ALG_ARGON2ID13
-//     );
-
-//     // decrypt account private key
-//     // const privateAccountKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
-//     //     null,
-//     //     encryptedAccountPrivateKey,
-//     //     null,
-//     //     accountNonce,
-//     //     derivedMasterKey
-//     // );
-
-//     // if (!privateAccountKey) {
-//     //     throw new Error("Invalid password");
-//     // }
-
-//     // const accountPub = sodium.from_base64(loginAttestationData.accountPublicKey);
-
-//     // const unwrappedDriveKey = await quantumSealOpen(
-//     //     wrappedDriveKey,
-//     //     accountPub,
-//     //     privateAccountKey
-//     //     );
-//     // if (!unwrappedDriveKey) {
-//     //     throw new Error("Failed to unwrap drive key (seal_open -> false)");
-//     // }
-//     //Unwrapped drive key in memory!
-//     // console.log(`Unwrapped Drive Key: ${unwrappedDriveKey}`);
-
-//     const deviceKeyPair = sodium.crypto_kem_keypair();
-//     const sessionKey = sodium.randombytes_buf(32) //256-bit symmetric key
-
-//     // const wrappedDriveKeyForDevice = await quantumSeal(
-//     //     unwrappedDriveKey,
-//     //     deviceKeyPair.publicKey
-//     // )
-
-//     const deviceNonce = sodium.randombytes_buf(sodium.crypto_secretbox_NONCEBYTES)
-//     const encSessDeviceKey = sodium.crypto_secretbox_easy(
-//         deviceKeyPair.privateKey,
-//         deviceNonce,
-//         sessionKey
-//     )
-
-//     // await storeKeys(
-//     //     wrappedDriveKeyForDevice,
-//     //     encSessDeviceKey,
-//     //     deviceNonce,
-//     //     deviceKeyPair
-//     // );
-// }
-
 
 // Helper to convert ArrayBuffer to Base64
 export function bufferToBase64(buffer: ArrayBuffer): string {

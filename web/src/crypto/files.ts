@@ -12,10 +12,10 @@ export async function fetchFiles(folderId?: string) {
     return await res.json();
 }
 
-export async function getDownloadUrls(nodeId: string): Promise<string[]> {
+export async function getDownloadUrls(nodeId: string): Promise<{ urls: string[], encryptingNodeId?: string }> {
     const res = await customFetch(`${config.apiUrl}/v1/files/download?nodeId=${nodeId}`, { method: "GET" });
     if (!res.ok) throw new Error("Failed to get download URLs");
 
     const data = await res.json();
-    return data.presignedUrls;
+    return { urls: data.presignedUrls, encryptingNodeId: data.encryptingNodeId };
 }

@@ -7,6 +7,7 @@ const (
 	RequestIDKey        ContextKey = "request_id"
 	TrackM1RequestIDKey ContextKey = "track_m1_request_id"
 	UserIDKey           ContextKey = "userID"
+	IsDemoKey           ContextKey = "is_demo"
 	EmailKey            ContextKey = "email"
 	SessionIDKey        ContextKey = "session_id"
 	FamilyIDKey         ContextKey = "family_id"

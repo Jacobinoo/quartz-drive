@@ -22,6 +22,7 @@ type (
 
 		App
 		DB
+		Demo
 		// GRPC
 		KV
 		JWT
@@ -55,6 +56,9 @@ type (
 
 		SigninIPRate  int `env:"RL_SIGNIN_IP_RATE" envDefault:"10"`
 		SigninIPBurst int `env:"RL_SIGNIN_IP_BURST" envDefault:"10"`
+
+		DemoIPRate  int `env:"RL_DEMO_IP_RATE" envDefault:"2"`
+		DemoIPBurst int `env:"RL_DEMO_IP_BURST" envDefault:"6"`
 
 		SignoutIPRate  int `env:"RL_SIGNOUT_IP_RATE" envDefault:"10"`
 		SignoutIPBurst int `env:"RL_SIGNOUT_IP_BURST" envDefault:"5"`
@@ -102,6 +106,27 @@ type (
 		SSLMode                   string `env:"DB_SSLMODE,required"`
 		AutoMigrate               bool   `env:"DB_AUTO_MIGRATE,required"`
 		ConnectingApplicationName string `env:"APP_NAME,required"`
+	}
+
+	Demo struct {
+		MasterKdfSalt                                 string `env:"DEMO_MASTER_KDF_SALT,required"`
+		AccountEncryptionPublicKey                    string `env:"DEMO_ACC_ENCRYPTION_PUBLIC_KEY,required"`
+		EncryptedAccountEncryptionPrivateKey          string `env:"DEMO_ENC_ENCRYPTION_PRIVATE_KEY,required"`
+		AccountEncryptionKeyNonce                     string `env:"DEMO_ENCRYPTION_KEY_NONCE,required"`
+		AccountSigningPublicKey                       string `env:"DEMO_SIGNING_PUBLIC_KEY,required"`
+		EncryptedAccountSigningPrivateKey             string `env:"DEMO_ENC_SIGNING_PRIVATE_KEY,required"`
+		AccountSigningKeyNonce                        string `env:"DEMO_SIGNING_KEY_NONCE,required"`
+		DefaultSharePublicKey                         string `env:"DEMO_DEFAULT_SHARE_PUBLIC_KEY,required"`
+		DefaultShareWrappedPrivateKey                 string `env:"DEMO_DEFAULT_SHARE_WRAPPED_PRIVATE_KEY,required"`
+		DefaultSharePrivateKeyNonce                   string `env:"DEMO_DEFAULT_SHARE_PRIVATE_KEY_NONCE,required"`
+		DefaultShareEncryptedPassphraseForOwner       string `env:"DEMO_DEFAULT_SHARE_ENCRYPTED_PASSPHRASE_FOR_OWNER,required"`
+		DefaultShareSignedEncryptedPassphraseForOwner string `env:"DEMO_DEFAULT_SHARE_SIGNED_ENCRYPTED_PASSPHRASE_FOR_OWNER,required"`
+		RegistrationRecord                            string `env:"DEMO_REGISTRATION_RECORD,required"`
+		RootNodePublicKey                             string `env:"DEMO_ROOT_NODE_PUBLIC_KEY,required"`
+		RootNodeWrappedPrivateKey                     string `env:"DEMO_ROOT_NODE_WRAPPED_PRIVATE_KEY,required"`
+		RootNodePrivKeyNonce                          string `env:"DEMO_ROOT_NODE_PRIV_KEY_NONCE,required"`
+		RootNodeSignedEncryptedPassphrase             string `env:"DEMO_ROOT_NODE_SIGNED_ENCRYPTED_PASSPHRASE,required"`
+		RootNodeEncryptedPassphrase                   string `env:"DEMO_ROOT_NODE_ENCRYPTED_PASSPHRASE,required"`
 	}
 
 	// GRPC struct {

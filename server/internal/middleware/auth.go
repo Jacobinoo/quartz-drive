@@ -82,12 +82,19 @@ func AccessTokenMiddleware(next httputils.APIHandler) httputils.APIHandler {
 			return apperrors.NewUnauthorized("invalid family ID in token", err)
 		}
 
+		// Extract Is Demo? ('isDemo')
+		isDemo, ok := claims["isDemo"].(bool)
+		if !ok {
+			return apperrors.NewUnauthorized("missing or invalid invalid isDemo claim in token", nil)
+		}
+
 		// 4. Inject Data into Context
 		ctx := context.WithValue(r.Context(), contextkeys.UserIDKey, userID)
 		ctx = context.WithValue(ctx, contextkeys.EmailKey, email)
 		ctx = context.WithValue(ctx, contextkeys.SessionIDKey, sessionId)
 		ctx = context.WithValue(ctx, contextkeys.FamilyIDKey, familyId)
 		ctx = context.WithValue(ctx, contextkeys.KeysInitializedKey, keysInitializedStr)
+		ctx = context.WithValue(ctx, contextkeys.IsDemoKey, isDemo)
 
 		slog.DebugContext(r.Context(), "email", "email", email, "user_id", userID)
 

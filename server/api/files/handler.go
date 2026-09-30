@@ -835,10 +835,17 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewInternal(fmt.Errorf("failed to generate download links"))
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(map[string]interface{}{
+	// If blocks have an EncryptingNodeID (cloned files), return it so the
+	// frontend can use the correct node ID as AEAD Additional Data.
+	response := map[string]interface{}{
 		"presignedUrls": urls,
-	})
+	}
+	if len(blocks) > 0 && blocks[0].EncryptingNodeID != nil {
+		response["encryptingNodeId"] = blocks[0].EncryptingNodeID.String()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
 		return apperrors.NewInternal(err)
 	}

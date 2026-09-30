@@ -40,6 +40,14 @@ func (m *mockStorageService) GetChunkSize(ctx context.Context, objectKey string)
 	return 100, "mock-hash", "mock-sig", nil
 }
 
+func (m *mockStorageService) CopyChunk(ctx context.Context, srcObjectKey string, destObjectKey string) error {
+	return nil
+}
+
+func (m *mockStorageService) ApplyLegalHold(ctx context.Context, objectKey string, status bool) error {
+	return nil
+}
+
 func setupTestRedis(t *testing.T) *redis.Client {
 	mr, err := miniredis.Run()
 	if err != nil {

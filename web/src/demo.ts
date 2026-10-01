@@ -21,14 +21,11 @@ export async function demoStart(token: string) {
 
     const deviceKeyPair = await generateDeviceKeyPair();
 
-    const res = await fetch(`${config.apiUrl}/v1/demo/start`, {
+    const res = await customFetch(`${config.apiUrl}/v1/demo/start`, {
         method: "POST",
         headers: {
-            "Content-Type": "application/json",
-            "DPoP": dpopProof,
             "X-Verify-Token": token,
         },
-        credentials: "include",
     });
 
     const loginAttestationRaw = await res.json();

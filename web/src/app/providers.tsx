@@ -5,11 +5,14 @@ import { PostHogProvider as PHProvider } from '@posthog/react'
 import { config } from "@/config/env";
 
 if (typeof window !== 'undefined') {
+    const stored = localStorage.getItem('quartz_cookie_consent');
+    const persistence = stored === 'granted' ? 'localStorage+cookie' : 'memory';
+
     posthog.init(config.posthogToken as string, {
         api_host: config.posthogApiHost,
         ui_host: config.posthogUiHost,
 
-        persistence: 'memory',
+        persistence,
         opt_out_capturing_by_default: false,
 
         autocapture: false,

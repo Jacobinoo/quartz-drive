@@ -297,6 +297,8 @@ func (h *Handler) DemoStart(w http.ResponseWriter, r *http.Request) error {
 		Path:     "/",
 		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
+		Expires:  expiresAt,
+		MaxAge:   int(transientRefreshTokenLifetime.Seconds()),
 	})
 
 	if err := h.db.Create(&refreshTokenEntry).Error; err != nil {

@@ -22,12 +22,14 @@ import (
 	"quartz/pkg/storage"
 	"quartz/pkg/token"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
 	"github.com/mssola/useragent"
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/sync/errgroup"
 	"gorm.io/gorm"
 )
 
@@ -569,23 +571,16 @@ func cloneTemplateTree(ctx context.Context, tx *gorm.DB, storageSvc storage.Stor
 			return err
 		}
 
-		for _, b := range templateBlocks {
+		type blockCopyTask struct {
+			srcKey   string
+			destKey  string
+			newBlock model.FileBlock
+		}
+
+		tasks := make([]blockCopyTask, len(templateBlocks))
+		for i, b := range templateBlocks {
 			newNodeId := nodeMap[b.NodeID]
-
 			newObjectKey := uuid.New().String()
-
-			if err := storageSvc.CopyChunk(ctx, b.ObjectKey, newObjectKey); err != nil {
-				if len(copiedS3Keys) > 0 {
-					go func(keysToSweep []string) {
-						for _, key := range keysToSweep {
-							_ = storageSvc.DeleteChunk(context.Background(), key)
-						}
-					}(copiedS3Keys)
-				}
-				return err
-			}
-
-			copiedS3Keys = append(copiedS3Keys, newObjectKey)
 
 			newBlock := b
 			originalNodeId := b.NodeID // preserve the original for AEAD AD
@@ -598,7 +593,48 @@ func cloneTemplateTree(ctx context.Context, tx *gorm.DB, storageSvc storage.Stor
 			newBlock.UpdatedAt = time.Time{}
 			newBlock.DeletedAt = gorm.DeletedAt{}
 
-			if err := tx.Create(&newBlock).Error; err != nil {
+			tasks[i] = blockCopyTask{
+				srcKey:   b.ObjectKey,
+				destKey:  newObjectKey,
+				newBlock: newBlock,
+			}
+		}
+
+		var copiedMu sync.Mutex
+		g, gCtx := errgroup.WithContext(ctx)
+		g.SetLimit(16) // Concurrently copy up to 16 chunks at a time
+
+		for _, task := range tasks {
+			t := task
+			g.Go(func() error {
+				if err := storageSvc.CopyChunk(gCtx, t.srcKey, t.destKey); err != nil {
+					return err
+				}
+				copiedMu.Lock()
+				copiedS3Keys = append(copiedS3Keys, t.destKey)
+				copiedMu.Unlock()
+				return nil
+			})
+		}
+
+		if err := g.Wait(); err != nil {
+			if len(copiedS3Keys) > 0 {
+				go func(keysToSweep []string) {
+					for _, key := range keysToSweep {
+						_ = storageSvc.DeleteChunk(context.Background(), key)
+					}
+				}(copiedS3Keys)
+			}
+			return err
+		}
+
+		newBlocks := make([]model.FileBlock, len(tasks))
+		for i, t := range tasks {
+			newBlocks[i] = t.newBlock
+		}
+
+		if len(newBlocks) > 0 {
+			if err := tx.CreateInBatches(&newBlocks, 100).Error; err != nil {
 				go func(keysToSweep []string) {
 					for _, key := range keysToSweep {
 						_ = storageSvc.DeleteChunk(context.Background(), key)

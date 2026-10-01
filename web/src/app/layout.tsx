@@ -7,6 +7,7 @@ import { AuthProvider } from "@/components/auth-provider";
 import {SpeedInsights} from "@vercel/speed-insights/next";
 import {Analytics} from "@vercel/analytics/next";
 import {PostHogProvider} from "@/app/providers";
+import {CookieBanner} from "@/app/cookie-banner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -43,6 +44,7 @@ export default function RootLayout({
             <AuthProvider>
                 <PostHogProvider>
                     {children}
+                    <CookieBanner />
                 </PostHogProvider>
                 <SpeedInsights />
                 <Analytics />

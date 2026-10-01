@@ -8,13 +8,7 @@ export function CookieBanner() {
     const [consentGiven, setConsentGiven] = useState<string | null>(null);
 
     useEffect(() => {
-        if (posthog.has_opted_in_capturing()) {
-            setConsentGiven('granted');
-        } else if (posthog.has_opted_out_capturing()) {
-            setConsentGiven('denied');
-        } else {
-            setConsentGiven('pending');
-        }
+        setConsentGiven(posthog.get_explicit_consent_status());
     }, []);
 
     const handleAcceptCookies = () => {

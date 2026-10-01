@@ -26,9 +26,7 @@ export function identifyCurrentUser() {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
       if (payload.sub) {
-        posthog.identify(payload.sub, {
-          email: payload.email
-        });
+        posthog.identify(payload.sub);
       }
     } catch (e) {
       console.warn("Failed to parse token for PostHog identify", e);

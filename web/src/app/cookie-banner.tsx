@@ -8,16 +8,25 @@ export function CookieBanner() {
     const [consentGiven, setConsentGiven] = useState<string | null>(null);
 
     useEffect(() => {
-        setConsentGiven(posthog.get_explicit_consent_status());
+        const consent = localStorage.getItem('quartz_cookie_consent');
+        if (!consent) {
+            setConsentGiven('pending');
+        } else {
+            setConsentGiven(consent);
+            if (consent === 'granted') {
+                posthog.set_config({ persistence: 'localStorage+cookie' });
+            }
+        }
     }, []);
 
     const handleAcceptCookies = () => {
-        posthog.opt_in_capturing();
+        posthog.set_config({ persistence: 'localStorage+cookie' });
+        localStorage.setItem('quartz_cookie_consent', 'granted');
         setConsentGiven('granted');
     };
 
     const handleDeclineCookies = () => {
-        posthog.opt_out_capturing();
+        localStorage.setItem('quartz_cookie_consent', 'denied');
         setConsentGiven('denied');
     };
 

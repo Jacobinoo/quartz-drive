@@ -1,5 +1,7 @@
 import { deleteDeviceKeys } from "@/DeviceKeyStore";
 
+import posthog from "posthog-js";
+
 let memoryAccessToken: string | null = null;
 let memoryCsrfToken: string | null = null;
 
@@ -17,6 +19,23 @@ export function setOpaqueInitData(exportKey: string | Uint8Array | null, email: 
 export function getOpaqueExportKey() { return memoryOpaqueExportKey; }
 export function getUserEmail() { return memoryUserEmail; }
 
+
+export function identifyCurrentUser() {
+  const token = memoryAccessToken;
+  if (token && posthog.get_explicit_consent_status() === 'granted') {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      if (payload.sub) {
+        posthog.identify(payload.sub, {
+          email: payload.email
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to parse token for PostHog identify", e);
+    }
+  }
+}
+
 export function setAuthState(token: string | null, csrf: string | null) {
   memoryAccessToken = token;
   memoryCsrfToken = csrf;
@@ -24,6 +43,8 @@ export function setAuthState(token: string | null, csrf: string | null) {
   if (csrf) {
     localStorage.setItem("cf", csrf);
   }
+
+  identifyCurrentUser();
 }
 
 export function setAccountPrivateKeys(encryptionKey: Uint8Array | null, signingKey: Uint8Array | null) {

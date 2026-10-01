@@ -3,6 +3,7 @@ import { config } from "@/config/env";
 import {getCsrfToken, clearAuthState, getAccessToken} from "./lib/authStore";
 import { deleteDpopDatabase } from "./lib/dpop";
 import {customFetch} from "@/lib/api";
+import posthog from "posthog-js";
 
 export async function signOut() {
   try {
@@ -34,6 +35,11 @@ export async function signOut() {
       await deleteDpopDatabase();
     } catch (e) {
       console.warn("Could not wipe DPoP database:", e);
+    }
+    try {
+      posthog.reset();
+    } catch (e) {
+      console.warn("Could not reset PostHog:", e);
     }
   }
 }

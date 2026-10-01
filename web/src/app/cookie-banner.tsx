@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import posthog from "posthog-js";
 import Link from "next/link";
+import { identifyCurrentUser } from "@/lib/authStore";
 
 export function CookieBanner() {
     const [consentGiven, setConsentGiven] = useState<string | null>(null);
@@ -14,6 +15,7 @@ export function CookieBanner() {
     const handleAcceptCookies = () => {
         posthog.opt_in_capturing();
         setConsentGiven('granted');
+        identifyCurrentUser();
     };
 
     const handleDeclineCookies = () => {

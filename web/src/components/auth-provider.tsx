@@ -11,12 +11,11 @@ import { deleteDeviceKeys } from "@/DeviceKeyStore";
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const publicPaths = ["/signin", "/signup", "/forgot-password", "/reset-password", "/verify-email", "/onboarding", "/terms", "/privacy"];
+  const authPaths = ["/signin", "/signup", "/forgot-password", "/reset-password", "/verify-email", "/onboarding"];
+  const publicPaths = ["/terms", "/privacy"];
 
   const [isBooting, setIsBooting] = useState(true);
-
   const hasBooted = useRef(false);
-
   const [isOffline, setIsOffline] = useState(false);
   const [isRateLimited, setIsRateLimited] = useState(false);
 
@@ -38,18 +37,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function boot() {
       try {
         console.log("App booting... restoring session from secure cookie...");
-        // This hits /v1/refresh and automatically populates your authStore in memory!
         await refreshSession();
 
-        // User is authenticated. If they're on a public auth page, redirect to drive.
-        if (publicPaths.includes(pathname)) {
+        // User is authenticated. If they're on an auth page, redirect to drive.
+        if (authPaths.includes(pathname)) {
            router.push("/drive" + window.location.search);
         }
         setIsBooting(false);
       } catch (err: any) {
+        const isPublicOrAuthPage = authPaths.includes(pathname) || publicPaths.includes(pathname);
+        
         if (err.message === "NETWORK_ERROR") {
           console.warn("Backend is offline during boot. Halting boot sequence without logging out.");
-          if (publicPaths.includes(pathname)) {
+          if (isPublicOrAuthPage) {
             setIsBooting(false);
           } else {
             setIsOffline(true);
@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         if (err.message === "RATE_LIMIT_ERROR") {
           console.warn("Backend rate limit exceeded during boot.");
-          if (publicPaths.includes(pathname)) {
+          if (isPublicOrAuthPage) {
             setIsBooting(false);
           } else {
             setIsRateLimited(true);
@@ -68,13 +68,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // SESSION_EXPIRED = server explicitly rejected the session (401/403).
-        // Force a full sign-out. Use hard navigation to guarantee redirect
-        // and keep the loading screen up (don't setIsBooting(false)) so the
-        // protected page never renders.
         if (err.message === "SESSION_EXPIRED") {
           console.warn("Session expired (server returned 401/403). Signing out.");
-          if (publicPaths.includes(pathname)) {
+          if (isPublicOrAuthPage) {
             clearAuthState();
             deleteDpopDatabase().catch(() => {});
             deleteDeviceKeys().catch(() => {});
@@ -86,14 +82,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // Any other error (DPoP failure, IndexedDB hiccup, JSON parse error, etc.)
-        // is transient — do NOT destroy the session.
         console.warn("Boot failed with non-fatal error:", err.message);
-        if (publicPaths.includes(pathname)) {
-          // On public pages, just show the page (e.g., the login form)
+        if (isPublicOrAuthPage) {
           setIsBooting(false);
         } else {
-          // On protected pages, show offline screen so user can retry
           setIsOffline(true);
           setIsBooting(false);
         }

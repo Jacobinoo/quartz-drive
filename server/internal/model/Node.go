@@ -15,7 +15,7 @@ const (
 type Node struct {
 	gorm.Model
 	ID        uuid.UUID `gorm:"type:uuid;primaryKey;not null"`
-	Type      NodeType  `gorm:"type:varchar(20);check:type IN ('FILE', 'FOLDER');not null"`
+	Type      NodeType  `gorm:"type:varchar(20);index;check:type IN ('FILE', 'FOLDER');not null"`
 	SizeBytes int64     `gorm:"default:0;not null"`
 
 	EncryptedMetadata string `gorm:"type:text"`

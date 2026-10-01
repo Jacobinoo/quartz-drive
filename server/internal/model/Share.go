@@ -16,7 +16,7 @@ type Share struct {
 	gorm.Model
 	ID           uuid.UUID `gorm:"type:uuid;primaryKey;not null"`
 	TargetLinkID uuid.UUID `gorm:"type:uuid;not null;index"`
-	Type         ShareType `gorm:"type:varchar(50);check:type IN ('DEFAULT', 'SHARED');not null"`
+	Type         ShareType `gorm:"type:varchar(50);index;check:type IN ('DEFAULT', 'SHARED');not null"`
 
 	OwnerID uuid.UUID `gorm:"type:uuid;not null;index"`
 

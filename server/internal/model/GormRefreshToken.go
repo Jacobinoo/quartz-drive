@@ -21,7 +21,7 @@ type GormRefreshToken struct {
 	LastUsedAt time.Time `gorm:"default:null"`
 
 	CsrfTokenHash string `gorm:"not null"`
-	DpopJKT       string `gorm:"type:varchar(45);not null"`
+	DpopJKT       string `gorm:"type:varchar(45);index;not null"`
 
 	SessionID uuid.UUID `gorm:"type:uuid;index;not null"`
 	Session   Session   `gorm:"foreignKey:SessionID"`

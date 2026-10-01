@@ -9,7 +9,7 @@ import (
 
 type Link struct {
 	// ID: Unikalne ID linku, nie mylić z ID pliku/węzła
-	ID        uuid.UUID      `gorm:"type:uuid;primaryKey;not null"`
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey;not null"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index:idx_parent_node_deleted"`
@@ -41,7 +41,7 @@ type Link struct {
 
 	SignedEncryptedNodePassphrase string `gorm:"type:text;not null"`
 
-	AuthorID uuid.UUID `gorm:"type:uuid;not null"`
+	AuthorID uuid.UUID `gorm:"type:uuid;index;not null"`
 
 	ParentNode *Node `gorm:"foreignKey:ParentNodeID;constraint:OnDelete:CASCADE"`
 	ChildNode  Node  `gorm:"foreignKey:ChildNodeID;constraint:OnDelete:CASCADE"`

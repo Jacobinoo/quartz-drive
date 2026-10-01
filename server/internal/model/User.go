@@ -9,7 +9,7 @@ import (
 )
 
 type User struct {
-	CreatedAt          time.Time
+	CreatedAt          time.Time `gorm:"index"`
 	UpdatedAt          time.Time
 	DeletedAt          sql.NullTime `gorm:"index"`
 	ID                 uuid.UUID    `gorm:"primaryKey;type:uuid;not null"`

@@ -18,7 +18,7 @@ type Volume struct {
 	Type VolumeType `gorm:"type:varchar(20);not null"`
 
 	// Relationships
-	OwnerUserID *uuid.UUID `gorm:"type:uuid;uniqueIndex:idx_user_private_vol,where:type='PRIVATE'"` // Set if Type == PRIVATE
+	OwnerUserID *uuid.UUID `gorm:"type:uuid;index;uniqueIndex:idx_user_private_vol,where:type='PRIVATE'"` // Set if Type == PRIVATE
 	RootNodeID  uuid.UUID  `gorm:"type:uuid;not null;uniqueIndex"`
 
 	// Quota Accounting

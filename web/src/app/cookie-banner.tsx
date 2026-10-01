@@ -8,25 +8,24 @@ export function CookieBanner() {
     const [consentGiven, setConsentGiven] = useState<string | null>(null);
 
     useEffect(() => {
-        const consent = localStorage.getItem('quartz_cookie_consent');
-        if (!consent) {
-            setConsentGiven('pending');
+        if (posthog.has_opted_in_capturing()) {
+            posthog.set_config({ persistence: 'localStorage+cookie' });
+            setConsentGiven('granted');
+        } else if (posthog.has_opted_out_capturing()) {
+            setConsentGiven('denied');
         } else {
-            setConsentGiven(consent);
-            if (consent === 'granted') {
-                posthog.set_config({ persistence: 'localStorage+cookie' });
-            }
+            setConsentGiven('pending');
         }
     }, []);
 
     const handleAcceptCookies = () => {
+        posthog.opt_in_capturing();
         posthog.set_config({ persistence: 'localStorage+cookie' });
-        localStorage.setItem('quartz_cookie_consent', 'granted');
         setConsentGiven('granted');
     };
 
     const handleDeclineCookies = () => {
-        localStorage.setItem('quartz_cookie_consent', 'denied');
+        posthog.opt_out_capturing();
         setConsentGiven('denied');
     };
 
@@ -42,16 +41,16 @@ export function CookieBanner() {
                     </Link>.
                 </p>
                 <div className="flex gap-3 items-center justify-end pt-1">
-                    <button 
-                        type="button" 
-                        onClick={handleDeclineCookies} 
+                    <button
+                        type="button"
+                        onClick={handleDeclineCookies}
                         className="px-3.5 py-1.5 text-xs font-medium text-gray-700 dark:text-white/80 hover:bg-gray-100 dark:hover:bg-white/10 border border-gray-300 dark:border-white/15 rounded-lg transition-colors"
                     >
                         Decline
                     </button>
-                    <button 
-                        type="button" 
-                        onClick={handleAcceptCookies} 
+                    <button
+                        type="button"
+                        onClick={handleAcceptCookies}
                         className="px-3.5 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                     >
                         Accept cookies

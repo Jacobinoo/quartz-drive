@@ -8,12 +8,10 @@ if (typeof window !== 'undefined') {
     posthog.init(config.posthogToken as string, {
         api_host: config.posthogApiHost,
         ui_host: config.posthogUiHost,
-        
+
+        persistence: 'memory',
         opt_out_capturing_by_default: false,
-        persistence: 'memory', 
-        
-        cookieless_mode: "on_reject",
-        
+
         autocapture: false,
         disable_session_recording: true,
         enable_heatmaps: false,

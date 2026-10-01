@@ -287,11 +287,12 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 			Secure:   true,
 			SameSite: http.SameSiteLaxMode,
 			Expires:  time.Now().Add(7 * 24 * time.Hour),
-			MaxAge:   int(maxAge.Seconds()),
+			MaxAge:   int((7 * 24 * time.Hour).Seconds()),
 		})
 	}
 
 	if user.IsDemo {
+		demoMaxAge := time.Until(storedToken.ExpiresAt)
 		http.SetCookie(w, &http.Cookie{
 			Name:     "__Secure-Auth",
 			Value:    newRefreshToken.Token,
@@ -300,7 +301,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) error {
 			Secure:   true,
 			SameSite: http.SameSiteLaxMode,
 			Expires:  storedToken.ExpiresAt,
-			MaxAge:   int(maxAge.Seconds()),
+			MaxAge:   int(demoMaxAge.Seconds()),
 		})
 	}
 

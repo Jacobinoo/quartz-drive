@@ -8,7 +8,7 @@ export default function PrivacyPage() {
     <div className="min-h-screen bg-white dark:bg-[#0b0b0c] text-gray-900 dark:text-gray-900 dark:text-white/90 font-sans selection:bg-blue-500/30 flex flex-col">
       <div className="w-full max-w-3xl mx-auto px-6 py-20 flex flex-col gap-8 flex-1">
         <Link 
-          href="/signin"
+          href="/"
           className="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-500 dark:text-white/50 hover:text-gray-900 dark:hover:text-white transition-colors w-fit"
         >
           <ArrowLeft className="w-4 h-4" />

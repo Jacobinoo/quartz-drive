@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { ResetCookiesButton } from "./reset-cookies-button";
 
 export default function PrivacyPage() {
   return (
@@ -100,6 +101,13 @@ export default function PrivacyPage() {
           <h2 className="text-xl font-semibold mt-8 mb-4">10. Contact Us</h2>
           <p className="text-gray-600 dark:text-white/70 mb-4 leading-relaxed">
             If you have any questions, requests regarding your data, or complaints, please contact our Data Protection Officer at <strong><a href="mailto:help@quartzapp.top">help@quartzapp.top</a></strong>.
+          </p>
+
+          <h2 className="text-xl font-semibold mt-8 mb-4">11. Manage Cookies</h2>
+          <p className="text-gray-600 dark:text-white/70 mb-4 leading-relaxed">
+            You can change your mind about optional analytics cookies at any time. Clicking the button below will reset your preference and reload the page so you can make a new choice.
+            <br /><br />
+            <ResetCookiesButton />
           </p>
         </div>
 

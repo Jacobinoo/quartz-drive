@@ -8,7 +8,7 @@
 
 ---
 
-https://github.com/user-attachments/assets/94c30515-74fe-46cc-98d9-3583b534595b
+https://github.com/user-attachments/assets/b3504f7e-45ca-470e-ac38-97df6382da1d
 
 > Check out the live demo [here](https://quartzapp.top?utm_medium=github_repo_readme1&utm_medium=link&utm_campaign=demo).
 

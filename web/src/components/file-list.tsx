@@ -276,13 +276,16 @@ export function FileList() {
 
     const handlePreview = async (file: any) => {
         const isImage = /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(file.plaintextName ?? "");
-        if (!isImage) {
+        const isVideo = /\.(mp4|webm|ogg|mov)$/i.test(file.plaintextName ?? "");
+        
+        if (!isImage && !isVideo) {
             setPreviewFile({ file, url: null, loading: false, progress: 0, unsupported: true });
             return;
         }
 
         const size = file.metadata?.originalSizeBytes || file.sizeBytes || 0;
-        if (size > 25 * 1024 * 1024) {
+        const sizeLimit = isVideo ? 50 * 1024 * 1024 : 25 * 1024 * 1024;
+        if (size > sizeLimit) {
             setPreviewFile({ file, url: null, loading: false, progress: 0, tooLarge: true });
             return;
         }

@@ -59,6 +59,7 @@ export function FilePreviewModal({ file, url, loading, progress, tooLarge, unsup
   if (!file || (!url && !loading && !tooLarge && !unsupported)) return null;
 
   const isImage = /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(file.plaintextName ?? "");
+  const isVideo = /\.(mp4|webm|ogg|mov)$/i.test(file.plaintextName ?? "");
 
   // Helper to map MIME types to friendly names
   const MIME_TYPE_MAP: Record<string, string> = {
@@ -351,6 +352,13 @@ export function FilePreviewModal({ file, url, loading, progress, tooLarge, unsup
                 className="max-w-[90vw] max-h-[85vh] object-contain select-none shadow-2xl"
               />
             </>
+          ) : isVideo ? (
+            <video
+              src={url!}
+              controls
+              autoPlay
+              className="max-w-[90vw] max-h-[85vh] object-contain shadow-2xl bg-black rounded-md"
+            />
           ) : (
             <div className="flex flex-col items-center gap-4 text-white/60">
               <p className="text-sm">No preview available for this file type.</p>

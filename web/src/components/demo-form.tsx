@@ -71,7 +71,11 @@ export function DemoForm({
                       })
                       .catch((err: Error) => {
                         console.error(`Error occured on sign in: ${err.message}`);
-                        setError(err.message);
+                        if (err.name === 'TypeError' || err.message.includes('is not a') || err.message.includes('undefined')) {
+                           setError("An internal error occurred. Please ensure your browser is up to date and try again.");
+                        } else {
+                           setError(err.message || "An unexpected error occurred.");
+                        }
                       })
                       .finally(() => {
                         setIsLoading(false)

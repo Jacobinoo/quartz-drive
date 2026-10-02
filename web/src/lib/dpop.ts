@@ -88,6 +88,18 @@ async function getDpopPrivateKey(): Promise<CryptoKey> {
     });
 }
 
+function bufferToBase64Url(buffer: ArrayBuffer | Uint8Array): string {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+}
+
 async function createDpopProof(
     privateKey: CryptoKey,
     publicKeyJwk: JsonWebKey,
@@ -115,15 +127,11 @@ async function createDpopProof(
 
     if(accessToken) {
         const hash = await crypto.subtle.digest('SHA-256', encoder.encode(accessToken));
-        const hashBytes = new Uint8Array(hash);
-        // @ts-ignore
-        payload.ath = hashBytes.toBase64({ alphabet: "base64url", omitPadding: true});
+        payload.ath = bufferToBase64Url(hash);
     }
 
-    // @ts-ignore
-    const headerStr: string = encoder.encode(JSON.stringify(header)).toBase64({ alphabet: "base64url", omitPadding: true});
-    // @ts-ignore
-    const payloadStr: string = encoder.encode(JSON.stringify(payload)).toBase64({ alphabet: "base64url", omitPadding: true});
+    const headerStr = bufferToBase64Url(encoder.encode(JSON.stringify(header)));
+    const payloadStr = bufferToBase64Url(encoder.encode(JSON.stringify(payload)));
     const input = `${headerStr}.${payloadStr}`;
 
     const signature = await crypto.subtle.sign(
@@ -135,9 +143,7 @@ async function createDpopProof(
         encoder.encode(input)
     );
 
-    return (
-        `${input}.${(new Uint8Array(signature) as any).toBase64({alphabet: "base64url", omitPadding: true})}`
-    )
+    return `${input}.${bufferToBase64Url(signature)}`;
 }
 
 async function getDpopKeyPair(): Promise<{ privateKey: CryptoKey; publicKey: JsonWebKey }> {

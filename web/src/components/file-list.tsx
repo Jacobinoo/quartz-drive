@@ -7,7 +7,16 @@ import { fetchFiles, getDownloadUrls } from "@/crypto/files";
 import { getSodium } from "@/lib/crypto/sodium";
 import { useDriveStore } from "@/lib/driveStore";
 import { getAccountSigningPrivateKey } from "@/lib/authStore";
-import { FileIcon, FolderIcon, Info, MoreVertical, Pencil, Share2, Trash2, ShieldCheck, ShieldAlert } from "lucide-react";
+import {
+    FileIcon,
+    FolderIcon,
+    Info,
+    MoreVertical,
+    Pencil,
+    Share2,
+    Trash2,
+    CloudDownload
+} from "lucide-react";
 import { customFetch } from "@/lib/api"; // Added for our direct API calls
 import {
     DropdownMenu,
@@ -390,6 +399,7 @@ export function FileList() {
                                     <DropdownMenuContent align="end">
                                         {file.type === 'FILE' && (
                                             <DropdownMenuItem onClick={() => handleDownload(file)} className="cursor-pointer">
+                                                <CloudDownload className="w-4 h-4 mr-2" />
                                                 Download
                                             </DropdownMenuItem>
                                         )}

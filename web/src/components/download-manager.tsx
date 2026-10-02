@@ -46,6 +46,7 @@ export function DownloadManager() {
                             const a = document.createElement("a");
                             a.href = downloadUrl;
                             a.download = job.file.plaintextName;
+                            a.target = "_blank";
                             document.body.appendChild(a);
                             a.click();
 
@@ -69,30 +70,10 @@ export function DownloadManager() {
                     workerInstances.current.delete(job.id);
                 };
 
-                const getMimeType = (filename: string) => {
-                    const ext = filename.split('.').pop()?.toLowerCase();
-                    switch (ext) {
-                        case 'mp4': return 'video/mp4';
-                        case 'webm': return 'video/webm';
-                        case 'ogg': return 'video/ogg';
-                        case 'mov': return 'video/quicktime';
-                        case 'png': return 'image/png';
-                        case 'jpg':
-                        case 'jpeg': return 'image/jpeg';
-                        case 'gif': return 'image/gif';
-                        case 'webp': return 'image/webp';
-                        case 'avif': return 'image/avif';
-                        case 'svg': return 'image/svg+xml';
-                        case 'pdf': return 'application/pdf';
-                        default: return 'application/octet-stream';
-                    }
-                };
-
                 worker.postMessage({
                     urls,
                     fileKey: job.fileKey,
-                    nodeId: decryptNodeId,
-                    mimeType: getMimeType(job.file.plaintextName)
+                    nodeId: decryptNodeId
                 });
 
             } catch (err: any) {

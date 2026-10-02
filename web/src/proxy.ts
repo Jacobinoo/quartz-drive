@@ -28,6 +28,7 @@ export function proxy(request: NextRequest) {
     child-src 'self' blob:;
     style-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com;
     img-src 'self' blob: data:;
+    media-src 'self' blob:;
     font-src 'self';
     object-src 'none';
     connect-src ${connectSrc};

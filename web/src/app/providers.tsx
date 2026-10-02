@@ -17,8 +17,9 @@ if (typeof window !== 'undefined') {
         enable_heatmaps: false,
         capture_dead_clicks: false,
         
-        autocapture_exceptions: true,
+        capture_exceptions: true,
         before_send: (event) => {
+            if (!event) return event;
             if (event.event === '$exception' && event.properties) {
                 const redact = (str: string) => {
                     if (typeof str !== 'string') return str;

@@ -501,8 +501,27 @@ const handleDownload = async (file: any, withResult = false, onProgress?: (perce
         console.log("Starting Decryption Worker for preview...");
       const worker = new Worker(new URL('@/workers/decrypt.worker.ts', import.meta.url));
 
+      const getMimeType = (filename: string) => {
+          const ext = filename.split('.').pop()?.toLowerCase();
+          switch (ext) {
+              case 'mp4': return 'video/mp4';
+              case 'webm': return 'video/webm';
+              case 'ogg': return 'video/ogg';
+              case 'mov': return 'video/quicktime';
+              case 'png': return 'image/png';
+              case 'jpg':
+              case 'jpeg': return 'image/jpeg';
+              case 'gif': return 'image/gif';
+              case 'webp': return 'image/webp';
+              case 'avif': return 'image/avif';
+              case 'svg': return 'image/svg+xml';
+              case 'pdf': return 'application/pdf';
+              default: return 'application/octet-stream';
+          }
+      };
+
       return await new Promise<string | void>((resolve, reject) => {
-        worker.postMessage({ urls, fileKey, nodeId: decryptNodeId });
+        worker.postMessage({ urls, fileKey, nodeId: decryptNodeId, mimeType: getMimeType(file.plaintextName) });
 
         worker.onmessage = async (e) => {
             if (e.data.type === 'PROGRESS') {

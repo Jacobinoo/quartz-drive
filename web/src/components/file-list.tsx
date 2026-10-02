@@ -521,8 +521,6 @@ const handleDownload = async (file: any, withResult = false, onProgress?: (perce
       };
 
       return await new Promise<string | void>((resolve, reject) => {
-        worker.postMessage({ urls, fileKey, nodeId: decryptNodeId, mimeType: getMimeType(file.plaintextName) });
-
         worker.onmessage = async (e) => {
             if (e.data.type === 'PROGRESS') {
                 console.log(`Decrypting: ${e.data.percent}%`);
@@ -553,6 +551,8 @@ const handleDownload = async (file: any, withResult = false, onProgress?: (perce
         worker.terminate();
         reject(err);
       };
+
+      worker.postMessage({ urls, fileKey, nodeId: decryptNodeId, mimeType: getMimeType(file.plaintextName) });
   });
     } catch (err) {
       console.error("Download aborted or failed:", err);

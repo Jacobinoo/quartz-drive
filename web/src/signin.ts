@@ -1,17 +1,30 @@
 import { config } from "@/config/env";
-import * as opaque from '@serenity-kit/opaque'
+import * as opaque from "@serenity-kit/opaque";
 import { LoginAttestationConfirmed } from "@/LoginAttestationTypes";
-import {getSodium} from "@/lib/crypto/sodium";
-import { createDpopProof, generateAndStoreDpopKey, getDpopPrivateKey } from "@/lib/dpop";
-import { setAccountPrivateKeys, setAuthState, setOpaqueInitData } from './lib/authStore';
-import { saveDevicePrivateKey } from './DeviceKeyStore';
-import { customFetch } from './lib/api';
+import { getSodium } from "@/lib/crypto/sodium";
+import {
+    createDpopProof,
+    generateAndStoreDpopKey,
+    getDpopPrivateKey,
+} from "@/lib/dpop";
+import {
+    setAccountPrivateKeys,
+    setAuthState,
+    setOpaqueInitData,
+} from "./lib/authStore";
+import { saveDevicePrivateKey } from "./DeviceKeyStore";
+import { customFetch } from "./lib/api";
 
-
-
-
-export async function signIn(email: string, password: string, token: string, persistSession: boolean): Promise<"ok" | "noinit" | "recovery_needed"> {
-    if (!email || !password || !token) throw new Error("Email, password and bot verification success required");
+export async function signIn(
+    email: string,
+    password: string,
+    token: string,
+    persistSession: boolean
+): Promise<"ok" | "noinit" | "recovery_needed"> {
+    if (!email || !password || !token)
+        throw new Error(
+            "Email, password and bot verification success required"
+        );
 
     const sodium = await getSodium();
     await opaque.ready;
@@ -22,17 +35,17 @@ export async function signIn(email: string, password: string, token: string, per
 
     const m1 = {
         email: email,
-      loginRequest: startLoginRequest,
-    }
+        loginRequest: startLoginRequest,
+    };
 
     // send opaque m1 and fetch m2 from response
     const res = await fetch(`${config.apiUrl}/v1/signin`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "X-Verify-Token": token,
+            "Content-Type": "application/json",
+            "X-Verify-Token": token,
         },
-        body: JSON.stringify(m1)
+        body: JSON.stringify(m1),
     });
 
     const m2 = await res.json();
@@ -40,11 +53,16 @@ export async function signIn(email: string, password: string, token: string, per
     let loginResponse: string;
     let loginNonce: string;
 
-    if((m2.loginResponse && m2.loginResponse != "") && (m2.nonce && m2.nonce != "")) {
+    if (
+        m2.loginResponse &&
+        m2.loginResponse != "" &&
+        m2.nonce &&
+        m2.nonce != ""
+    ) {
         loginResponse = m2.loginResponse;
         loginNonce = m2.nonce;
     } else {
-        throw Error("Cannot find login response in payload.")
+        throw Error("Cannot find login response in payload.");
     }
 
     const loginResult = opaque.client.finishLogin({
@@ -60,35 +78,43 @@ export async function signIn(email: string, password: string, token: string, per
         throw new Error("Login failed");
     }
 
-    const { finishLoginRequest, exportKey, serverStaticPublicKey } = loginResult;
+    const { finishLoginRequest, exportKey, serverStaticPublicKey } =
+        loginResult;
 
-  if (serverStaticPublicKey !== process.env.NEXT_PUBLIC_SERVER_PUBLIC_KEY) {
-      throw new Error("Server identity verification failed. Aborting login.");
-  }
+    if (serverStaticPublicKey !== process.env.NEXT_PUBLIC_SERVER_PUBLIC_KEY) {
+        throw new Error("Server identity verification failed. Aborting login.");
+    }
 
-    console.log("Agreed session key, client is done, waiting for trust attestation from server.") //session key agreed, waiting for server trust attestation
+    console.log(
+        "Agreed session key, client is done, waiting for trust attestation from server."
+    ); //session key agreed, waiting for server trust attestation
 
     //DPoP
     const dpopPublicKey = await generateAndStoreDpopKey();
     const dpopPrivateKey = await getDpopPrivateKey();
-    const dpopProof = await createDpopProof(dpopPrivateKey, dpopPublicKey, "POST", `${config.apiUrl}/v1/signin/m3`);
+    const dpopProof = await createDpopProof(
+        dpopPrivateKey,
+        dpopPublicKey,
+        "POST",
+        `${config.apiUrl}/v1/signin/m3`
+    );
 
-  console.log(dpopProof);
+    console.log(dpopProof);
 
-  const deviceKeyPair = await generateDeviceKeyPair();
+    const deviceKeyPair = await generateDeviceKeyPair();
 
     const m3 = {
-      finishLoginRequest: finishLoginRequest,
-      nonce: loginNonce,
+        finishLoginRequest: finishLoginRequest,
+        nonce: loginNonce,
         persistSession: persistSession,
-    }
+    };
 
     // send opaque m3
     const res3 = await fetch(`${config.apiUrl}/v1/signin/m3`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
-            "DPoP": dpopProof,
+            DPoP: dpopProof,
         },
         body: JSON.stringify(m3),
         credentials: "include",
@@ -96,21 +122,28 @@ export async function signIn(email: string, password: string, token: string, per
 
     const loginAttestationRaw = await res3.json();
 
-    let attestationConfirmed = false
+    let attestationConfirmed = false;
 
-    if((loginAttestationRaw.status && loginAttestationRaw.status == "ok") && (loginAttestationRaw.attestation && loginAttestationRaw.attestation == true)) {
-        attestationConfirmed = true
+    if (
+        loginAttestationRaw.status &&
+        loginAttestationRaw.status == "ok" &&
+        loginAttestationRaw.attestation &&
+        loginAttestationRaw.attestation == true
+    ) {
+        attestationConfirmed = true;
     }
 
     if (!attestationConfirmed) {
-        throw Error("Login failed")
+        throw Error("Login failed");
     }
 
-    console.log("Opaque SessionKey received trust attestation.")
+    console.log("Opaque SessionKey received trust attestation.");
 
     const loginAttestationData: LoginAttestationConfirmed = {
-        accountEncryptionKeyNonce: loginAttestationRaw.accountEncryptionKeyNonce,
-        accountEncryptionPublicKey: loginAttestationRaw.accountEncryptionPublicKey,
+        accountEncryptionKeyNonce:
+            loginAttestationRaw.accountEncryptionKeyNonce,
+        accountEncryptionPublicKey:
+            loginAttestationRaw.accountEncryptionPublicKey,
         accountSigningKeyNonce: loginAttestationRaw.accountSigningKeyNonce,
         accountSigningPublicKey: loginAttestationRaw.accountSigningPublicKey,
         attestation: loginAttestationRaw.attestation,
@@ -118,8 +151,10 @@ export async function signIn(email: string, password: string, token: string, per
         csrfToken: loginAttestationRaw.csrfToken,
         deletedAt: loginAttestationRaw.deletedAt,
         email: loginAttestationRaw.email,
-        encryptedAccountEncryptionPrivateKey: loginAttestationRaw.encryptedAccountEncryptionPrivateKey,
-        encryptedAccountSigningPrivateKey: loginAttestationRaw.encryptedAccountSigningPrivateKey,
+        encryptedAccountEncryptionPrivateKey:
+            loginAttestationRaw.encryptedAccountEncryptionPrivateKey,
+        encryptedAccountSigningPrivateKey:
+            loginAttestationRaw.encryptedAccountSigningPrivateKey,
         encryptionVersion: loginAttestationRaw.encryptionVersion,
         id: loginAttestationRaw.id,
         kdfParams: loginAttestationRaw.kdfParams,
@@ -128,108 +163,135 @@ export async function signIn(email: string, password: string, token: string, per
         status: loginAttestationRaw.status,
         token: loginAttestationRaw.token,
         updatedAt: loginAttestationRaw.updatedAt,
-        }
+    };
 
-    setAuthState(
-        loginAttestationData.token,
-        loginAttestationData.csrfToken
-    );
+    setAuthState(loginAttestationData.token, loginAttestationData.csrfToken);
 
-  // check if the keys are NOT initialized
-  if (loginAttestationData.encryptionVersion == -1) {
-    setOpaqueInitData(exportKey, loginAttestationData.email);
-    return "noinit"
-  }
+    // check if the keys are NOT initialized
+    if (loginAttestationData.encryptionVersion == -1) {
+        setOpaqueInitData(exportKey, loginAttestationData.email);
+        return "noinit";
+    }
 
-  console.log("session priv key:", loginAttestationData.sessionPrivateKey)
+    console.log("session priv key:", loginAttestationData.sessionPrivateKey);
     const kdfSalt = sodium.from_base64(loginAttestationData.masterKdfSalt);
 
-        // 1. Derive master key from OPAQUE exportKey via fast KDF
-        // We first hash the exportKey to exactly 32 bytes
-        const exportKeyBytes = typeof exportKey === "string" ? sodium.from_string(exportKey) : exportKey;
-        const kdfRootKey = sodium.crypto_generichash(
-            sodium.crypto_kdf_KEYBYTES,
-            exportKeyBytes,
-            null
-        );
+    // 1. Derive master key from OPAQUE exportKey via fast KDF
+    // We first hash the exportKey to exactly 32 bytes
+    const exportKeyBytes =
+        typeof exportKey === "string"
+            ? sodium.from_string(exportKey)
+            : exportKey;
+    const kdfRootKey = sodium.crypto_generichash(
+        sodium.crypto_kdf_KEYBYTES,
+        exportKeyBytes,
+        null
+    );
 
-        // Then we use domain separation to derive the specific master key
-        const derivedMasterKey = sodium.crypto_kdf_derive_from_key(
-            sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES,
-            1,              // Subkey ID 1
-            "QMaster!",     // 8-byte context string
-            kdfRootKey
-        );
-        // 2. Decrypt Account Encryption Private Key
-        const accountEncryptionPrivNonce = sodium.from_base64(loginAttestationData.accountEncryptionKeyNonce);
-        const encryptedAccountEncryptionPrivateKey = sodium.from_base64(loginAttestationData.encryptedAccountEncryptionPrivateKey);
+    // Then we use domain separation to derive the specific master key
+    const derivedMasterKey = sodium.crypto_kdf_derive_from_key(
+        sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES,
+        1, // Subkey ID 1
+        "QMaster!", // 8-byte context string
+        kdfRootKey
+    );
+    // 2. Decrypt Account Encryption Private Key
+    const accountEncryptionPrivNonce = sodium.from_base64(
+        loginAttestationData.accountEncryptionKeyNonce
+    );
+    const encryptedAccountEncryptionPrivateKey = sodium.from_base64(
+        loginAttestationData.encryptedAccountEncryptionPrivateKey
+    );
 
-        // 3. Decrypt Account Signing Private Key
-        const accountSigningPrivNonce = sodium.from_base64(loginAttestationData.accountSigningKeyNonce);
-        const encryptedAccountSigningPrivateKey = sodium.from_base64(loginAttestationData.encryptedAccountSigningPrivateKey);
-        let accountSigningPrivateKey: Uint8Array | null = null;
-        let accountEncryptionPrivateKey: Uint8Array | null = null;
+    // 3. Decrypt Account Signing Private Key
+    const accountSigningPrivNonce = sodium.from_base64(
+        loginAttestationData.accountSigningKeyNonce
+    );
+    const encryptedAccountSigningPrivateKey = sodium.from_base64(
+        loginAttestationData.encryptedAccountSigningPrivateKey
+    );
+    let accountSigningPrivateKey: Uint8Array | null = null;
+    let accountEncryptionPrivateKey: Uint8Array | null = null;
 
-        try {
-            accountEncryptionPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+    try {
+        accountEncryptionPrivateKey =
+            sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
                 null,
                 encryptedAccountEncryptionPrivateKey,
-                sodium.from_base64(loginAttestationData.accountEncryptionPublicKey),
+                sodium.from_base64(
+                    loginAttestationData.accountEncryptionPublicKey
+                ),
                 accountEncryptionPrivNonce,
                 derivedMasterKey
             );
 
-            accountSigningPrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+        accountSigningPrivateKey =
+            sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
                 null,
                 encryptedAccountSigningPrivateKey,
-                sodium.from_base64(loginAttestationData.accountSigningPublicKey),
+                sodium.from_base64(
+                    loginAttestationData.accountSigningPublicKey
+                ),
                 accountSigningPrivNonce,
                 derivedMasterKey
             );
-        } catch (e) {
-            console.warn("Failed to decrypt account private keys. Keys might be encrypted with an old password.");
-        }
-
-        if (!accountEncryptionPrivateKey || !accountSigningPrivateKey) {
-            setOpaqueInitData(exportKey, loginAttestationData.email);
-            return "recovery_needed";
-        }
-        // 4. Save decrypted keys to JS memory in authStore!
-        setAccountPrivateKeys(accountEncryptionPrivateKey, accountSigningPrivateKey);
-        console.log("Zero-Knowledge account keys successfully decrypted into JS memory!");
-        //Encrypt the Libsodium Root Keys using Web Crypto RSA-OAEP
-                const combinedKeys = new Uint8Array([...accountSigningPrivateKey, ...accountEncryptionPrivateKey]);
-
-                // Re-import the public key string back into a CryptoKey for encryption
-                const pubKeyBuffer = Uint8Array.from(atob(deviceKeyPair.devicePublicKey), c => c.charCodeAt(0));
-                const importedPubKey = await crypto.subtle.importKey(
-                    "spki",
-                    pubKeyBuffer,
-                    { name: "RSA-OAEP", hash: "SHA-256" },
-                    true,
-                    ["encrypt"]
-                );
-                const wrappedAccountKeysBuffer = await crypto.subtle.encrypt(
-                    { name: "RSA-OAEP" },
-                    importedPubKey,
-                    combinedKeys
-                );
-                const wrappedAccountKeys = bufferToBase64(wrappedAccountKeysBuffer);
-
-                // 7. Save the Non-Extractable Private Key to IndexedDB
-                await saveDevicePrivateKey(deviceKeyPair.devicePrivateKey);
-  console.log("Non-extractable Device Private Key written to IndexedDB.");
-
-  await customFetch(`${config.apiUrl}/v1/devices/register`, {
-              method: "POST",
-              body: JSON.stringify({
-                  devicePublicKey: deviceKeyPair.devicePublicKey,
-                  wrappedAccountKeys: wrappedAccountKeys
-              }),
-              credentials: "include",
-          });
-    return "ok"
+    } catch (e) {
+        console.warn(
+            "Failed to decrypt account private keys. Keys might be encrypted with an old password."
+        );
     }
+
+    if (!accountEncryptionPrivateKey || !accountSigningPrivateKey) {
+        setOpaqueInitData(exportKey, loginAttestationData.email);
+        return "recovery_needed";
+    }
+    // 4. Save decrypted keys to JS memory in authStore!
+    setAccountPrivateKeys(
+        accountEncryptionPrivateKey,
+        accountSigningPrivateKey
+    );
+    console.log(
+        "Zero-Knowledge account keys successfully decrypted into JS memory!"
+    );
+    //Encrypt the Libsodium Root Keys using Web Crypto RSA-OAEP
+    const combinedKeys = new Uint8Array([
+        ...accountSigningPrivateKey,
+        ...accountEncryptionPrivateKey,
+    ]);
+
+    // Re-import the public key string back into a CryptoKey for encryption
+    const pubKeyBuffer = Uint8Array.from(
+        atob(deviceKeyPair.devicePublicKey),
+        (c) => c.charCodeAt(0)
+    );
+    const importedPubKey = await crypto.subtle.importKey(
+        "spki",
+        pubKeyBuffer,
+        { name: "RSA-OAEP", hash: "SHA-256" },
+        true,
+        ["encrypt"]
+    );
+    const wrappedAccountKeysBuffer = await crypto.subtle.encrypt(
+        { name: "RSA-OAEP" },
+        importedPubKey,
+        combinedKeys
+    );
+    const wrappedAccountKeys = bufferToBase64(wrappedAccountKeysBuffer);
+
+    // 7. Save the Non-Extractable Private Key to IndexedDB
+    await saveDevicePrivateKey(deviceKeyPair.devicePrivateKey);
+    console.log("Non-extractable Device Private Key written to IndexedDB.");
+
+    await customFetch(`${config.apiUrl}/v1/devices/register`, {
+        method: "POST",
+        body: JSON.stringify({
+            devicePublicKey: deviceKeyPair.devicePublicKey,
+            wrappedAccountKeys: wrappedAccountKeys,
+        }),
+        credentials: "include",
+    });
+    return "ok";
+}
 
 // Helper to convert ArrayBuffer to Base64
 export function bufferToBase64(buffer: ArrayBuffer): string {
@@ -237,8 +299,8 @@ export function bufferToBase64(buffer: ArrayBuffer): string {
 }
 
 export async function generateDeviceKeyPair(): Promise<{
-    devicePublicKey: string,
-    devicePrivateKey: CryptoKey
+    devicePublicKey: string;
+    devicePrivateKey: CryptoKey;
 }> {
     // Generate Non-Extractable RSA KeyPair
     const keyPair = await crypto.subtle.generateKey(
@@ -253,9 +315,12 @@ export async function generateDeviceKeyPair(): Promise<{
     );
 
     // Export only the Public Key to send to the server
-    const exportedPubKey = await crypto.subtle.exportKey("spki", keyPair.publicKey);
+    const exportedPubKey = await crypto.subtle.exportKey(
+        "spki",
+        keyPair.publicKey
+    );
     return {
         devicePublicKey: bufferToBase64(exportedPubKey),
-        devicePrivateKey: keyPair.privateKey
+        devicePrivateKey: keyPair.privateKey,
     };
 }

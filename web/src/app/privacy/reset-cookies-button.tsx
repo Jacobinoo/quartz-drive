@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
 import posthog from "posthog-js";
 
 export function ResetCookiesButton() {
     return (
-        <button 
+        <button
             onClick={() => {
                 posthog.clear_opt_in_out_capturing();
                 window.location.reload();

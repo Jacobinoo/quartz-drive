@@ -1,29 +1,31 @@
-import { create } from 'zustand';
+import { create } from "zustand";
 
-export type UploadStatus = 'INIT' | 'IDLE' | 'UPLOADING' | 'SUCCESS' | 'ERROR';
+export type UploadStatus = "INIT" | "IDLE" | "UPLOADING" | "SUCCESS" | "ERROR";
 
 export interface UploadJob {
     id: string;
     file: File;
     progress: number;
     status: UploadStatus;
-  uploadId: string;
-  nodeId: string;
-  totalChunks: number;
-  fileKey: Uint8Array;
-  errorMessage?: string;
-  activity?: string;
+    uploadId: string;
+    nodeId: string;
+    totalChunks: number;
+    fileKey: Uint8Array;
+    errorMessage?: string;
+    activity?: string;
 
-
-  parentNodeId: string;
-      encryptedName: string;
-      nameNonce: string;
-      encryptedNodePassphrase: string;
+    parentNodeId: string;
+    encryptedName: string;
+    nameNonce: string;
+    encryptedNodePassphrase: string;
 }
 
 interface UploadStore {
     jobs: UploadJob[];
-    addToQueue: (job: Omit<UploadJob, 'id' | 'progress' | 'status'>, initialStatus?: UploadStatus) => string;
+    addToQueue: (
+        job: Omit<UploadJob, "id" | "progress" | "status">,
+        initialStatus?: UploadStatus
+    ) => string;
     updateJob: (id: string, updates: Partial<UploadJob>) => void;
     cancelJob: (id: string) => void;
 }
@@ -31,26 +33,34 @@ interface UploadStore {
 export const useUploadStore = create<UploadStore>((set) => ({
     jobs: [],
 
-    addToQueue: (job, initialStatus = 'IDLE') => {
+    addToQueue: (job, initialStatus = "IDLE") => {
         const id = crypto.randomUUID();
         console.log("adding task", id, "to queue", job.file.name);
         set((state) => ({
-            jobs: [...state.jobs, {
-                ...job, id, progress: 0, status: initialStatus
-            }]
+            jobs: [
+                ...state.jobs,
+                {
+                    ...job,
+                    id,
+                    progress: 0,
+                    status: initialStatus,
+                },
+            ],
         }));
         return id;
     },
     updateJob: (id, updates) => {
         console.log("updating job", id, updates);
         set((state) => ({
-            jobs: state.jobs.map(j => j.id === id ? { ...j, ...updates } : j)
-        }))
+            jobs: state.jobs.map((j) =>
+                j.id === id ? { ...j, ...updates } : j
+            ),
+        }));
     },
     cancelJob: (id) => {
         console.log("canceling job", id);
         set((state) => ({
-            jobs: state.jobs.filter(job => job.id !== id)
-        }))
+            jobs: state.jobs.filter((job) => job.id !== id),
+        }));
     },
 }));

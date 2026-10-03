@@ -1,10 +1,24 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { shareFolderCryptographically } from "@/lib/shareService";
 
-export function ShareModal({ folder, isOpen, onClose }: { folder: any, isOpen: boolean, onClose: () => void }) {
+export function ShareModal({
+    folder,
+    isOpen,
+    onClose,
+}: {
+    folder: any;
+    isOpen: boolean;
+    onClose: () => void;
+}) {
     const [email, setEmail] = useState("");
     const [loading, setLoading] = useState(false);
 
@@ -34,7 +48,9 @@ export function ShareModal({ folder, isOpen, onClose }: { folder: any, isOpen: b
                 </DialogHeader>
                 <div className="flex flex-col space-y-4 py-4">
                     <p className="text-sm text-gray-500">
-                        Enter the email address of the user you want to share this folder with. Everything inside will be end-to-end encrypted for them.
+                        Enter the email address of the user you want to share
+                        this folder with. Everything inside will be end-to-end
+                        encrypted for them.
                     </p>
                     <Input
                         placeholder="jane@example.com"
@@ -45,7 +61,13 @@ export function ShareModal({ folder, isOpen, onClose }: { folder: any, isOpen: b
                     />
                 </div>
                 <DialogFooter>
-                    <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
+                    <Button
+                        variant="outline"
+                        onClick={onClose}
+                        disabled={loading}
+                    >
+                        Cancel
+                    </Button>
                     <Button onClick={handleShare} disabled={loading || !email}>
                         {loading ? "Encrypting..." : "Send Invite"}
                     </Button>

@@ -17,17 +17,22 @@ export async function createEncryptedFolderPayload(
 
     // 2. Generate brand new keys specifically for this new folder
     const nodeKeyPair = sodium.crypto_kem_keypair();
-    const nodePassphrase = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES);
-    const nodePrivNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+    const nodePassphrase = sodium.randombytes_buf(
+        sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES
+    );
+    const nodePrivNonce = sodium.randombytes_buf(
+        sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
+    );
 
     // 3. Encrypt the new Folder's Private Key using its own Passphrase
-    const wrappedNodePrivateKey = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
-        nodeKeyPair.privateKey,
-        sodium.from_string("FolderNode"), // AD (Associated Data)
-        null,
-        nodePrivNonce,
-        nodePassphrase
-    );
+    const wrappedNodePrivateKey =
+        sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
+            nodeKeyPair.privateKey,
+            sodium.from_string("FolderNode"), // AD (Associated Data)
+            null,
+            nodePrivNonce,
+            nodePassphrase
+        );
 
     // 4. Wrap the new Folder's Passphrase using the PARENT Folder's Public Key!
     // (This is the Parent-Child hierarchy link)
@@ -43,7 +48,9 @@ export async function createEncryptedFolderPayload(
     );
 
     // 6. Encrypt the Folder Name using the PARENT Folder's Private Key
-    const nameNonce = sodium.randombytes_buf(sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+    const nameNonce = sodium.randombytes_buf(
+        sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES
+    );
     const encryptedName = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
         sodium.from_string(folderName),
         null,
@@ -65,8 +72,10 @@ export async function createEncryptedFolderPayload(
             encryptedName: sodium.to_base64(encryptedName),
             nameNonce: sodium.to_base64(nameNonce),
             encryptedNodePassphrase: sodium.to_base64(encryptedNodePassphrase),
-            signedEncryptedNodePassphrase: sodium.to_base64(signedEncryptedNodePassphrase),
-            authorId: authorId
-        }
+            signedEncryptedNodePassphrase: sodium.to_base64(
+                signedEncryptedNodePassphrase
+            ),
+            authorId: authorId,
+        },
     };
 }

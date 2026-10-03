@@ -1,44 +1,44 @@
 function base64UrlEncode(str: string): string {
-    return btoa(str)
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
+    return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 function base64UrlDecode(str: string): string {
     // Add padding back before decoding
-    const pad = '='.repeat((4 - (str.length % 4)) % 4);
-    return atob(str.replace(/-/g, '+').replace(/_/g, '/') + pad);
+    const pad = "=".repeat((4 - (str.length % 4)) % 4);
+    return atob(str.replace(/-/g, "+").replace(/_/g, "/") + pad);
 }
 
 async function generateAndStoreDpopKey() {
     const keyPair = await crypto.subtle.generateKey(
         {
             name: "ECDSA",
-            namedCurve: "P-256"
+            namedCurve: "P-256",
         },
         false,
         ["sign", "verify"]
     );
 
-    const publicKeyJwk = await crypto.subtle.exportKey("jwk", keyPair.publicKey);
+    const publicKeyJwk = await crypto.subtle.exportKey(
+        "jwk",
+        keyPair.publicKey
+    );
     const dbRequest = indexedDB.open("dpop-keys", 1);
 
-    dbRequest.onupgradeneeded = event => {
+    dbRequest.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
         db.createObjectStore("keys", { keyPath: "id" });
-    }
+    };
 
-    dbRequest.onsuccess = event => {
+    dbRequest.onsuccess = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
         const tx = db.transaction("keys", "readwrite");
         const store = tx.objectStore("keys");
         store.put({
             id: "dpopKey",
             privateKey: keyPair.privateKey,
-            publicKey: publicKeyJwk
+            publicKey: publicKeyJwk,
         });
         tx.oncomplete = () => db.close();
-    }
+    };
     return publicKeyJwk;
 }
 
@@ -89,15 +89,15 @@ async function getDpopPrivateKey(): Promise<CryptoKey> {
 }
 
 function bufferToBase64Url(buffer: ArrayBuffer | Uint8Array): string {
-    let binary = '';
+    let binary = "";
     const bytes = new Uint8Array(buffer);
     for (let i = 0; i < bytes.byteLength; i++) {
         binary += String.fromCharCode(bytes[i]);
     }
     return btoa(binary)
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
 }
 
 async function createDpopProof(
@@ -105,15 +105,19 @@ async function createDpopProof(
     publicKeyJwk: JsonWebKey,
     method: string,
     url: string,
-    accessToken?: string,
+    accessToken?: string
 ) {
     const header = {
         alg: "ES256",
         typ: "dpop+jwt",
-        jwk: publicKeyJwk
+        jwk: publicKeyJwk,
     };
     const payload: {
-        htm: string; htu: string; jti: string; iat: number; ath?: string
+        htm: string;
+        htu: string;
+        jti: string;
+        iat: number;
+        ath?: string;
     } = {
         htm: method,
         htu: url,
@@ -125,19 +129,24 @@ async function createDpopProof(
 
     const encoder = new TextEncoder();
 
-    if(accessToken) {
-        const hash = await crypto.subtle.digest('SHA-256', encoder.encode(accessToken));
+    if (accessToken) {
+        const hash = await crypto.subtle.digest(
+            "SHA-256",
+            encoder.encode(accessToken)
+        );
         payload.ath = bufferToBase64Url(hash);
     }
 
     const headerStr = bufferToBase64Url(encoder.encode(JSON.stringify(header)));
-    const payloadStr = bufferToBase64Url(encoder.encode(JSON.stringify(payload)));
+    const payloadStr = bufferToBase64Url(
+        encoder.encode(JSON.stringify(payload))
+    );
     const input = `${headerStr}.${payloadStr}`;
 
     const signature = await crypto.subtle.sign(
         {
             name: "ECDSA",
-            hash: { name: "SHA-256" }
+            hash: { name: "SHA-256" },
         },
         privateKey,
         encoder.encode(input)
@@ -146,7 +155,10 @@ async function createDpopProof(
     return `${input}.${bufferToBase64Url(signature)}`;
 }
 
-async function getDpopKeyPair(): Promise<{ privateKey: CryptoKey; publicKey: JsonWebKey }> {
+async function getDpopKeyPair(): Promise<{
+    privateKey: CryptoKey;
+    publicKey: JsonWebKey;
+}> {
     return new Promise((resolve, reject) => {
         const dbRequest = indexedDB.open("dpop-keys", 1);
 
@@ -171,10 +183,14 @@ async function getDpopKeyPair(): Promise<{ privateKey: CryptoKey; publicKey: Jso
                 const request = store.get("dpopKey");
 
                 request.onsuccess = () => {
-                    if (request.result && request.result.privateKey && request.result.publicKey) {
+                    if (
+                        request.result &&
+                        request.result.privateKey &&
+                        request.result.publicKey
+                    ) {
                         resolve({
                             privateKey: request.result.privateKey,
-                            publicKey: request.result.publicKey
+                            publicKey: request.result.publicKey,
                         });
                     } else {
                         reject("No DPoP keypair found in store");
@@ -213,5 +229,10 @@ async function deleteDpopDatabase(): Promise<void> {
     });
 }
 
-
-export { generateAndStoreDpopKey, getDpopPrivateKey, createDpopProof, getDpopKeyPair, deleteDpopDatabase };
+export {
+    generateAndStoreDpopKey,
+    getDpopPrivateKey,
+    createDpopProof,
+    getDpopKeyPair,
+    deleteDpopDatabase,
+};

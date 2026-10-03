@@ -1,4 +1,3 @@
-
 type Base64String = string;
 
 interface KDFParams {
@@ -7,7 +6,4 @@ interface KDFParams {
     kdfMemLimit: number;
 }
 
-export type {
-    Base64String,
-    KDFParams
-}
+export type { Base64String, KDFParams };

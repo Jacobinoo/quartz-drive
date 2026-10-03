@@ -1,27 +1,50 @@
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 export function proxy(request: NextRequest) {
-  const nonce = Buffer.from(crypto.randomUUID()).toString('base64')
+    const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
 
-  const isDev = process.env.NODE_ENV === 'development'
-  const s3Endpoint = process.env.NEXT_PUBLIC_S3_ENDPOINT || ''
-  const apiOrigin = process.env.NEXT_PUBLIC_API_URL || ''
-  const passwordPwnedCheckApi = 'https://api.pwnedpasswords.com'
+    const isDev = process.env.NODE_ENV === "development";
+    const s3Endpoint = process.env.NEXT_PUBLIC_S3_ENDPOINT || "";
+    const apiOrigin = process.env.NEXT_PUBLIC_API_URL || "";
+    const passwordPwnedCheckApi = "https://api.pwnedpasswords.com";
 
-  const devOrigins = [
-    "https://localhost:3000",
-    process.env.NEXT_PUBLIC_API_URL || '',
-    "wss://localhost:3000",
-  ]
+    const devOrigins = [
+        "https://localhost:3000",
+        process.env.NEXT_PUBLIC_API_URL || "",
+        "wss://localhost:3000",
+    ];
 
-  const connectSrc = isDev
-    ? ["'self'", ...devOrigins, s3Endpoint, passwordPwnedCheckApi, "https://*.hcaptcha.com", "https://challenges.cloudflare.com", "https://*.challenges.cloudflare.com", "https://eu-assets.i.posthog.com", "https://eu.i.posthog.com", "https://a.quartzapp.top"].join(' ')
-    : ["'self'", apiOrigin, s3Endpoint, passwordPwnedCheckApi, "https://*.hcaptcha.com", "https://challenges.cloudflare.com", "https://*.challenges.cloudflare.com", "https://eu-assets.i.posthog.com", "https://eu.i.posthog.com", "https://a.quartzapp.top"].join(' ')
+    const connectSrc = isDev
+        ? [
+              "'self'",
+              ...devOrigins,
+              s3Endpoint,
+              passwordPwnedCheckApi,
+              "https://*.hcaptcha.com",
+              "https://challenges.cloudflare.com",
+              "https://*.challenges.cloudflare.com",
+              "https://eu-assets.i.posthog.com",
+              "https://eu.i.posthog.com",
+              "https://a.quartzapp.top",
+          ].join(" ")
+        : [
+              "'self'",
+              apiOrigin,
+              s3Endpoint,
+              passwordPwnedCheckApi,
+              "https://*.hcaptcha.com",
+              "https://challenges.cloudflare.com",
+              "https://*.challenges.cloudflare.com",
+              "https://eu-assets.i.posthog.com",
+              "https://eu.i.posthog.com",
+              "https://a.quartzapp.top",
+          ].join(" ");
 
-  const reportUri = process.env.NEXT_PUBLIC_CSP_REPORT_URI || '/api/csp-report'
+    const reportUri =
+        process.env.NEXT_PUBLIC_CSP_REPORT_URI || "/api/csp-report";
 
-  const cspHeader = `
+    const cspHeader = `
     default-src 'self';
     script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://js.hcaptcha.com https://*.hcaptcha.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://eu-assets.i.posthog.com https://a.quartzapp.top ${isDev ? "'unsafe-eval'" : ""};
     worker-src 'self' blob:;
@@ -39,55 +62,55 @@ export function proxy(request: NextRequest) {
     upgrade-insecure-requests;
     report-uri ${reportUri};
     report-to csp-endpoint;
-  `
-  // Replace newline characters and spaces
-  const contentSecurityPolicyHeaderValue = cspHeader
-    .replace(/\s{2,}/g, ' ')
-    .trim()
+  `;
+    // Replace newline characters and spaces
+    const contentSecurityPolicyHeaderValue = cspHeader
+        .replace(/\s{2,}/g, " ")
+        .trim();
 
-  const requestHeaders = new Headers(request.headers)
-  requestHeaders.set('x-nonce', nonce)
-  requestHeaders.set(
-    'Content-Security-Policy',
-    contentSecurityPolicyHeaderValue
-  )
-  requestHeaders.set(
-    'Report-To',
-    `{"group":"csp-endpoint","max_age":10886400,"endpoints":[{"url":"${reportUri}"}]}`
-  )
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-nonce", nonce);
+    requestHeaders.set(
+        "Content-Security-Policy",
+        contentSecurityPolicyHeaderValue
+    );
+    requestHeaders.set(
+        "Report-To",
+        `{"group":"csp-endpoint","max_age":10886400,"endpoints":[{"url":"${reportUri}"}]}`
+    );
 
-  const response = NextResponse.next({
-    request: {
-      headers: requestHeaders,
-    },
-  })
-  response.headers.set(
-    'Content-Security-Policy',
-    contentSecurityPolicyHeaderValue
-  )
-  response.headers.set(
-    'Report-To',
-    `{"group":"csp-endpoint","max_age":10886400,"endpoints":[{"url":"${reportUri}"}]}`
-  )
+    const response = NextResponse.next({
+        request: {
+            headers: requestHeaders,
+        },
+    });
+    response.headers.set(
+        "Content-Security-Policy",
+        contentSecurityPolicyHeaderValue
+    );
+    response.headers.set(
+        "Report-To",
+        `{"group":"csp-endpoint","max_age":10886400,"endpoints":[{"url":"${reportUri}"}]}`
+    );
 
-  return response
+    return response;
 }
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    {
-      source: '/((?!api|_next/static|_next/image|favicon.ico).*)',
-      missing: [
-        { type: 'header', key: 'next-router-prefetch' },
-        { type: 'header', key: 'purpose', value: 'prefetch' },
-      ],
-    },
-  ],
-}
+    matcher: [
+        /*
+         * Match all request paths except for the ones starting with:
+         * - api (API routes)
+         * - _next/static (static files)
+         * - _next/image (image optimization files)
+         * - favicon.ico (favicon file)
+         */
+        {
+            source: "/((?!api|_next/static|_next/image|favicon.ico).*)",
+            missing: [
+                { type: "header", key: "next-router-prefetch" },
+                { type: "header", key: "purpose", value: "prefetch" },
+            ],
+        },
+    ],
+};

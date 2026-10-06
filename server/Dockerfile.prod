@@ -42,7 +42,9 @@ RUN CGO_ENABLED=1 go build -ldflags="-s -w -X 'quartz/config.BuildVersion=${BUIL
 # Stage 2: Runtime
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget curl bash gnupg \
+    && curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | bash \
+    && apt-get update && apt-get install -y --no-install-recommends infisical \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user for security
@@ -54,4 +56,4 @@ COPY --from=builder /app/build/libopaque_rust.so /usr/lib/
 
 # Switch to the non-root user before running the app
 USER quartzuser
-CMD ["quartz-account"]
+CMD ["infisical", "run", "--", "quartz-account"]

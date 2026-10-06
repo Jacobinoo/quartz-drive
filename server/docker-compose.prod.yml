@@ -79,6 +79,11 @@ services:
       - 1.1.1.1
     env_file:
       - .env.production
+    environment:
+      - INFISICAL_MACHINE_IDENTITY_ID
+      - INFISICAL_PROJECT_ID
+      - INFISICAL_AUTH_METHOD=gcp-id-token
+      - INFISICAL_ENVIRONMENT=prod
     depends_on:
       valkey:
         condition: service_healthy

@@ -80,7 +80,6 @@ services:
       - INFISICAL_MACHINE_IDENTITY_ID
       - INFISICAL_PROJECT_ID
       - INFISICAL_API_URL
-      - INFISICAL_AUTH_METHOD=gcp-id-token
       - INFISICAL_ENVIRONMENT=prod
     depends_on:
       valkey:

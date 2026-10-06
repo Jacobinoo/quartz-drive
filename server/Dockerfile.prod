@@ -56,4 +56,4 @@ COPY --from=builder /app/build/libopaque_rust.so /usr/lib/
 
 # Switch to the non-root user before running the app
 USER quartzuser
-CMD ["infisical", "run", "--", "quartz-account"]
+CMD bash -c "infisical login --method=gcp-id-token --machine-identity-id=\"$INFISICAL_MACHINE_IDENTITY_ID\" && infisical run --env=\"$INFISICAL_ENVIRONMENT\" -- quartz-account"

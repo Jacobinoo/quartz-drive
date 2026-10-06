@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"quartz/config"
@@ -9,8 +10,54 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	infisical "github.com/infisical/go-sdk"
 	"github.com/joho/godotenv"
 )
+
+func loadInfisicalSecrets() {
+	identityID := os.Getenv("INFISICAL_MACHINE_IDENTITY_ID")
+	projectID := os.Getenv("INFISICAL_PROJECT_ID")
+
+	if identityID == "" || projectID == "" {
+		slog.Debug("INFISICAL_MACHINE_IDENTITY_ID or INFISICAL_PROJECT_ID not set, skipping Infisical injection")
+		return
+	}
+
+	apiURL := os.Getenv("INFISICAL_API_URL")
+	if apiURL == "" {
+		apiURL = "https://app.infisical.com"
+	}
+
+	env := os.Getenv("INFISICAL_ENVIRONMENT")
+	if env == "" {
+		env = "prod"
+	}
+
+	slog.Info("Authenticating with Infisical via GCP ID Token...", "url", apiURL, "env", env)
+
+	client := infisical.NewInfisicalClient(context.Background(), infisical.Config{
+		SiteUrl: apiURL,
+	})
+
+	_, err := client.Auth().GcpIdTokenAuthLogin(identityID)
+	if err != nil {
+		slog.Error("Failed to authenticate with Infisical GCP ID Token", "error", err)
+		os.Exit(1)
+	}
+
+	secrets, err := client.Secrets().List(infisical.ListSecretsOptions{
+		ProjectID:          projectID,
+		Environment:        env,
+		SecretPath:         "/",
+		AttachToProcessEnv: true,
+	})
+	if err != nil {
+		slog.Error("Failed to fetch secrets from Infisical", "error", err)
+		os.Exit(1)
+	}
+
+	slog.Info("Successfully injected Infisical secrets into memory!", "count", len(secrets))
+}
 
 func main() {
 	// Check if APP_ENV is set (e.g., development, production)
@@ -21,6 +68,9 @@ func main() {
 	}
 
 	logger.InitLogger(appEnv)
+
+	// Fetch remote secrets before local .env parsing
+	loadInfisicalSecrets()
 
 	// If PORT is already set by systemd, skip loading the .env file so we don't accidentally override it
 	if os.Getenv("PORT") == "" {

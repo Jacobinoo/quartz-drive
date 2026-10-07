@@ -17,6 +17,7 @@ import (
 func loadInfisicalSecrets() {
 	identityID := os.Getenv("INFISICAL_MACHINE_IDENTITY_ID")
 	projectID := os.Getenv("INFISICAL_PROJECT_ID")
+	backupFile := ".env.infisical.backup"
 
 	if identityID == "" || projectID == "" {
 		slog.Debug("INFISICAL_MACHINE_IDENTITY_ID or INFISICAL_PROJECT_ID not set, skipping Infisical injection")
@@ -41,8 +42,9 @@ func loadInfisicalSecrets() {
 
 	_, err := client.Auth().GcpIdTokenAuthLogin(identityID)
 	if err != nil {
-		slog.Error("Failed to authenticate with Infisical GCP ID Token", "error", err)
-		os.Exit(1)
+		slog.Warn("Infisical Auth Failed", "error", err)
+		attemptBackupRestore(backupFile)
+		return
 	}
 
 	secrets, err := client.Secrets().List(infisical.ListSecretsOptions{
@@ -52,11 +54,32 @@ func loadInfisicalSecrets() {
 		AttachToProcessEnv: true,
 	})
 	if err != nil {
-		slog.Error("Failed to fetch secrets from Infisical", "error", err)
-		os.Exit(1)
+		slog.Warn("Infisical Fetch Failed", "error", err)
+		attemptBackupRestore(backupFile)
+		return
+	}
+
+	envMap := make(map[string]string)
+	for _, secret := range secrets {
+		envMap[secret.SecretKey] = secret.SecretValue
+	}
+
+	if err := godotenv.Write(envMap, backupFile); err != nil {
+		slog.Warn("Failed to write Infisical backup file", "error", err)
+	} else {
+		slog.Debug("Successfully updated Infisical backup file")
 	}
 
 	slog.Info("Successfully injected Infisical secrets into memory!", "count", len(secrets))
+}
+
+func attemptBackupRestore(backupFile string) {
+	slog.Warn("Attempting to rescue secrets from local backup...", "file", backupFile)
+	if err := godotenv.Load(backupFile); err != nil {
+		slog.Error("Backup environment file missing or corrupted! Cannot start server.", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("Successfully recovered secrets from local backup file!")
 }
 
 func main() {

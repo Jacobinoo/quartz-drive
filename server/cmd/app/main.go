@@ -17,7 +17,8 @@ import (
 func loadInfisicalSecrets() {
 	identityID := os.Getenv("INFISICAL_MACHINE_IDENTITY_ID")
 	projectID := os.Getenv("INFISICAL_PROJECT_ID")
-	backupFile := ".env.infisical.backup"
+
+	backupFile := "/tmp/.env.infisical.backup"
 
 	if identityID == "" || projectID == "" {
 		slog.Debug("INFISICAL_MACHINE_IDENTITY_ID or INFISICAL_PROJECT_ID not set, skipping Infisical injection")

@@ -65,9 +65,18 @@ func InitLogger(env string) {
 			Level: slog.LevelDebug,
 		})
 	} else {
-		// Pure JSON format for production (perfect for DataDog/Grafana/Prometheus)
 		baseHandler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 			Level: slog.LevelInfo,
+			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+				if a.Key == slog.LevelKey {
+					a.Key = "severity"
+					// GCP strictly expects "WARNING" instead of the default "WARN"
+					if a.Value.String() == "WARN" {
+						a.Value = slog.StringValue("WARNING")
+					}
+				}
+				return a
+			},
 		})
 	}
 

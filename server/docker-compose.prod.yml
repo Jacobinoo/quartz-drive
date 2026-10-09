@@ -9,6 +9,10 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
+
+      - "--serverstransport.forwardingTimeouts.responseHeaderTimeout=30s"
+      - "--serverstransport.forwardingTimeouts.dialTimeout=5s"
+
       # Automatically redirects HTTP to HTTPS
       - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
       - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
@@ -37,6 +41,8 @@ services:
       - "--entrypoints.web.transport.respondingTimeouts.readTimeout=30s"
       - "--entrypoints.websecure.transport.respondingTimeouts.writeTimeout=30s"
       - "--entrypoints.web.transport.respondingTimeouts.writeTimeout=30s"
+      - "--entrypoints.web.transport.respondingTimeouts.idleTimeout=60s"
+      - "--entrypoints.websecure.transport.respondingTimeouts.idleTimeout=60s"
     logging:
       driver: "nanoandrew4/ngcplogs:linux-amd64-v1.3.0"
     dns:

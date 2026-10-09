@@ -126,7 +126,7 @@ async function reportChunkDone(
             }),
         }
     );
-    let test = await res.text();
+    const test = await res.text();
     console.log(`Status of reportChunkDone: ${res.status} ${test}`);
 
     if (!res || !res.ok) return false;
@@ -196,7 +196,7 @@ ctx.onmessage = async (event: MessageEvent<UploadWorkerInput>) => {
         const waitForQueueChange = () =>
             new Promise<void>((resolve) => queueChangeResolvers.push(resolve));
 
-        let metrics = {
+        const metrics = {
             initTime: 0,
             putTime: 0,
             reportTime: 0,
@@ -299,6 +299,10 @@ ctx.onmessage = async (event: MessageEvent<UploadWorkerInput>) => {
                             xhr.setRequestHeader(
                                 "x-amz-checksum-sha256",
                                 chunkHash
+                            );
+                            xhr.setRequestHeader(
+                                "content-type",
+                                "application/octet-stream"
                             );
 
                             xhr.upload.onprogress = (e) => {

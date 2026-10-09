@@ -1,0 +1,7 @@
+Acknowledgments: https://github.com/jacobinoo/quartz-drive
+Canonical: https://quartzapp.top/.well-known/security.txt
+Contact: mailto:help@quartzapp.top
+Expires: 2027-12-31T00:00:00Z
+Hiring: https://github.com/Jacobinoo/quartz-drive/blob/master/CONTRIBUTING.md
+Policy: https://github.com/Jacobinoo/quartz-drive/blob/master/SECURITY.md
+Preferred-Languages: en,pl

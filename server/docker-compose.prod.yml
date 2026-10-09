@@ -33,6 +33,10 @@ services:
       - "--entrypoints.web.http.encodedCharacters.allowEncodedPercent=false"
       - "--entrypoints.web.http.encodedCharacters.allowEncodedQuestionMark=false"
       - "--entrypoints.web.http.encodedCharacters.allowEncodedHash=false"
+      - "--entrypoints.websecure.transport.respondingTimeouts.readTimeout=30s"
+      - "--entrypoints.web.transport.respondingTimeouts.readTimeout=30s"
+      - "--entrypoints.websecure.transport.respondingTimeouts.writeTimeout=30s"
+      - "--entrypoints.web.transport.respondingTimeouts.writeTimeout=30s"
     logging:
       driver: "nanoandrew4/ngcplogs:linux-amd64-v1.3.0"
     dns:

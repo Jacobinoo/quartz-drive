@@ -32,6 +32,10 @@ const nextConfig: NextConfig = {
                         value: "none",
                     },
                     {
+                        key: "Server",
+                        value: "",
+                    },
+                    {
                         key: "Permissions-Policy",
                         value: "camera=(), microphone=(), geolocation=(), browsing-topics=(), payment=(), usb=(), bluetooth=()",
                     },

@@ -143,6 +143,7 @@ func (s *S3Service) GenerateDownloadUrls(ctx context.Context, objectKeys []strin
 
 	reqParams := make(url.Values)
 	reqParams.Set("response-content-type", "application/octet-stream")
+	reqParams.Set("response-content-disposition", "attachment")
 
 	for i, objectKey := range objectKeys {
 		presignedURL, err := clientToUse.PresignedGetObject(ctx, s.bucket, objectKey, expiry, reqParams)

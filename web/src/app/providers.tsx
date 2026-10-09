@@ -4,8 +4,8 @@ import posthog from "posthog-js";
 import { PostHogProvider as PHProvider } from "@posthog/react";
 import { config } from "@/config/env";
 
-if (typeof window !== "undefined") {
-    posthog.init(config.posthogToken as string, {
+if (typeof window !== "undefined" && config.posthogToken) {
+    posthog.init(config.posthogToken, {
         api_host: config.posthogApiHost,
         ui_host: config.posthogUiHost,
 

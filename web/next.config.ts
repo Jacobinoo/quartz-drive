@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import "./src/config/env.ts";
 
 const nextConfig: NextConfig = {
+    poweredByHeader: false,
     async headers() {
         return [
             {
@@ -30,10 +31,6 @@ const nextConfig: NextConfig = {
                     {
                         key: "X-Permitted-Cross-Domain-Policies",
                         value: "none",
-                    },
-                    {
-                        key: "Server",
-                        value: "",
                     },
                     {
                         key: "Permissions-Policy",

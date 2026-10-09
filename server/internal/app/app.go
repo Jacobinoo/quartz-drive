@@ -89,8 +89,10 @@ func Run() {
 
 	router := initRouter(state)
 
+	cacheNoStoreHandler := middleware.CacheControlNoStoreMiddleware(router)
+
 	// Limit request body size for security & abuse prevention
-	bodyLimitedHandler := middleware.LimitBodySize(router)
+	bodyLimitedHandler := middleware.LimitBodySize(cacheNoStoreHandler)
 
 	finalHandler := httputils.RequestIDMiddleware(bodyLimitedHandler)
 	sentryHandler := sentryhttp.New(sentryhttp.Options{})

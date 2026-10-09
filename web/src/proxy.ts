@@ -46,7 +46,7 @@ export function proxy(request: NextRequest) {
 
     const cspHeader = `
     default-src 'self';
-    script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://js.hcaptcha.com https://*.hcaptcha.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://eu-assets.i.posthog.com https://a.quartzapp.top ${isDev ? "'unsafe-eval'" : ""};
+    script-src 'self' 'nonce-${nonce}' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://js.hcaptcha.com https://*.hcaptcha.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://eu-assets.i.posthog.com https://a.quartzapp.top ${isDev ? "'unsafe-eval'" : ""};
     worker-src 'self' blob:;
     child-src 'self' blob:;
     style-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com;

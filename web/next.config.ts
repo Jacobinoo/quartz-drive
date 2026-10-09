@@ -33,6 +33,10 @@ const nextConfig: NextConfig = {
                         value: "none",
                     },
                     {
+                        key: "Cross-Origin-Opener-Policy",
+                        value: "same-origin",
+                    },
+                    {
                         key: "Permissions-Policy",
                         value: "camera=(), microphone=(), geolocation=(), browsing-topics=(), payment=(), usb=(), bluetooth=()",
                     },

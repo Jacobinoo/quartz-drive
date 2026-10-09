@@ -94,6 +94,7 @@ func (s *S3Service) GenerateUploadUrl(ctx context.Context, objectKey string, exp
 	extraHeaders := http.Header{}
 	extraHeaders.Set("Content-Length", strconv.FormatInt(expectedSize, 10))
 	extraHeaders.Set("x-amz-checksum-sha256", chunkHash)
+	extraHeaders.Set("Content-Type", "application/octet-stream")
 
 	log.Printf("Generating presigned url for object %s signed with Content-Length %d and checksum sha256 %s", objectKey, expectedSize, chunkHash)
 
@@ -140,8 +141,11 @@ func (s *S3Service) GenerateDownloadUrls(ctx context.Context, objectKeys []strin
 		clientToUse = s.devPresignClient
 	}
 
+	reqParams := make(url.Values)
+	reqParams.Set("response-content-type", "application/octet-stream")
+
 	for i, objectKey := range objectKeys {
-		presignedURL, err := clientToUse.PresignedGetObject(ctx, s.bucket, objectKey, expiry, nil)
+		presignedURL, err := clientToUse.PresignedGetObject(ctx, s.bucket, objectKey, expiry, reqParams)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate GET URL for chunk %d: %w", i, err)
 		}

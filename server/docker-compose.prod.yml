@@ -101,20 +101,23 @@ services:
       retries: 5
     labels:
       - "traefik.enable=true"
-      # Securely loads the domain from .env.production
       - "traefik.http.routers.quartz.rule=Host(`${DOMAIN_NAME}`)"
       - "traefik.http.routers.quartz.entrypoints=websecure"
       - "traefik.http.routers.quartz.tls.certresolver=myresolver"
       - "traefik.http.services.quartz.loadbalancer.server.port=8080"
 
-      # Security Headers (HSTS)
       - "traefik.http.middlewares.hsts.headers.stsSeconds=31536000"
       - "traefik.http.middlewares.hsts.headers.stsIncludeSubdomains=true"
       - "traefik.http.middlewares.hsts.headers.stsPreload=true"
 
-      # Limit request body to ~1MB (1048576 bytes)
       - "traefik.http.middlewares.limit-size.buffering.maxRequestBodyBytes=1048576"
-      - "traefik.http.routers.quartz.middlewares=hsts,limit-size"
+
+      - "traefik.http.middlewares.security.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.security.headers.customFrameOptionsValue=DENY"
+      - "traefik.http.middlewares.security.headers.referrerPolicy=strict-origin-when-cross-origin"
+      - "traefik.http.middlewares.security.headers.contentSecurityPolicy=default-src 'none'; frame-ancestors 'none';"
+
+      - "traefik.http.routers.quartz.middlewares=hsts,limit-size,security"
     deploy:
       resources:
         limits:

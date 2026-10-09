@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function proxy(request: NextRequest) {
-    const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-
     const isDev = process.env.NODE_ENV === "development";
     const s3Endpoint = process.env.NEXT_PUBLIC_S3_ENDPOINT || "";
     const apiOrigin = process.env.NEXT_PUBLIC_API_URL || "";
@@ -46,7 +44,7 @@ export function proxy(request: NextRequest) {
 
     const cspHeader = `
     default-src 'self';
-    script-src 'self' 'nonce-${nonce}' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://js.hcaptcha.com https://*.hcaptcha.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://eu-assets.i.posthog.com https://a.quartzapp.top ${isDev ? "'unsafe-eval'" : ""};
+    script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://js.hcaptcha.com https://*.hcaptcha.com https://challenges.cloudflare.com https://*.challenges.cloudflare.com https://eu-assets.i.posthog.com https://a.quartzapp.top ${isDev ? "'unsafe-eval'" : ""};
     worker-src 'self' blob:;
     child-src 'self' blob:;
     style-src 'self' 'unsafe-inline' https://js.hcaptcha.com https://*.hcaptcha.com;
@@ -69,7 +67,6 @@ export function proxy(request: NextRequest) {
         .trim();
 
     const requestHeaders = new Headers(request.headers);
-    requestHeaders.set("x-nonce", nonce);
     requestHeaders.set(
         "Content-Security-Policy",
         contentSecurityPolicyHeaderValue

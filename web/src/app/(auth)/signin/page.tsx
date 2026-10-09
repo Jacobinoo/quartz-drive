@@ -3,6 +3,7 @@
 import { Folder } from "lucide-react";
 
 import { DemoForm } from "@/components/demo-form";
+import { LoginForm } from "@/components/login-form";
 
 export default function LoginPage() {
     return (
@@ -25,8 +26,11 @@ export default function LoginPage() {
                         </div>
                         Quartz Drive
                     </a>
-                    {/*<LoginForm />*/}
-                    <DemoForm />
+                    {process.env.NODE_ENV === "development" ? (
+                        <LoginForm />
+                    ) : (
+                        <DemoForm />
+                    )}
                 </div>
             </div>
         </>

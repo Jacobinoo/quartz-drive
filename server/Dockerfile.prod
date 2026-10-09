@@ -34,24 +34,20 @@ RUN cd internal/bindings/opaque_rust \
     && mkdir -p /app/build \
     && cp target/release/libopaque_rust.so /app/build/
 
-# 5. Build the Go binary (module cache from step 1 is reused; only your own
+# 5. Build the Go binary
 #    packages get compiled since GOCACHE isn't primed by go mod download alone)
 ARG BUILD_VERSION=unknown
 RUN CGO_ENABLED=1 go build -ldflags="-s -w -X 'quartz/config.BuildVersion=${BUILD_VERSION}'" -trimpath -o build/quartz-account ./cmd/app
 
+# 6. Build the tiny healthcheck binary
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -trimpath -o build/healthcheck ./cmd/health
+
 # Stage 2: Runtime
-FROM debian:bookworm-slim
-
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget \
-    && rm -rf /var/lib/apt/lists/*
-
-# Create a non-root user for security
-RUN useradd -m -s /bin/false quartzuser
+FROM gcr.io/distroless/cc-debian12:nonroot
 
 WORKDIR /app
-COPY --from=builder /app/build/quartz-account /usr/local/bin/quartz-account
+COPY --from=builder /app/build/quartz-account /app/quartz-account
+COPY --from=builder /app/build/healthcheck /app/healthcheck
 COPY --from=builder /app/build/libopaque_rust.so /usr/lib/
 
-# Switch to the non-root user before running the app
-USER quartzuser
-CMD ["quartz-account"]
+CMD ["/app/quartz-account"]

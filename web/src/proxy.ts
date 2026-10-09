@@ -2,19 +2,6 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export function proxy(request: NextRequest) {
-    if (request.nextUrl.hostname === "quartzapp.top") {
-        const url = request.nextUrl.clone();
-        url.hostname = "www.quartzapp.top";
-
-        const response = NextResponse.redirect(url, 308);
-        // force the preload header directly onto the redirect
-        response.headers.set(
-            "Strict-Transport-Security",
-            "max-age=31536000; includeSubDomains; preload"
-        );
-        return response;
-    }
-
     const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
 
     const isDev = process.env.NODE_ENV === "development";

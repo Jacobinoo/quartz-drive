@@ -1,11 +1,31 @@
-.git
-.github
+# Git & GitHub
+.git/
+.github/
+.gitignore
+
+# Docs & IDEs
 *.md
+.vscode/
+.idea/
+
+# Docker & Deployment
 docker-compose*.yml
 deploy.sh
 .dockerignore
 Dockerfile*
-.vscode
-.idea
-*.log
+
+# Environment Variables & Secrets
+.env*
+cert/
+
+# Local Dev & Logs
+.air.toml
 tmp/
+*.log
+weed-data/
+pgdata-dev/
+
+# Compiled Binaries
+main
+qdeploy
+build/

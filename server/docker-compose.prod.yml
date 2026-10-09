@@ -101,11 +101,10 @@ services:
       - "traefik.http.middlewares.hsts.headers.stsSeconds=31536000"
       - "traefik.http.middlewares.hsts.headers.stsIncludeSubdomains=true"
       - "traefik.http.middlewares.hsts.headers.stsPreload=true"
-      - "traefik.http.routers.quartz.middlewares=hsts"
 
-      # Limit request body to ~2MB (2097152 bytes)
-      - "traefik.http.middlewares.limit-size.buffering.maxRequestBodyBytes=2097152"
-      - "traefik.http.routers.quartz.middlewares=limit-size"
+      # Limit request body to ~1MB (1048576 bytes)
+      - "traefik.http.middlewares.limit-size.buffering.maxRequestBodyBytes=1048576"
+      - "traefik.http.routers.quartz.middlewares=hsts,limit-size"
     deploy:
       resources:
         limits:

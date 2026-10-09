@@ -6,7 +6,7 @@ const envSchema = z.object({
     NEXT_PUBLIC_S3_ENDPOINT: z.string().min(1),
     NEXT_PUBLIC_CAPTCHA_SITE_KEY: z.string().min(1),
     NEXT_PUBLIC_TURNSTILE_SITE_KEY: z.string().min(1),
-    NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: z.string().min(1),
+    NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: z.string().optional(),
     NEXT_PUBLIC_POSTHOG_API_HOST: z.string().optional(),
     NEXT_PUBLIC_POSTHOG_UI_HOST: z.string().optional(),
     NEXT_PUBLIC_CSP_REPORT_URI: z.string().optional(),

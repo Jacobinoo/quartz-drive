@@ -534,17 +534,19 @@ export function FileList() {
                                                 Download
                                             </DropdownMenuItem>
                                         )}
-                                        {file.type === "FOLDER" && (
-                                            <DropdownMenuItem
-                                                onClick={() =>
-                                                    setFolderToShare(file)
-                                                }
-                                                className="cursor-pointer"
-                                            >
-                                                <Share2 className="w-4 h-4 mr-2" />
-                                                Share Folder
-                                            </DropdownMenuItem>
-                                        )}
+                                        {
+                                            /*{file.type === "FOLDER"*/ false && (
+                                                <DropdownMenuItem
+                                                    onClick={() =>
+                                                        setFolderToShare(file)
+                                                    }
+                                                    className="cursor-pointer"
+                                                >
+                                                    <Share2 className="w-4 h-4 mr-2" />
+                                                    Share Folder
+                                                </DropdownMenuItem>
+                                            )
+                                        }
                                         <DropdownMenuItem
                                             onClick={() => handleRename(file)}
                                             className="cursor-pointer"

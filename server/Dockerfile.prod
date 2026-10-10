@@ -22,17 +22,17 @@ RUN cd internal/bindings/opaque_rust \
     && cargo build --release \
     && rm -rf src
 
-# 3. Copy the rest of the application code
-# (.dockerignore keeps docs/CI/deploy-file changes from invalidating this layer unnecessarily)
-COPY . .
-
-# 4. Build the real Rust library (dependencies are already cached from step 2,
-#    as long as Cargo.toml/Cargo.lock didn't change)
+# 3. Copy Rust source code and build it first
+COPY internal/bindings/opaque_rust/src ./internal/bindings/opaque_rust/src
 RUN cd internal/bindings/opaque_rust \
     && touch src/lib.rs \
     && cargo build --release \
     && mkdir -p /app/build \
     && cp target/release/libopaque_rust.so /app/build/
+
+# 4. Copy the rest of the application code
+# (.dockerignore keeps docs/CI/deploy-file changes from invalidating this layer unnecessarily)
+COPY . .
 
 # 5. Build the Go binary
 #    packages get compiled since GOCACHE isn't primed by go mod download alone)

@@ -16,6 +16,7 @@ import (
 	apperrors "quartz/pkg/app-errors"
 	"quartz/pkg/contextkeys"
 	"quartz/pkg/crypto"
+	"quartz/pkg/httputils"
 	"quartz/pkg/storage"
 	"time"
 
@@ -43,7 +44,7 @@ func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "application/json")
 
 	var uploadRequest dto.InitFileUploadRequest
-	if err := json.NewDecoder(r.Body).Decode(&uploadRequest); err != nil {
+	if err := httputils.ParseAndValidate(r, &uploadRequest); err != nil {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
@@ -173,8 +174,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "application/json")
 
 	var uploadRequest dto.RequestChunkUploadRequest
-	if err := json.NewDecoder(r.Body).Decode(&uploadRequest); err != nil {
-		slog.Debug("failed to decode RequestChunkUploadRequest")
+	if err := httputils.ParseAndValidate(r, &uploadRequest); err != nil {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
@@ -291,8 +291,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/json")
 
 	var uploadRequest dto.FinishChunkUploadRequest
-	if err := json.NewDecoder(r.Body).Decode(&uploadRequest); err != nil {
-		slog.WarnContext(r.Context(), "failed to decode FinishChunkUploadRequest")
+	if err := httputils.ParseAndValidate(r, &uploadRequest); err != nil {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
@@ -900,8 +899,8 @@ func (h *Handler) CreateFolder(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 	var req dto.CreateFolderRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return apperrors.NewBadRequest("invalid request body", nil)
+	if err := httputils.ParseAndValidate(r, &req); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
@@ -1063,8 +1062,8 @@ func (h *Handler) RenameFile(w http.ResponseWriter, r *http.Request) error {
 	parentFolderID := r.URL.Query().Get("parentFolderId")
 
 	var req dto.RenameRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return apperrors.NewBadRequest("invalid body", nil)
+	if err := httputils.ParseAndValidate(r, &req); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
@@ -1228,8 +1227,8 @@ func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var req dto.MoveFileRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return apperrors.NewBadRequest("invalid request", nil)
+	if err := httputils.ParseAndValidate(r, &req); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
@@ -1479,8 +1478,8 @@ func (h *Handler) ShareFolder(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewInternal(err)
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return apperrors.NewBadRequest("bad request", nil)
+	if err := httputils.ParseAndValidate(r, &req); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	targetNodeUUID := uuid.MustParse(req.TargetNodeID)

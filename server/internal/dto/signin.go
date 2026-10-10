@@ -51,19 +51,19 @@ func (TrustedUserInformation) TableName() string {
 }
 
 type M1Login struct {
-	Email        string `json:"email"`
-	LoginRequest string `json:"loginRequest"`
+	Email        string `json:"email" validate:"required,email,max=255"`
+	LoginRequest string `json:"loginRequest" validate:"required,len=128"`
 }
 
 type M3Login struct {
-	FinishLoginRequest string `json:"finishLoginRequest"`
-	Nonce              string `json:"nonce"`
+	FinishLoginRequest string `json:"finishLoginRequest" validate:"required,len=86"`
+	Nonce              string `json:"nonce" validate:"required,len=64"`
 	PersistSession     bool   `json:"persistSession"`
 }
 
 type RegisterDeviceRequest struct {
-	DevicePublicKey    string `json:"devicePublicKey"`
-	WrappedAccountKeys string `json:"wrappedAccountKeys"`
+	DevicePublicKey    string `json:"devicePublicKey" validate:"required,len=736"`
+	WrappedAccountKeys string `json:"wrappedAccountKeys" validate:"required,len=684"`
 }
 
 type M2Login struct {

@@ -16,6 +16,7 @@ import (
 	"quartz/pkg/captcha"
 	"quartz/pkg/contextkeys"
 	"quartz/pkg/crypto"
+	"quartz/pkg/httputils"
 	"quartz/pkg/worker"
 	"strings"
 	"time"
@@ -49,17 +50,17 @@ func (h *Handler) RecoveryStart(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var req dto.RecoveryStartRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return apperrors.NewBadRequest("invalid request body", err)
+	if err := httputils.ParseAndValidate(r, &req); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	success, errArr, err := captcha.VerifyTurnstileTokenInRequest(r)
 	if err != nil {
-		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","), "error", err)
+		slog.InfoContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","), "error", err)
 		return apperrors.NewBadRequest("invalid token", err)
 	}
 	if !success {
-		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","))
+		slog.InfoContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","))
 		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
@@ -193,8 +194,8 @@ func (h *Handler) RecoveryVerify(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var req dto.RecoveryVerifyRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return apperrors.NewBadRequest("invalid request body", err)
+	if err := httputils.ParseAndValidate(r, &req); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	sessionKey := "recovery:session:" + sessionID
@@ -292,8 +293,8 @@ func (h *Handler) RecoveryOpaqueM1(w http.ResponseWriter, r *http.Request) error
 	}
 
 	var req dto.RecoveryOpaqueM1Request
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return apperrors.NewBadRequest("invalid request body", err)
+	if err := httputils.ParseAndValidate(r, &req); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	sessionKey := "recovery:session:" + sessionID
@@ -343,8 +344,8 @@ func (h *Handler) RecoveryComplete(w http.ResponseWriter, r *http.Request) error
 	}
 
 	var req dto.RecoveryCompleteRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return apperrors.NewBadRequest("invalid request body", err)
+	if err := httputils.ParseAndValidate(r, &req); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	sessionKey := "recovery:session:" + sessionID

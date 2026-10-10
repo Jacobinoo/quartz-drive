@@ -33,11 +33,11 @@ type RecoverySession struct {
 
 // Request/Response DTOs for the endpoints
 type RecoveryStartRequest struct {
-	Method string `json:"method"`
-	Email  string `json:"email,omitempty"`
+	Method string `json:"method" validate:"required,oneof=email phrase,max=255"`
+	Email  string `json:"email,omitempty" validate:"required_if=Method email,omitempty,email,max=255"`
 
 	// For Recovery Phrase
-	RecoveryIDHex string `json:"recovery_id_hex,omitempty"`
+	RecoveryIDHex string `json:"recovery_id_hex,omitempty" validate:"required_if=Method phrase,omitempty,len=64"`
 }
 
 type RecoveryStartResponse struct {
@@ -50,10 +50,10 @@ type RecoveryStartResponse struct {
 
 type RecoveryVerifyRequest struct {
 	// For Email
-	Token string `json:"token,omitempty"`
+	Token string `json:"token,omitempty" validate:"required_without=ChallengeSignatureHex,excluded_with=ChallengeSignatureHex,omitempty,base64rawurl,len=64"`
 
 	// For Recovery Phrase (Proof of possession)
-	ChallengeSignatureHex string `json:"challenge_signature_hex,omitempty"`
+	ChallengeSignatureHex string `json:"challenge_signature_hex,omitempty" validate:"required_without=Token,excluded_with=Token,omitempty,len=128"`
 }
 
 type RecoveryVerifyResponse struct {
@@ -62,10 +62,10 @@ type RecoveryVerifyResponse struct {
 }
 
 type RecoveryOpaqueM1Request struct {
-	RegistrationRequest string `json:"registrationRequest"`
+	RegistrationRequest string `json:"registrationRequest" validate:"required,len=43"`
 }
 
 type RecoveryCompleteRequest struct {
-	NewOPAQUERecord *string  `json:"new_opaque_record,omitempty"`
+	NewOPAQUERecord *string  `json:"new_opaque_record,omitempty" validate:"required,len=256"`
 	ReEncryptedKeys *KeysDTO `json:"re_encrypted_keys,omitempty"`
 }

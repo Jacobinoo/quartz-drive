@@ -18,6 +18,7 @@ import (
 	"quartz/pkg/contextkeys"
 	"quartz/pkg/crypto"
 	"quartz/pkg/dpop"
+	"quartz/pkg/httputils"
 	"quartz/pkg/token"
 	"strconv"
 	"strings"
@@ -50,7 +51,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var m1 dto.M1Login
-	if err := json.NewDecoder(r.Body).Decode(&m1); err != nil {
+	if err := httputils.ParseAndValidate(r, &m1); err != nil {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
@@ -61,11 +62,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) error {
 
 	success, errArr, err := captcha.VerifyTurnstileTokenInRequest(r)
 	if err != nil {
-		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","), "error", err)
+		slog.InfoContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","), "error", err)
 		return apperrors.NewBadRequest("invalid token", err)
 	}
 	if !success {
-		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","))
+		slog.InfoContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","))
 		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
@@ -182,7 +183,7 @@ func (h *Handler) LoginM3(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var m3 dto.M3Login
-	if err := json.NewDecoder(r.Body).Decode(&m3); err != nil {
+	if err := httputils.ParseAndValidate(r, &m3); err != nil {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 

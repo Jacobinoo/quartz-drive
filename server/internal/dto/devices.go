@@ -16,5 +16,5 @@ type DeviceResponse struct {
 }
 
 type RevokeDeviceRequest struct {
-	SessionID uuid.UUID `json:"sessionId"`
+	SessionID uuid.UUID `json:"sessionId" validate:"required,uuid"`
 }

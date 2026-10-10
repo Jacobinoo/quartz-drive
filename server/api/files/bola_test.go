@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -99,6 +100,17 @@ func TestUploadInit_BOLA_CrossVolumeAccess(t *testing.T) {
 		ParentNodeID:  nodeA.ID.String(),
 		TotalChunks:   1,
 		TotalFileSize: 500,
+
+		// Dummy data to pass the validator
+		EncryptedName:                 "ZHVtbXk",
+		NameNonce:                     strings.Repeat("A", 32),
+		EncryptedNodePassphrase:       strings.Repeat("A", 1590),
+		SignedEncryptedNodePassphrase: strings.Repeat("A", 86),
+		NodePublicKey:                 strings.Repeat("A", 1622),
+		WrappedNodeKey:                strings.Repeat("A", 64),
+		NodePrivNonce:                 strings.Repeat("A", 32),
+		EncryptedMetadata:             "ZHVtbXk",
+		MetadataNonce:                 strings.Repeat("A", 32),
 	}
 	body, _ := json.Marshal(uploadReq)
 

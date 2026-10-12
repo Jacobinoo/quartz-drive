@@ -41,7 +41,6 @@ export function DemoBanner() {
 
         if (!payload.demoExpiresAt) return;
 
-        // demoExpiresAt is a unix timestamp (seconds), multiply by 1000 for JS Date
         const expiresAt = payload.demoExpiresAt * 1000;
 
         const interval = setInterval(() => {
@@ -51,6 +50,7 @@ export function DemoBanner() {
             if (distance < 0) {
                 setTimeLeft("EXPIRED");
                 clearInterval(interval);
+                window.location.href = "/signin";
                 return;
             }
 

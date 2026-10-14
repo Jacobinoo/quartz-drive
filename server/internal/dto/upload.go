@@ -27,7 +27,7 @@ type InitFileUploadRequest struct {
 type RequestChunkUploadRequest struct {
 	UploadID     uuid.UUID `json:"uploadId" validate:"required,uuid"`
 	ChunkIndex   int       `json:"chunkIndex" validate:"min=0"`
-	DeclaredSize int64     `json:"declaredSize" validate:"required,min=1,max=4194304"` //post-encryption chunk size
+	DeclaredSize int64     `json:"declaredSize" validate:"required,min=1,max=4194344"` //post-encryption chunk size
 	ChunkHash    string    `json:"chunkHash" validate:"required,base64,len=44"`        // SHA-256 of ciphertext for integrity check
 }
 

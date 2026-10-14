@@ -445,7 +445,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 
 	linkUUID := uuid.New()
 
-	// TODO: Extract actual OwnerID from your DPoP/JWT auth claims or session
+	// TODO: Extract actual OwnerID from DPoP/JWT auth claims or session
 	// For testing/MVP if not extracted yet, fetch the parent node's owner:
 	var parentNode model.Node
 	if err := h.db.First(&parentNode, "id = ? AND owner_id = ?", uploadSession.ParentNodeID, uploadSession.UserID).Error; err != nil {
@@ -576,7 +576,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 
 // 	linkUUID := uuid.New()
 
-// 	// TODO: Extract actual OwnerID from your DPoP/JWT auth claims or session
+// 	// TODO: Extract actual OwnerID from DPoP/JWT auth claims or session
 // 	// For testing/MVP if not extracted yet, fetch the parent node's owner:
 // 	var parentNode model.Node
 // 	if err := h.db.First(&parentNode, "id = ?", parentUUID).Error; err != nil {
@@ -725,6 +725,39 @@ func (h *Handler) Files(w http.ResponseWriter, r *http.Request) error {
 			}
 			return apperrors.NewInternal(err)
 		}
+	}
+
+	//etag check
+	type FolderMeta struct {
+		MaxUpdatedAt *time.Time
+		TotalCount   int64
+	}
+
+	// folder contents changed when:
+	//	item added to a folder (new Link) - count,
+	// 	item removed/deleted (count/deleted_at),
+	//	item renamed/updated (updated_at)
+	var meta FolderMeta
+	if err := h.db.Model(&model.Link{}).
+		Select("MAX(updated_at) as max_updated_at, COUNT(*) as total_count").
+		Where("parent_node_id = ?", parentFolderID).
+		Scan(&meta).Error; err != nil {
+		slog.WarnContext(r.Context(), "failed to compute folder etag", "error", err, "folder_id", parentFolderID)
+	} else {
+		var lastUpdatedMillis int64 = 0
+		if meta.MaxUpdatedAt != nil {
+			lastUpdatedMillis = meta.MaxUpdatedAt.UnixMilli()
+		}
+		etag := fmt.Sprintf(`W/"%s-%d-%d"`, parentFolderID, lastUpdatedMillis, meta.TotalCount)
+
+		if match := r.Header.Get("If-None-Match"); match != "" && match == etag {
+			w.Header().Set("ETag", etag)
+			w.Header().Set("Cache-Control", "private, no-cache")
+			w.WriteHeader(http.StatusNotModified)
+			return nil
+		}
+		w.Header().Set("ETag", etag)
+		w.Header().Set("Cache-Control", "private, no-cache")
 	}
 
 	var links []model.Link

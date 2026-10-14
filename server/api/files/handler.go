@@ -691,6 +691,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 // }
 
 func (h *Handler) Files(w http.ResponseWriter, r *http.Request) error {
+	w.Header().Set("Content-Type", "application/json")
 	if r.Method != http.MethodGet {
 		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
@@ -761,7 +762,7 @@ func (h *Handler) Files(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var links []model.Link
-	// Preload the ChildNode so we get SizeBytes and Type
+	// Preload the ChildNode for SizeBytes and Type
 	// Preload Author and Author.KeyStore for signature verification
 	err := h.db.Preload("ChildNode").
 		Preload("Author").
@@ -772,13 +773,35 @@ func (h *Handler) Files(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewInternal(fmt.Errorf("failed to fetch files"))
 	}
 
+	var subfolderIDs []uuid.UUID
+	for _, l := range links {
+		if l.ChildNode.Type == model.NodeTypeFolder {
+			subfolderIDs = append(subfolderIDs, *l.ChildNodeID)
+		}
+	}
+
+	childrenCounts := make(map[uuid.UUID]int64)
+	if len(subfolderIDs) > 0 {
+		type CountResult struct {
+			ParentNodeID uuid.UUID
+			Count        int64
+		}
+		var counts []CountResult
+		h.db.Model(&model.Link{}).
+			Select("parent_node_id, COUNT(*) as count").
+			Where("parent_node_id IN ?", subfolderIDs).
+			Group("parent_node_id").
+			Scan(&counts)
+		for _, c := range counts {
+			childrenCounts[c.ParentNodeID] = c.Count
+		}
+	}
+
 	var response []dto.FileListResponseItem
 	for _, link := range links {
 		hasChildren := false
 		if link.ChildNode.Type == model.NodeTypeFolder {
-			var count int64
-			h.db.Model(&model.Link{}).Where("parent_node_id = ?", link.ChildNodeID).Count(&count)
-			if count > 0 {
+			if count, ok := childrenCounts[*link.ChildNodeID]; ok && count > 0 {
 				hasChildren = true
 			}
 		}
@@ -813,7 +836,6 @@ func (h *Handler) Files(w http.ResponseWriter, r *http.Request) error {
 		})
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
 		return apperrors.NewInternal(err)

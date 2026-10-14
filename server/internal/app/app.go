@@ -34,6 +34,7 @@ import (
 	"time"
 
 	sentryhttp "github.com/getsentry/sentry-go/http"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/resend/resend-go/v2"
 	"gorm.io/gorm"
 )

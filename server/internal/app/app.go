@@ -89,7 +89,9 @@ func Run() {
 
 	router := initRouter(state)
 
-	cacheNoStoreHandler := middleware.CacheControlNoStoreMiddleware(router)
+	compressedHandler := chimiddleware.Compress(5)(router)
+
+	cacheNoStoreHandler := middleware.CacheControlNoStoreMiddleware(compressedHandler)
 
 	// Limit request body size for security & abuse prevention
 	bodyLimitedHandler := middleware.LimitBodySize(cacheNoStoreHandler)

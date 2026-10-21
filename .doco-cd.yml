@@ -5,5 +5,5 @@ compose_files:
 env_files:
   - /opt/quartz-drive/.env.production
 environment:
-  DEPLOY_TAG: "${DOCO_CD_GIT_REF_NAME}"
+  DEPLOY_TAG: "latest"
   DOCKERHUB_USERNAME: "jacobinoo"

@@ -7,3 +7,6 @@ env_files:
 environment:
   DEPLOY_TAG: "latest"
   DOCKERHUB_USERNAME: "jacobinoo"
+retry:
+  limit: 10
+  delay: 30s

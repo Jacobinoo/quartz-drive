@@ -89,8 +89,8 @@ jobs:
 
       - name: Trigger Deployment
         run: |
-          curl -sS -X POST \
-            --url 'https://cd.quartzapp.top/v1/api/poll/run?wait=true' \
-            --header 'content-type: application/json' \
-            --header 'x-api-key: ${{ secrets.DOCO_CD_API_SECRET }}' \
-            --data '[{"url": "https://github.com/Jacobinoo/quartz-drive.git"}]'
+          curl -f -X POST "https://api.quartzapp.top/doco/v1/api/poll/run?wait=true" \
+            -H "Content-Type: application/json" \
+            -H "x-cf-secret: ${{ secrets.CF_DEPLOY_KEY }}" \
+            -H "x-api-key: ${{ secrets.DOCO_API_SECRET }}" \
+            -d '[{"url": "https://github.com/Jacobinoo/quartz-drive.git", "reference": "master"}]'

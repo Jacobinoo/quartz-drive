@@ -82,8 +82,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Create GitHub Pre-Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
-          prerelease: true
+
+      - name: Trigger Deployment
+        run: |
+          curl -sS -X POST \
+            --url 'https://cd.quartzapp.top/v1/api/poll/run?wait=true' \
+            --header 'content-type: application/json' \
+            --header 'x-api-key: ${{ secrets.DOCO_CD_API_SECRET }}' \
+            --data '[{"url": "https://github.com/Jacobinoo/quartz-drive.git"}]'

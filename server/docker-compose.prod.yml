@@ -7,16 +7,17 @@ services:
       - "--log.format=json"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.filename=/etc/traefik/traefik-dynamic.yml"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
 
       - "--serverstransport.forwardingTimeouts.responseHeaderTimeout=30s"
       - "--serverstransport.forwardingTimeouts.dialTimeout=5s"
 
-      # Automatically redirects HTTP to HTTPS
+
       - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
       - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
-      # Let's Encrypt SSL Configuration
+
       - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
       - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
       - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
@@ -45,15 +46,14 @@ services:
       - "--entrypoints.websecure.transport.respondingTimeouts.idleTimeout=60s"
     logging:
       driver: "nanoandrew4/ngcplogs:linux-amd64-v1.3.0"
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "./letsencrypt:/letsencrypt"
+      - "traefik-acme:/letsencrypt"
+      - "/opt/quartz-drive/traefik-dynamic.yml:/etc/traefik/traefik-dynamic.yml:ro"
+      - "/opt/quartz-drive/certs:/certs:ro"
     deploy:
       resources:
         limits:
@@ -80,8 +80,8 @@ services:
     restart: unless-stopped
 
   quartz-server:
-    image: ${DOCKERHUB_USERNAME}/quartz-server:${DEPLOY_TAG:-latest}
     cpu_shares: 2048
+    image: ${DOCKERHUB_USERNAME}/quartz-server:${DEPLOY_TAG:-latest}
     logging:
       driver: "nanoandrew4/ngcplogs:linux-amd64-v1.3.0"
     env_file:
@@ -89,7 +89,7 @@ services:
     environment:
       - INFISICAL_MACHINE_IDENTITY_ID
       - INFISICAL_PROJECT_ID
-      - INFISICAL_API_URL
+      - INFISICAL_AUTH_METHOD=gcp-id-token
       - INFISICAL_ENVIRONMENT=prod
     read_only: true
     tmpfs:
@@ -129,18 +129,6 @@ services:
           memory: 32M
     restart: unless-stopped
 
-#  fluent-bit:
-#    image: cr.fluentbit.io/fluent/fluent-bit:latest
-#    env_file:
-#      - .env.production
-#    volumes:
-#      - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
-#      - ./parsers_custom.conf:/fluent-bit/etc/parsers_custom.conf:ro
-#      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-#    deploy:
-#      resources:
-#        limits:
-#          memory: 32M
-#        reservations:
-#          memory: 16M
-#    restart: unless-stopped
+volumes:
+  traefik-acme:
+    name: quartz-traefik-acme

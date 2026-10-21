@@ -26,6 +26,7 @@ import (
 	"quartz/pkg/storage"
 	"quartz/pkg/worker"
 	"strings"
+	"sync/atomic"
 
 	"encoding/base64"
 	"os"
@@ -38,6 +39,13 @@ import (
 	"github.com/resend/resend-go/v2"
 	"gorm.io/gorm"
 )
+
+var isDraining atomic.Bool
+
+// MarkDraining is called when SIGTERM is received
+func MarkDraining() {
+	isDraining.Store(true)
+}
 
 func Run() {
 	// grpcClient, conn := initGrpcClient()
@@ -129,7 +137,17 @@ func Run() {
 	// kill -9 is syscall.SIGKILL but can't be caught, so don't need add it
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	slog.Info("Shutting down server...")
+	slog.Info("Shutdown signal received, initiating drain...")
+
+	MarkDraining()
+
+	drainWindow := 3 * time.Second
+	drainEnvVal := config.Cfg.App.ShutdownDrainDelay
+	if d, err := time.ParseDuration(drainEnvVal); err == nil {
+		drainWindow = d
+	}
+
+	time.Sleep(drainWindow)
 
 	// The context is used to inform the server it has 5 seconds to finish
 	// the request it is currently handling
@@ -203,10 +221,14 @@ func opaqueSetupBytes() []byte {
 }
 
 func rootHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	// In Go's ServeMux, "/" is a wildcard prefix match.
 	// If the path isn't exactly "/", return a 404 Not Found.
 	if r.URL.Path != "/" {
-		http.NotFound(w, r)
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "not_found",
+		})
 		return
 	}
 
@@ -214,26 +236,30 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=300, s-maxage=3600")
 	w.WriteHeader(http.StatusOK)
 
-	version := "unknown"
+	raw := config.BuildVersion
+
+	version := config.Cfg.App.Version
 	commitHash := "unknown"
 	buildNumber := "unknown"
-
-	buildVerArr := strings.Split(config.BuildVersion, "-")
-	if len(buildVerArr) >= 5 {
-		version = buildVerArr[0]
-		commitHash = buildVerArr[1] + "-" + buildVerArr[2]
-		buildNumber = buildVerArr[4]
-	} else if config.BuildVersion != "" {
-		version = config.BuildVersion
+	parts := strings.Split(raw, "-")
+	for i := 0; i < len(parts); i++ {
+		if parts[i] == "sha" && i+1 < len(parts) {
+			commitHash = parts[i+1]
+			if len(commitHash) > 7 {
+				commitHash = commitHash[:7]
+			}
+		}
+		if parts[i] == "build" && i+1 < len(parts) {
+			buildNumber = parts[i+1]
+		}
 	}
-
 	response := struct {
-		Service            string
-		EnvironmentVersion string
-		Version            string
-		BuildNumber        string
-		CommitHash         string
-		Description        string
+		Service            string `json:"service"`
+		EnvironmentVersion string `json:"environmentVersion"`
+		Version            string `json:"version"`
+		BuildNumber        string `json:"buildNumber"`
+		CommitHash         string `json:"commitHash"`
+		Description        string `json:"description"`
 	}{
 		Service:            config.Cfg.App.Name,
 		EnvironmentVersion: config.Cfg.App.Version,
@@ -242,7 +268,6 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 		CommitHash:         commitHash,
 		Description:        "Quartz API Server",
 	}
-
 	err := json.NewEncoder(w).Encode(&response)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -254,7 +279,6 @@ func healthHandler(state *ServerState) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		// Require Bearer token
 		expectedToken := "Bearer " + config.Cfg.App.HealthToken
 		if r.Header.Get("Authorization") != expectedToken {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -280,6 +304,14 @@ func healthHandler(state *ServerState) http.HandlerFunc {
 }
 
 func upHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "public, max-age=5")
+
+	if isDraining.Load() {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
 	return
 }

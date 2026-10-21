@@ -84,8 +84,6 @@ services:
     image: ${DOCKERHUB_USERNAME}/quartz-server:${DEPLOY_TAG:-latest}
     logging:
       driver: "nanoandrew4/ngcplogs:linux-amd64-v1.3.0"
-    env_file:
-      - .env.production
     environment:
       - INFISICAL_MACHINE_IDENTITY_ID
       - INFISICAL_PROJECT_ID

@@ -1,6 +1,6 @@
 module quartz
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/Backblaze/blazer v0.9.0
@@ -39,7 +39,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.3 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.6 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.6 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.6 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.21 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.6 // indirect
@@ -84,7 +83,6 @@ require (
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/rs/zerolog v1.35.1 // indirect
-	github.com/sony/gobreaker v1.0.0 // indirect
 	github.com/sony/gobreaker/v2 v2.4.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/tinylib/msgp v1.6.5 // indirect

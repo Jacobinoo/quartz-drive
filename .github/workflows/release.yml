@@ -15,9 +15,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.26.5'
+          go-version: '1.27.2'
           cache: true
           cache-dependency-path: server/go.sum
+
+      - name: Download Go Modules
+        run: go mod download
+        working-directory: ./server
 
       - name: Run Go Tests
         run: go test -v ./...
@@ -78,8 +82,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Create GitHub Pre-Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
-          prerelease: true
+
+      - name: Trigger Deployment
+        run: |
+          curl -f -X POST "https://api.quartzapp.top/doco/v1/api/poll/run?wait=true" \
+            -H "Content-Type: application/json" \
+            -H "x-cf-secret: ${{ secrets.CF_DEPLOY_KEY }}" \
+            -H "x-api-key: ${{ secrets.DOCO_API_SECRET }}" \
+            -d '[{"url": "https://github.com/Jacobinoo/quartz-drive.git", "reference": "master"}]'

@@ -16,6 +16,7 @@ import (
 	apperrors "quartz/pkg/app-errors"
 	"quartz/pkg/contextkeys"
 	"quartz/pkg/crypto"
+	"quartz/pkg/httputils"
 	"quartz/pkg/storage"
 	"time"
 
@@ -43,7 +44,7 @@ func (h *Handler) InitUpload(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "application/json")
 
 	var uploadRequest dto.InitFileUploadRequest
-	if err := json.NewDecoder(r.Body).Decode(&uploadRequest); err != nil {
+	if err := httputils.ParseAndValidate(r, &uploadRequest); err != nil {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
@@ -173,8 +174,7 @@ func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "application/json")
 
 	var uploadRequest dto.RequestChunkUploadRequest
-	if err := json.NewDecoder(r.Body).Decode(&uploadRequest); err != nil {
-		slog.Debug("failed to decode RequestChunkUploadRequest")
+	if err := httputils.ParseAndValidate(r, &uploadRequest); err != nil {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
@@ -291,8 +291,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/json")
 
 	var uploadRequest dto.FinishChunkUploadRequest
-	if err := json.NewDecoder(r.Body).Decode(&uploadRequest); err != nil {
-		slog.WarnContext(r.Context(), "failed to decode FinishChunkUploadRequest")
+	if err := httputils.ParseAndValidate(r, &uploadRequest); err != nil {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
@@ -446,7 +445,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 
 	linkUUID := uuid.New()
 
-	// TODO: Extract actual OwnerID from your DPoP/JWT auth claims or session
+	// TODO: Extract actual OwnerID from DPoP/JWT auth claims or session
 	// For testing/MVP if not extracted yet, fetch the parent node's owner:
 	var parentNode model.Node
 	if err := h.db.First(&parentNode, "id = ? AND owner_id = ?", uploadSession.ParentNodeID, uploadSession.UserID).Error; err != nil {
@@ -577,7 +576,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 
 // 	linkUUID := uuid.New()
 
-// 	// TODO: Extract actual OwnerID from your DPoP/JWT auth claims or session
+// 	// TODO: Extract actual OwnerID from DPoP/JWT auth claims or session
 // 	// For testing/MVP if not extracted yet, fetch the parent node's owner:
 // 	var parentNode model.Node
 // 	if err := h.db.First(&parentNode, "id = ?", parentUUID).Error; err != nil {
@@ -692,6 +691,7 @@ func (h *Handler) ReportChunkUploadDone(w http.ResponseWriter, r *http.Request) 
 // }
 
 func (h *Handler) Files(w http.ResponseWriter, r *http.Request) error {
+	w.Header().Set("Content-Type", "application/json")
 	if r.Method != http.MethodGet {
 		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
@@ -728,8 +728,41 @@ func (h *Handler) Files(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 
+	//etag check
+	type FolderMeta struct {
+		MaxUpdatedAt *time.Time
+		TotalCount   int64
+	}
+
+	// folder contents changed when:
+	//	item added to a folder (new Link) - count,
+	// 	item removed/deleted (count/deleted_at),
+	//	item renamed/updated (updated_at)
+	var meta FolderMeta
+	if err := h.db.Model(&model.Link{}).
+		Select("MAX(updated_at) as max_updated_at, COUNT(*) as total_count").
+		Where("parent_node_id = ?", parentFolderID).
+		Scan(&meta).Error; err != nil {
+		slog.WarnContext(r.Context(), "failed to compute folder etag", "error", err, "folder_id", parentFolderID)
+	} else {
+		var lastUpdatedMillis int64 = 0
+		if meta.MaxUpdatedAt != nil {
+			lastUpdatedMillis = meta.MaxUpdatedAt.UnixMilli()
+		}
+		etag := fmt.Sprintf(`W/"%s-%d-%d"`, parentFolderID, lastUpdatedMillis, meta.TotalCount)
+
+		if match := r.Header.Get("If-None-Match"); match != "" && match == etag {
+			w.Header().Set("ETag", etag)
+			w.Header().Set("Cache-Control", "private, no-cache")
+			w.WriteHeader(http.StatusNotModified)
+			return nil
+		}
+		w.Header().Set("ETag", etag)
+		w.Header().Set("Cache-Control", "private, no-cache")
+	}
+
 	var links []model.Link
-	// Preload the ChildNode so we get SizeBytes and Type
+	// Preload the ChildNode for SizeBytes and Type
 	// Preload Author and Author.KeyStore for signature verification
 	err := h.db.Preload("ChildNode").
 		Preload("Author").
@@ -740,13 +773,35 @@ func (h *Handler) Files(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewInternal(fmt.Errorf("failed to fetch files"))
 	}
 
+	var subfolderIDs []uuid.UUID
+	for _, l := range links {
+		if l.ChildNode.Type == model.NodeTypeFolder {
+			subfolderIDs = append(subfolderIDs, *l.ChildNodeID)
+		}
+	}
+
+	childrenCounts := make(map[uuid.UUID]int64)
+	if len(subfolderIDs) > 0 {
+		type CountResult struct {
+			ParentNodeID uuid.UUID
+			Count        int64
+		}
+		var counts []CountResult
+		h.db.Model(&model.Link{}).
+			Select("parent_node_id, COUNT(*) as count").
+			Where("parent_node_id IN ?", subfolderIDs).
+			Group("parent_node_id").
+			Scan(&counts)
+		for _, c := range counts {
+			childrenCounts[c.ParentNodeID] = c.Count
+		}
+	}
+
 	var response []dto.FileListResponseItem
 	for _, link := range links {
 		hasChildren := false
 		if link.ChildNode.Type == model.NodeTypeFolder {
-			var count int64
-			h.db.Model(&model.Link{}).Where("parent_node_id = ?", link.ChildNodeID).Count(&count)
-			if count > 0 {
+			if count, ok := childrenCounts[*link.ChildNodeID]; ok && count > 0 {
 				hasChildren = true
 			}
 		}
@@ -781,7 +836,6 @@ func (h *Handler) Files(w http.ResponseWriter, r *http.Request) error {
 		})
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
 		return apperrors.NewInternal(err)
@@ -900,8 +954,8 @@ func (h *Handler) CreateFolder(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewMethodNotAllowed("method not allowed")
 	}
 	var req dto.CreateFolderRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return apperrors.NewBadRequest("invalid request body", nil)
+	if err := httputils.ParseAndValidate(r, &req); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
@@ -1063,8 +1117,8 @@ func (h *Handler) RenameFile(w http.ResponseWriter, r *http.Request) error {
 	parentFolderID := r.URL.Query().Get("parentFolderId")
 
 	var req dto.RenameRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return apperrors.NewBadRequest("invalid body", nil)
+	if err := httputils.ParseAndValidate(r, &req); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
@@ -1228,8 +1282,8 @@ func (h *Handler) MoveFile(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var req dto.MoveFileRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return apperrors.NewBadRequest("invalid request", nil)
+	if err := httputils.ParseAndValidate(r, &req); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	userID, ok := r.Context().Value(contextkeys.UserIDKey).(uuid.UUID)
@@ -1479,8 +1533,8 @@ func (h *Handler) ShareFolder(w http.ResponseWriter, r *http.Request) error {
 		return apperrors.NewInternal(err)
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return apperrors.NewBadRequest("bad request", nil)
+	if err := httputils.ParseAndValidate(r, &req); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	targetNodeUUID := uuid.MustParse(req.TargetNodeID)

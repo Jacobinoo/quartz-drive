@@ -19,6 +19,7 @@ import (
 	"quartz/pkg/contextkeys"
 	crypto "quartz/pkg/crypto"
 	"quartz/pkg/email"
+	"quartz/pkg/httputils"
 	"quartz/pkg/worker"
 	"strings"
 	"time"
@@ -59,7 +60,7 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var m1 dto.M1
-	if err := json.NewDecoder(r.Body).Decode(&m1); err != nil {
+	if err := httputils.ParseAndValidate(r, &m1); err != nil {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
@@ -203,8 +204,7 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 
 	var m3 dto.M3
 
-	if err := json.NewDecoder(r.Body).Decode(&m3); err != nil {
-		slog.WarnContext(r.Context(), "decode m3 payload error", "error", err)
+	if err := httputils.ParseAndValidate(r, &m3); err != nil {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 

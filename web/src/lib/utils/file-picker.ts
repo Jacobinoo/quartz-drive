@@ -3,7 +3,10 @@ interface PickerOptions {
     accept?: string;
 }
 
-export function openFilePicker({ multiple = true, accept = "*/*" }: PickerOptions = {}): Promise<File[]> {
+export function openFilePicker({
+    multiple = true,
+    accept = "*/*",
+}: PickerOptions = {}): Promise<File[]> {
     return new Promise((resolve) => {
         const input = document.createElement("input");
         input.type = "file";
@@ -22,7 +25,6 @@ export function openFilePicker({ multiple = true, accept = "*/*" }: PickerOption
 
             input.remove();
         };
-
 
         input.click();
     });

@@ -1,9 +1,14 @@
-import sodium from 'libsodium-wrappers-sumo';
+import sodium from "libsodium-wrappers-sumo";
 
 const ctx: Worker = self as any;
 
 ctx.onmessage = async (event) => {
-    const { urls, fileKey, nodeId, mimeType = 'application/octet-stream' } = event.data;
+    const {
+        urls,
+        fileKey,
+        nodeId,
+        mimeType = "application/octet-stream",
+    } = event.data;
 
     try {
         await sodium.ready;
@@ -20,8 +25,10 @@ ctx.onmessage = async (event) => {
             const nonce = payload.slice(0, 24);
             const ciphertext = payload.slice(24);
 
-            const isFinal = (i === urls.length - 1);
-            const ad = sodium.from_string(`${nodeId}|${i}|${isFinal ? '1' : '0'}`);
+            const isFinal = i === urls.length - 1;
+            const ad = sodium.from_string(
+                `${nodeId}|${i}|${isFinal ? "1" : "0"}`
+            );
 
             const decrypted = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
                 null,
@@ -34,14 +41,17 @@ ctx.onmessage = async (event) => {
             decryptedChunks.push(decrypted);
 
             // Optional: send progress updates
-            ctx.postMessage({ type: 'PROGRESS', percent: Math.round(((i + 1) / urls.length) * 100) });
+            ctx.postMessage({
+                type: "PROGRESS",
+                percent: Math.round(((i + 1) / urls.length) * 100),
+            });
         }
 
         // Stitch the decrypted chunks together into a single file blob!
         const fileBlob = new Blob(decryptedChunks as any, { type: mimeType });
 
-        ctx.postMessage({ type: 'SUCCESS', blob: fileBlob });
+        ctx.postMessage({ type: "SUCCESS", blob: fileBlob });
     } catch (error: any) {
-        ctx.postMessage({ type: 'ERROR', message: error.message });
+        ctx.postMessage({ type: "ERROR", message: error.message });
     }
 };

@@ -1,4 +1,4 @@
-import type SodiumType from 'libsodium-wrappers-sumo'
+import type SodiumType from "libsodium-wrappers-sumo";
 
 let sodiumInstance: typeof SodiumType | null = null;
 

@@ -7,12 +7,17 @@ services:
       - "--log.format=json"
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.filename=/etc/traefik/traefik-dynamic.yml"
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
-      # Automatically redirects HTTP to HTTPS
+
+      - "--serverstransport.forwardingTimeouts.responseHeaderTimeout=30s"
+      - "--serverstransport.forwardingTimeouts.dialTimeout=5s"
+
+
       - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
       - "--entrypoints.web.http.redirections.entryPoint.scheme=https"
-      # Let's Encrypt SSL Configuration
+
       - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
       - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
       - "--certificatesresolvers.myresolver.acme.email=${ACME_EMAIL}"
@@ -33,17 +38,22 @@ services:
       - "--entrypoints.web.http.encodedCharacters.allowEncodedPercent=false"
       - "--entrypoints.web.http.encodedCharacters.allowEncodedQuestionMark=false"
       - "--entrypoints.web.http.encodedCharacters.allowEncodedHash=false"
+      - "--entrypoints.websecure.transport.respondingTimeouts.readTimeout=30s"
+      - "--entrypoints.web.transport.respondingTimeouts.readTimeout=30s"
+      - "--entrypoints.websecure.transport.respondingTimeouts.writeTimeout=30s"
+      - "--entrypoints.web.transport.respondingTimeouts.writeTimeout=30s"
+      - "--entrypoints.web.transport.respondingTimeouts.idleTimeout=60s"
+      - "--entrypoints.websecure.transport.respondingTimeouts.idleTimeout=60s"
     logging:
       driver: "nanoandrew4/ngcplogs:linux-amd64-v1.3.0"
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "./letsencrypt:/letsencrypt"
+      - "traefik-acme:/letsencrypt"
+      - "/opt/quartz-drive/traefik-dynamic.yml:/etc/traefik/traefik-dynamic.yml:ro"
+      - "/opt/quartz-drive/certs:/certs:ro"
     deploy:
       resources:
         limits:
@@ -70,39 +80,45 @@ services:
     restart: unless-stopped
 
   quartz-server:
-    image: ${DOCKERHUB_USERNAME}/quartz-server:${DEPLOY_TAG:-latest}
     cpu_shares: 2048
+    image: ${DOCKERHUB_USERNAME}/quartz-server:${DEPLOY_TAG:-latest}
     logging:
       driver: "nanoandrew4/ngcplogs:linux-amd64-v1.3.0"
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    env_file:
-      - .env.production
+    environment:
+      - INFISICAL_MACHINE_IDENTITY_ID
+      - INFISICAL_PROJECT_ID
+      - INFISICAL_AUTH_METHOD=gcp-id-token
+      - INFISICAL_ENVIRONMENT=prod
+    read_only: true
+    tmpfs:
+      - /tmp
     depends_on:
       valkey:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/up"]
+      test: ["CMD", "/app/healthcheck"]
       interval: 3s
       timeout: 5s
       retries: 5
     labels:
       - "traefik.enable=true"
-      # Securely loads the domain from .env.production
       - "traefik.http.routers.quartz.rule=Host(`${DOMAIN_NAME}`)"
       - "traefik.http.routers.quartz.entrypoints=websecure"
       - "traefik.http.routers.quartz.tls.certresolver=myresolver"
       - "traefik.http.services.quartz.loadbalancer.server.port=8080"
 
-      # Security Headers (HSTS)
-      - "traefik.http.middlewares.hsts.headers.stsSeconds=300"
+      - "traefik.http.middlewares.hsts.headers.stsSeconds=31536000"
       - "traefik.http.middlewares.hsts.headers.stsIncludeSubdomains=true"
-      - "traefik.http.routers.quartz.middlewares=hsts"
+      - "traefik.http.middlewares.hsts.headers.stsPreload=true"
 
-      # Limit request body to ~2MB (2097152 bytes)
-      - "traefik.http.middlewares.limit-size.buffering.maxRequestBodyBytes=2097152"
-      - "traefik.http.routers.quartz.middlewares=limit-size"
+      - "traefik.http.middlewares.limit-size.buffering.maxRequestBodyBytes=1048576"
+
+      - "traefik.http.middlewares.security.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.security.headers.customFrameOptionsValue=DENY"
+      - "traefik.http.middlewares.security.headers.referrerPolicy=strict-origin-when-cross-origin"
+      - "traefik.http.middlewares.security.headers.contentSecurityPolicy=default-src 'none'; frame-ancestors 'none';"
+
+      - "traefik.http.routers.quartz.middlewares=hsts,limit-size,security"
     deploy:
       resources:
         limits:
@@ -111,18 +127,6 @@ services:
           memory: 32M
     restart: unless-stopped
 
-#  fluent-bit:
-#    image: cr.fluentbit.io/fluent/fluent-bit:latest
-#    env_file:
-#      - .env.production
-#    volumes:
-#      - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
-#      - ./parsers_custom.conf:/fluent-bit/etc/parsers_custom.conf:ro
-#      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-#    deploy:
-#      resources:
-#        limits:
-#          memory: 32M
-#        reservations:
-#          memory: 16M
-#    restart: unless-stopped
+volumes:
+  traefik-acme:
+    name: quartz-traefik-acme

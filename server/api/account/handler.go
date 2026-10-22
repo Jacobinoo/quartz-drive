@@ -20,6 +20,7 @@ import (
 	"quartz/pkg/contextkeys"
 	"quartz/pkg/crypto"
 	"quartz/pkg/discord"
+	"quartz/pkg/httputils"
 	"quartz/pkg/worker"
 	"strings"
 	"time"
@@ -55,17 +56,17 @@ func (h *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var req ForgotPasswordRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return apperrors.NewBadRequest("Request body is invalid", err)
+	if err := httputils.ParseAndValidate(r, &req); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	success, errArr, err := captcha.VerifyTurnstileTokenInRequest(r)
 	if err != nil {
-		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","), "error", err)
+		slog.InfoContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","), "error", err)
 		return apperrors.NewBadRequest("invalid token", err)
 	}
 	if !success {
-		slog.WarnContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","))
+		slog.InfoContext(r.Context(), "turnstile verification failed", "errors", strings.Join(errArr, ","))
 		return apperrors.NewBadRequest("invalid token", nil)
 	}
 
@@ -147,8 +148,8 @@ func (h *Handler) VerifyResetCode(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	var req VerifyCodeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return apperrors.NewBadRequest("Request body is invalid", err)
+	if err := httputils.ParseAndValidate(r, &req); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	tokenHashBytes := sha256.Sum256([]byte(req.Token))
@@ -203,8 +204,8 @@ func (h *Handler) ResetPasswordM1(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	var m1 ResetM1
-	if err := json.NewDecoder(r.Body).Decode(&m1); err != nil {
-		return apperrors.NewBadRequest("Request body is invalid", err)
+	if err := httputils.ParseAndValidate(r, &m1); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	tokenHashBytes := sha256.Sum256([]byte(m1.Token))
@@ -394,7 +395,7 @@ func (h *Handler) InitializeKeys(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "application/json")
 
 	var initRequest dto.InitializeAccountKeysRequest
-	if err := json.NewDecoder(r.Body).Decode(&initRequest); err != nil {
+	if err := httputils.ParseAndValidate(r, &initRequest); err != nil {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
@@ -586,7 +587,7 @@ func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Content-Type", "application/json")
 
 	var verifyRequest VerifyEmailRequest
-	if err := json.NewDecoder(r.Body).Decode(&verifyRequest); err != nil {
+	if err := httputils.ParseAndValidate(r, &verifyRequest); err != nil {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
@@ -676,7 +677,7 @@ func (h *Handler) Reauthenticate(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var m1 dto.M1Reauthenticate
-	if err := json.NewDecoder(r.Body).Decode(&m1); err != nil {
+	if err := httputils.ParseAndValidate(r, &m1); err != nil {
 		return apperrors.NewBadRequest("invalid request", err)
 	}
 
@@ -783,8 +784,8 @@ func (h *Handler) UpdateKeys(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var req dto.UpdateUserKeysRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return apperrors.NewBadRequest("invalid request body", err)
+	if err := httputils.ParseAndValidate(r, &req); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	if req.SignatureHex == "" {

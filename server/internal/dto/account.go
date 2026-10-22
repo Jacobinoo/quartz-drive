@@ -17,19 +17,19 @@ type DriveDTO struct {
 }
 
 type ShareDTO struct {
-	PublicKey                         string `json:"publicKey"`
-	WrappedPrivateKey                 string `json:"wrappedPrivateKey"`
-	PrivKeyNonce                      string `json:"privKeyNonce"`
-	EncryptedPassphraseForOwner       string `json:"encryptedPassphraseForOwner"`
-	SignedEncryptedPassphraseForOwner string `json:"signedEncryptedPassphraseForOwner"`
+	PublicKey                         string `json:"publicKey" validate:"required,len=1622"`
+	WrappedPrivateKey                 string `json:"wrappedPrivateKey" validate:"required,len=64"`
+	PrivKeyNonce                      string `json:"privKeyNonce" validate:"required,len=32"`
+	EncryptedPassphraseForOwner       string `json:"encryptedPassphraseForOwner" validate:"required,len=1590"`
+	SignedEncryptedPassphraseForOwner string `json:"signedEncryptedPassphraseForOwner" validate:"required,len=86"`
 }
 
 type NodeDTO struct {
-	PublicKey                 string `json:"publicKey"`
-	WrappedPrivateKey         string `json:"wrappedPrivateKey"`
-	PrivKeyNonce              string `json:"privKeyNonce"`
-	EncryptedPassphrase       string `json:"encryptedPassphrase"`
-	SignedEncryptedPassphrase string `json:"signedEncryptedPassphrase"`
+	PublicKey                 string `json:"publicKey" validate:"required,len=1622"`
+	WrappedPrivateKey         string `json:"wrappedPrivateKey" validate:"required,len=64"`
+	PrivKeyNonce              string `json:"privKeyNonce" validate:"required,len=32"`
+	EncryptedPassphrase       string `json:"encryptedPassphrase" validate:"required,len=1590"`
+	SignedEncryptedPassphrase string `json:"signedEncryptedPassphrase" validate:"required,len=86"`
 }
 
 type RedisPendingRegistration struct {
@@ -40,15 +40,10 @@ type RedisPendingRegistration struct {
 }
 
 type M1Reauthenticate struct {
-	LoginRequest string `json:"loginRequest"`
+	LoginRequest string `json:"loginRequest" validate:"required,len=128"`
 }
 
 type M2Reauthenticate struct {
 	LoginResponse string `json:"loginResponse"`
 	Email         string `json:"email"`
-}
-
-type RedisPendingEmailRecovery struct {
-	UserID    uuid.UUID `json:"user_id"`
-	TokenHash string    `json:"token_hash"`
 }

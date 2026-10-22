@@ -89,12 +89,13 @@ type (
 	}
 
 	App struct {
-		Env         string `env:"APP_ENV,required"`
-		Name        string `env:"APP_NAME,required"`
-		Version     string `env:"APP_VERSION,required"`
-		FrontendURL string `env:"FRONTEND_URL,required"`
-		HealthToken string `env:"HEALTH_TOKEN,required"`
-		SentryDSN   string `env:"SENTRY_DSN,required"`
+		Env                string `env:"APP_ENV,required"`
+		Name               string `env:"APP_NAME,required"`
+		Version            string `env:"APP_VERSION,required"`
+		FrontendURL        string `env:"FRONTEND_URL,required"`
+		HealthToken        string `env:"HEALTH_TOKEN,required"`
+		SentryDSN          string `env:"SENTRY_DSN,required"`
+		ShutdownDrainDelay string `env:"SHUTDOWN_DRAIN_DELAY" envDefault:"3s"`
 	}
 
 	DB struct {

@@ -7,21 +7,21 @@ import (
 )
 
 type KeysDTO struct {
-	MasterKdfSalt string `json:"masterKdfSalt"`
+	MasterKdfSalt string `json:"masterKdfSalt" validate:"required,len=22"`
 
-	AccountEncryptionPublicKey           string `json:"accountEncryptionPublicKey"`
-	EncryptedAccountEncryptionPrivateKey string `json:"encAccountEncryptionPrivateKey"`
-	AccountEncryptionKeyNonce            string `json:"accountEncryptionKeyNonce"`
+	AccountEncryptionPublicKey           string `json:"accountEncryptionPublicKey" validate:"required,len=1622"`
+	EncryptedAccountEncryptionPrivateKey string `json:"encAccountEncryptionPrivateKey" validate:"required,len=64"`
+	AccountEncryptionKeyNonce            string `json:"accountEncryptionKeyNonce" validate:"required,len=32"`
 
-	AccountSigningPublicKey           string `json:"accountSigningPublicKey"`
-	EncryptedAccountSigningPrivateKey string `json:"encAccountSigningPrivateKey"`
-	AccountSigningKeyNonce            string `json:"accountSigningKeyNonce"`
+	AccountSigningPublicKey           string `json:"accountSigningPublicKey" validate:"required,len=43"`
+	EncryptedAccountSigningPrivateKey string `json:"encAccountSigningPrivateKey" validate:"required,len=107"`
+	AccountSigningKeyNonce            string `json:"accountSigningKeyNonce" validate:"required,len=32"`
 
-	RecoveryEncryptedAccountEncryptionPrivateKey string `json:"recoveryEncAccountEncryptionPrivateKey"`
-	RecoveryAccountEncryptionKeyNonce            string `json:"recoveryAccountEncryptionKeyNonce"`
-	RecoveryEncryptedAccountSigningPrivateKey    string `json:"recoveryEncAccountSigningPrivateKey"`
-	RecoveryAccountSigningKeyNonce               string `json:"recoveryAccountSigningKeyNonce"`
-	RecoveryIDHex                                string `json:"recoveryIdHex"`
+	RecoveryEncryptedAccountEncryptionPrivateKey string `json:"recoveryEncAccountEncryptionPrivateKey" validate:"required,len=64"`
+	RecoveryAccountEncryptionKeyNonce            string `json:"recoveryAccountEncryptionKeyNonce" validate:"required,len=32"`
+	RecoveryEncryptedAccountSigningPrivateKey    string `json:"recoveryEncAccountSigningPrivateKey" validate:"required,len=107"`
+	RecoveryAccountSigningKeyNonce               string `json:"recoveryAccountSigningKeyNonce" validate:"required,len=32"`
+	RecoveryIDHex                                string `json:"recoveryIdHex" validate:"omitempty,len=64"`
 }
 
 func (k KeysDTO) Value() (driver.Value, error) {
@@ -41,10 +41,10 @@ func (k *KeysDTO) Scan(value interface{}) error {
 }
 
 type UpdateUserKeysRequest struct {
-	EncryptedAccountEncryptionPrivateKey string `json:"encAccountEncryptionPrivateKey"`
-	AccountEncryptionKeyNonce            string `json:"accountEncryptionKeyNonce"`
-	EncryptedAccountSigningPrivateKey    string `json:"encAccountSigningPrivateKey"`
-	AccountSigningKeyNonce               string `json:"accountSigningKeyNonce"`
+	EncryptedAccountEncryptionPrivateKey string `json:"encAccountEncryptionPrivateKey" validate:"required,len=64"`
+	AccountEncryptionKeyNonce            string `json:"accountEncryptionKeyNonce" validate:"required,len=32"`
+	EncryptedAccountSigningPrivateKey    string `json:"encAccountSigningPrivateKey" validate:"required,len=107"`
+	AccountSigningKeyNonce               string `json:"accountSigningKeyNonce" validate:"required,len=32"`
 
-	SignatureHex string `json:"signatureHex"`
+	SignatureHex string `json:"signatureHex" validate:"required,len=128"`
 }

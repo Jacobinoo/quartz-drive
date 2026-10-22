@@ -6,15 +6,15 @@ import { Button } from "@/components/ui/button";
 import { X, Upload, Download } from "lucide-react";
 
 export function TransferList() {
-    const uploadJobs = useUploadStore(s=>s.jobs);
-    const cancelUploadJob = useUploadStore(s=>s.cancelJob);
+    const uploadJobs = useUploadStore((s) => s.jobs);
+    const cancelUploadJob = useUploadStore((s) => s.cancelJob);
 
-    const downloadJobs = useDownloadStore(s=>s.jobs);
-    const cancelDownloadJob = useDownloadStore(s=>s.cancelJob);
+    const downloadJobs = useDownloadStore((s) => s.jobs);
+    const cancelDownloadJob = useDownloadStore((s) => s.cancelJob);
 
-    const activeUploads = uploadJobs.filter(j => j.status !== 'SUCCESS');
-    const activeDownloads = downloadJobs.filter(j => j.status !== 'SUCCESS');
-    
+    const activeUploads = uploadJobs.filter((j) => j.status !== "SUCCESS");
+    const activeDownloads = downloadJobs.filter((j) => j.status !== "SUCCESS");
+
     const totalActive = activeUploads.length + activeDownloads.length;
 
     if (totalActive === 0) return null;
@@ -32,11 +32,13 @@ export function TransferList() {
                                 {job.file.name}
                             </span>
                             <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">{Math.round(job.progress)}%</span>
-                                <Button 
-                                    variant="ghost" 
-                                    size="icon" 
-                                    className="h-5 w-5 rounded-full hover:bg-red-500/10 hover:text-red-500" 
+                                <span className="text-xs text-muted-foreground">
+                                    {Math.round(job.progress)}%
+                                </span>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-5 w-5 rounded-full hover:bg-red-500/10 hover:text-red-500"
                                     onClick={() => cancelUploadJob(job.id)}
                                     title="Cancel upload"
                                 >
@@ -48,22 +50,31 @@ export function TransferList() {
                         <div className="w-full bg-muted rounded-full h-2">
                             <div
                                 className={`h-2 rounded-full transition-all ${
-                                    job.status === 'SUCCESS' ? 'bg-green-500' :
-                                        job.status === 'ERROR' ? 'bg-red-500' :
-                                            job.status === 'UPLOADING' ? 'bg-yellow-500' : 'bg-blue-600'
+                                    job.status === "SUCCESS"
+                                        ? "bg-green-500"
+                                        : job.status === "ERROR"
+                                          ? "bg-red-500"
+                                          : job.status === "UPLOADING"
+                                            ? "bg-yellow-500"
+                                            : "bg-blue-600"
                                 }`}
                                 style={{ width: `${job.progress}%` }}
                             />
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                            {job.status === 'SUCCESS' ? "Upload successful" : 
-                             job.status === 'UPLOADING' ? (job.activity || "Uploading...") : 
-                             job.status === 'IDLE' ? "Waiting for upload..." : 
-                             job.status === 'ERROR' ? (job.errorMessage || "Upload error") : "Status: Unknown"}
+                            {job.status === "SUCCESS"
+                                ? "Upload successful"
+                                : job.status === "UPLOADING"
+                                  ? job.activity || "Uploading..."
+                                  : job.status === "IDLE"
+                                    ? "Waiting for upload..."
+                                    : job.status === "ERROR"
+                                      ? job.errorMessage || "Upload error"
+                                      : "Status: Unknown"}
                         </p>
                     </div>
                 ))}
-                
+
                 {activeDownloads.map((job) => (
                     <div key={job.id} className="text-sm">
                         <div className="flex justify-between items-center mb-1">
@@ -72,11 +83,13 @@ export function TransferList() {
                                 {job.file.plaintextName}
                             </span>
                             <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">{Math.round(job.progress)}%</span>
-                                <Button 
-                                    variant="ghost" 
-                                    size="icon" 
-                                    className="h-5 w-5 rounded-full hover:bg-red-500/10 hover:text-red-500" 
+                                <span className="text-xs text-muted-foreground">
+                                    {Math.round(job.progress)}%
+                                </span>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-5 w-5 rounded-full hover:bg-red-500/10 hover:text-red-500"
                                     onClick={() => cancelDownloadJob(job.id)}
                                     title="Cancel download"
                                 >
@@ -88,18 +101,27 @@ export function TransferList() {
                         <div className="w-full bg-muted rounded-full h-2">
                             <div
                                 className={`h-2 rounded-full transition-all ${
-                                    job.status === 'SUCCESS' ? 'bg-green-500' :
-                                        job.status === 'ERROR' ? 'bg-red-500' :
-                                            job.status === 'DOWNLOADING' ? 'bg-green-500' : 'bg-blue-600'
+                                    job.status === "SUCCESS"
+                                        ? "bg-green-500"
+                                        : job.status === "ERROR"
+                                          ? "bg-red-500"
+                                          : job.status === "DOWNLOADING"
+                                            ? "bg-green-500"
+                                            : "bg-blue-600"
                                 }`}
                                 style={{ width: `${job.progress}%` }}
                             />
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
-                            {job.status === 'SUCCESS' ? "Download successful" : 
-                             job.status === 'DOWNLOADING' ? (job.activity || "Downloading...") : 
-                             job.status === 'IDLE' ? "Waiting for download..." : 
-                             job.status === 'ERROR' ? (job.errorMessage || "Download error") : "Status: Unknown"}
+                            {job.status === "SUCCESS"
+                                ? "Download successful"
+                                : job.status === "DOWNLOADING"
+                                  ? job.activity || "Downloading..."
+                                  : job.status === "IDLE"
+                                    ? "Waiting for download..."
+                                    : job.status === "ERROR"
+                                      ? job.errorMessage || "Download error"
+                                      : "Status: Unknown"}
                         </p>
                     </div>
                 ))}

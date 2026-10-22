@@ -105,6 +105,7 @@ docker-compose -f docker-compose.dev.yml up -d
 This command will run the Next.js development server:
 ```bash
 cd ../web
+cp example.env .env.development
 npm install
 npm run dev
 ```

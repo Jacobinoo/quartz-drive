@@ -22,9 +22,9 @@ export async function revokeDevice(sessionId: string): Promise<void> {
     const response = await customFetch(`${config.apiUrl}/v1/devices/revoke`, {
         method: "DELETE",
         headers: {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         },
-        body: JSON.stringify({ sessionId })
+        body: JSON.stringify({ sessionId }),
     });
     if (!response.ok) {
         throw new Error("Failed to revoke device");

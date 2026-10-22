@@ -9,6 +9,7 @@ import (
 	apperrors "quartz/pkg/app-errors"
 	"quartz/pkg/contextkeys"
 	"quartz/pkg/dpop"
+	"quartz/pkg/httputils"
 	"strings"
 
 	"github.com/google/uuid"
@@ -34,8 +35,8 @@ func (h *Handler) RegisterDevice(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var req dto.RegisterDeviceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return apperrors.NewBadRequest("invalid json payload", err)
+	if err := httputils.ParseAndValidate(r, &req); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	var session model.Session
@@ -111,8 +112,8 @@ func (h *Handler) RevokeDevice(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var req dto.RevokeDeviceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return apperrors.NewBadRequest("invalid json payload", err)
+	if err := httputils.ParseAndValidate(r, &req); err != nil {
+		return apperrors.NewBadRequest("invalid request", err)
 	}
 
 	// First, verify this session belongs to the user

@@ -3,6 +3,7 @@ package email
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"quartz/config"
 	"quartz/pkg/contextkeys"
 
@@ -40,6 +41,11 @@ Privacy Policy: %s/privacy`, data.Email, data.ActionURL, data.FrontendURL, data.
 
 	if config.Cfg.App.Env == "development" {
 		toEmail = config.Cfg.Email.LocalDeliveryAddress
+	}
+
+	if config.Cfg.Env != "production" {
+		slog.DebugContext(ctx, textContent)
+		return nil
 	}
 
 	from := fmt.Sprintf("%s <%s>", config.Cfg.Email.UpdatesFromSenderName, config.Cfg.Email.UpdatesVerifiedDomain)
@@ -108,6 +114,11 @@ Privacy Policy: %s/privacy`, data.Email, data.ActionURL, data.EmailID, data.Fron
 		toEmail = config.Cfg.Email.LocalDeliveryAddress
 	}
 
+	if config.Cfg.Env != "production" {
+		slog.DebugContext(ctx, textContent)
+		return nil
+	}
+
 	from := fmt.Sprintf("%s <%s>", config.Cfg.Email.UpdatesFromSenderName, config.Cfg.Email.UpdatesVerifiedDomain)
 
 	params := &resend.SendEmailRequest{
@@ -168,6 +179,11 @@ Privacy Policy: %s/privacy`, data.Email, data.ActionURL, data.ActionRecoverURL, 
 
 	if config.Cfg.App.Env == "development" {
 		toEmail = config.Cfg.Email.LocalDeliveryAddress
+	}
+
+	if config.Cfg.Env != "production" {
+		slog.DebugContext(ctx, textContent)
+		return nil
 	}
 
 	from := fmt.Sprintf("%s <%s>", config.Cfg.Email.UpdatesFromSenderName, config.Cfg.Email.UpdatesVerifiedDomain)

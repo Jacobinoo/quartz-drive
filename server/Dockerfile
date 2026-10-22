@@ -1,4 +1,4 @@
-FROM golang:1.26-bookworm AS builder
+FROM golang:1.27.2-bookworm AS builder
 
 # Install Rust and build dependencies
 RUN apt-get update && apt-get install -y curl build-essential \

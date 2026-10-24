@@ -30,7 +30,7 @@ export async function demoStart(token: string) {
         `${config.apiUrl}/v1/demo/start`
     );
 
-    console.log(dpopProof);
+    console.debug(dpopProof);
 
     const deviceKeyPair = await generateDeviceKeyPair();
 
@@ -89,7 +89,7 @@ export async function demoStart(token: string) {
 
     setAuthState(loginAttestationData.token, loginAttestationData.csrfToken);
 
-    console.log("session priv key:", loginAttestationData.sessionPrivateKey);
+    console.debug("session priv key:", loginAttestationData.sessionPrivateKey);
 
     const exportKeyKdfRootKey = sodium.from_base64(
         "_n2gXdneMpPGuOwwpPJK0Yv_DcnXZqpsdLSsBm08fV8",

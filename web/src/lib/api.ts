@@ -70,8 +70,8 @@ export async function customFetch(
     init?: RequestInit
 ): Promise<Response> {
     // 1. Get the current token and make the initial request
-    let token = getAccessToken();
-    let cf = getCsrfToken();
+    const token = getAccessToken();
+    const cf = getCsrfToken();
 
     const method = (init?.method || "GET").toUpperCase();
     const url = typeof input === "string" ? input : input.toString();
@@ -93,12 +93,12 @@ export async function customFetch(
         );
     }
 
-    console.log(
+    console.debug(
         `Attaching headers: token:${token}, dpopProof:${dpopProof}, csrf:${cf}`
     );
 
     let config = attachHeaders(init, token, dpopProof, cf);
-    let response = await fetch(input, config);
+    const response = await fetch(input, config);
 
     // 2. If the request succeeded (or failed with something other than 401), return immediately!
     if (response.status !== 401) {

@@ -125,7 +125,7 @@ async function createDpopProof(
         iat: Math.floor(Date.now() / 1000),
     };
 
-    console.log(payload);
+    console.debug(payload);
 
     const encoder = new TextEncoder();
 
@@ -215,7 +215,7 @@ async function deleteDpopDatabase(): Promise<void> {
     return new Promise((resolve, reject) => {
         const req = indexedDB.deleteDatabase("dpop-keys");
         req.onsuccess = () => {
-            console.log("DPoP IndexedDB deleted successfully");
+            console.debug("DPoP IndexedDB deleted successfully");
             resolve();
         };
         req.onerror = () => {

@@ -139,7 +139,7 @@ export function OnboardingView({
             await initializeAccountKeysToServer(keyMaterial, email, "", "");
 
             // Save keys to memory and register device
-            console.log(
+            console.debug(
                 "Setting account private keys in JS memory:",
                 keyMaterial.rawAccountEncryptionPrivateKey,
                 keyMaterial.rawAccountSigningPrivateKey
@@ -236,7 +236,7 @@ export function OnboardingView({
                                     onClick={(e) => {
                                         e.preventDefault();
 
-                                        let _password = password;
+                                        const _password = password;
 
                                         reAuthenticate(_password)
                                             .then(() => {

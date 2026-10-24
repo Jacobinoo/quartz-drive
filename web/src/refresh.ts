@@ -106,8 +106,8 @@ export async function refreshSession(): Promise<RefreshSessionResponse> {
         throw new Error("Could not refresh session:" + refreshRes.body);
     }
 
-    console.log("New access token:", resData.token);
-    console.log("New CSRF token:", resData.csrfToken);
+    console.debug("New access token:", resData.token);
+    console.debug("New CSRF token:", resData.csrfToken);
 
     return resData;
 }

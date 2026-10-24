@@ -58,8 +58,8 @@ export function setAccountPrivateKeys(
     memoryAccountEncryptionPrivateKey = encryptionKey;
     memoryAccountSigningPrivateKey = signingKey;
 
-    console.log(`MemoryAccountEncryptionPrivateKey: ${encryptionKey}`);
-    console.log(`MemoryAccountEncryptionPrivateKey: ${signingKey}`);
+    console.debug(`MemoryAccountEncryptionPrivateKey: ${encryptionKey}`);
+    console.debug(`MemoryAccountEncryptionPrivateKey: ${signingKey}`);
 }
 
 export function getAccountEncryptionPrivateKey(): Uint8Array | null {

@@ -99,7 +99,7 @@ export async function signIn(
         `${config.apiUrl}/v1/signin/m3`
     );
 
-    console.log(dpopProof);
+    console.debug(dpopProof);
 
     const deviceKeyPair = await generateDeviceKeyPair();
 
@@ -173,7 +173,7 @@ export async function signIn(
         return "noinit";
     }
 
-    console.log("session priv key:", loginAttestationData.sessionPrivateKey);
+    console.debug("session priv key:", loginAttestationData.sessionPrivateKey);
     const kdfSalt = sodium.from_base64(loginAttestationData.masterKdfSalt);
 
     // 1. Derive master key from OPAQUE exportKey via fast KDF

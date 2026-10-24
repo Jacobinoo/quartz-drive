@@ -50,7 +50,7 @@ export function NewDriveItemButton() {
         const ENCRYPTION_OVERHEAD_BYTES = 40;
 
         for (const file of files) {
-            console.log(file.name, file.size);
+            console.debug(file.name, file.size);
 
             const declaredFileSize = file.size + ENCRYPTION_OVERHEAD_BYTES;
 
@@ -61,7 +61,7 @@ export function NewDriveItemButton() {
             const fileKey = sodium.randombytes_buf(
                 sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES
             );
-            console.log(`file key: ${sodium.to_base64(fileKey)}`);
+            console.debug(`file key: ${sodium.to_base64(fileKey)}`);
 
             // 3. Encrypt the Filename (Symmetric)
             const nameNonce = sodium.randombytes_buf(
@@ -176,7 +176,7 @@ export function NewDriveItemButton() {
                     throw new Error("init file upload failed");
                 }
 
-                console.log(
+                console.debug(
                     `file "${file.name}" initialized. NodeID: ${res.nodeId}`
                 );
 
@@ -188,12 +188,10 @@ export function NewDriveItemButton() {
                 });
             } catch (e: any) {
                 if (e.message === "QUOTA_EXCEEDED") {
-                    useUploadStore
-                        .getState()
-                        .updateJob(jobId, {
-                            status: "ERROR",
-                            errorMessage: "Not enough storage space",
-                        });
+                    useUploadStore.getState().updateJob(jobId, {
+                        status: "ERROR",
+                        errorMessage: "Not enough storage space",
+                    });
                     // Don't break, allow the user to see which files failed
                 } else {
                     console.error(
@@ -201,12 +199,10 @@ export function NewDriveItemButton() {
                         file.name,
                         e
                     );
-                    useUploadStore
-                        .getState()
-                        .updateJob(jobId, {
-                            status: "ERROR",
-                            errorMessage: "Initialization failed",
-                        });
+                    useUploadStore.getState().updateJob(jobId, {
+                        status: "ERROR",
+                        errorMessage: "Initialization failed",
+                    });
                 }
             }
         }
@@ -244,7 +240,7 @@ export function NewDriveItemButton() {
             });
 
             if (res.ok) {
-                console.log("✅ Folder created successfully!");
+                console.debug("✅ Folder created successfully!");
                 const data = await res.json();
                 await addSingleSearchItem({
                     id: data.nodeId,

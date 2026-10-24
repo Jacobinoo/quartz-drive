@@ -124,7 +124,7 @@ export async function buildE2EESearchIndex(): Promise<void> {
     }
 
     await saveSearchIndex(decryptedItems);
-    console.log(
+    console.debug(
         `Successfully built Tree Search Index! Unlocked ${Object.keys(folderKeys).length} folders and ${decryptedItems.length} items!`
     );
 }

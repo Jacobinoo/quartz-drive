@@ -55,7 +55,7 @@ export function FileList() {
     useEffect(() => {
         return () => {
             if (previewFile?.url) {
-                console.log("Revoking url", previewFile.url);
+                console.debug("Revoking url", previewFile.url);
                 URL.revokeObjectURL(previewFile.url);
             }
         };
@@ -408,7 +408,7 @@ export function FileList() {
             return;
         }
 
-        console.log("Previewing file ", file.plaintextName);
+        console.debug("Previewing file ", file.plaintextName);
         try {
             setPreviewFile({ file, url: null, loading: true, progress: 0 });
             const url = (await handleDownload(file, true, (progress) => {
@@ -629,7 +629,7 @@ const handleDownload = async (
     onProgress?: (percent: number) => void
 ): Promise<string | void> => {
     try {
-        console.log("Unwrapping file key...");
+        console.debug("Unwrapping file key...");
         const sodium = await getSodium();
         const currentFolder = useDriveStore.getState().getCurrentFolder();
         if (!currentFolder) throw new Error("Drive keys not initialized");
@@ -650,11 +650,11 @@ const handleDownload = async (
             return;
         }
 
-        console.log("Fetching S3 URLs for preview...");
+        console.debug("Fetching S3 URLs for preview...");
         const { urls, encryptingNodeId } = await getDownloadUrls(file.nodeId);
         const decryptNodeId = encryptingNodeId || file.nodeId;
 
-        console.log("Starting Decryption Worker for preview...");
+        console.debug("Starting Decryption Worker for preview...");
         const worker = new Worker(
             new URL("@/workers/decrypt.worker.ts", import.meta.url)
         );
@@ -693,10 +693,10 @@ const handleDownload = async (
         return await new Promise<string | void>((resolve, reject) => {
             worker.onmessage = async (e) => {
                 if (e.data.type === "PROGRESS") {
-                    console.log(`Decrypting: ${e.data.percent}%`);
+                    console.debug(`Decrypting: ${e.data.percent}%`);
                     if (onProgress) onProgress(e.data.percent);
                 } else if (e.data.type === "SUCCESS") {
-                    console.log("Decryption complete!");
+                    console.debug("Decryption complete!");
 
                     // 1. Get the decrypted blob from the worker
                     const blob = e.data.blob;

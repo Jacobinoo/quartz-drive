@@ -133,5 +133,5 @@ export async function signUp(
         throw new Error("Could not sign up.");
     }
 
-    console.log(m3ResponseData);
+    console.debug(m3ResponseData);
 }

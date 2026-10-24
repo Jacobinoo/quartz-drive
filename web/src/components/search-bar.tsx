@@ -95,7 +95,7 @@ export function SearchBar() {
                                 key={item.id}
                                 className="flex items-center gap-2 p-2 hover:bg-accent hover:text-accent-foreground rounded-sm cursor-pointer text-sm"
                                 onClick={async () => {
-                                    console.log("Clicked:", item);
+                                    console.debug("Clicked:", item);
                                     setIsFocused(false);
 
                                     if (item.type === "FOLDER") {
@@ -105,7 +105,7 @@ export function SearchBar() {
                                         await resolvePathAndNavigate(item.id);
 
                                         // You could also open a download modal here if you want!
-                                        console.log(
+                                        console.debug(
                                             "Navigated to parent folder of:",
                                             item.name
                                         );

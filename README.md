@@ -73,8 +73,6 @@ graph TD
     Server --> |File size checks|S3
 ```
 
-> For more details on architecture, cryptography, and key management specifications, see [ARCHITECTURE.md](ARCHITECTURE.md) (Work in Progress).
-
 ## Local Development
 
 ### Prerequisites

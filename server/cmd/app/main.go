@@ -18,12 +18,20 @@ func loadInfisicalSecrets() {
 	identityID := os.Getenv("INFISICAL_MACHINE_IDENTITY_ID")
 	projectID := os.Getenv("INFISICAL_PROJECT_ID")
 
+	privateKey := os.Getenv("OCI_PRIVATE_KEY")
+	tenancy := os.Getenv("OCI_TENANCY_OCID")
+	user := os.Getenv("OCI_USER_OCID")
+	fingerprint := os.Getenv("OCI_FINGERPRINT")
+	region := os.Getenv("OCI_REGION")
+
 	backupFile := "/tmp/.env.infisical.backup"
 
 	if identityID == "" || projectID == "" {
 		slog.Debug("INFISICAL_MACHINE_IDENTITY_ID or INFISICAL_PROJECT_ID not set, skipping Infisical injection")
 		return
 	}
+
+	var identifyWith string = ""
 
 	apiURL := os.Getenv("INFISICAL_API_URL")
 	if apiURL == "" {
@@ -35,17 +43,51 @@ func loadInfisicalSecrets() {
 		env = "prod"
 	}
 
-	slog.Info("Authenticating with Infisical via GCP ID Token...", "url", apiURL, "env", env)
+	if privateKey == "" || tenancy == "" || user == "" || fingerprint == "" || region == "" {
+		slog.Warn("OCI metadata not set, will try GCP ID...")
+		slog.Info("Authenticating with Infisical via GCP ID Token...", "url", apiURL, "env", env)
+		identifyWith = "gcp"
+	} else {
+		slog.Warn("OCI metadata set, will identify with OCI.")
+		slog.Info("Authenticating with Infisical via OCI...", "url", apiURL, "env", env)
+		identifyWith = "oci"
+	}
 
 	client := infisical.NewInfisicalClient(context.Background(), infisical.Config{
 		SiteUrl: apiURL,
 	})
 
-	_, err := client.Auth().GcpIdTokenAuthLogin(identityID)
-	if err != nil {
-		slog.Warn("Infisical Auth Failed", "error", err)
+	switch identifyWith {
+	case "gcp":
+		_, err := client.Auth().GcpIdTokenAuthLogin(identityID)
+		if err != nil {
+			slog.Warn("Infisical Auth GCP Failed", "error", err)
+			attemptBackupRestore(backupFile)
+			return
+		}
+
+		break
+	case "oci":
+
+		_, err := client.Auth().OciAuthLogin(infisical.OciAuthLoginOptions{
+			IdentityID:  identityID,
+			PrivateKey:  privateKey,
+			Fingerprint: fingerprint,
+			UserID:      user,
+			TenancyID:   tenancy,
+			Region:      region,
+		})
+		if err != nil {
+			slog.Warn("Infisical Auth OCI Failed", "error", err)
+			attemptBackupRestore(backupFile)
+			return
+		}
+
+		break
+	default:
+		slog.Warn("Not using OCI/GCP!")
 		attemptBackupRestore(backupFile)
-		return
+		break
 	}
 
 	secrets, err := client.Secrets().List(infisical.ListSecretsOptions{

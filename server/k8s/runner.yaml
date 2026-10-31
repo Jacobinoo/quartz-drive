@@ -1,0 +1,142 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: github-actions-runner
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: github-actions-deployer
+  namespace: default
+rules:
+  # Scoped strictly to quartz-api deployment to prevent modifying the runner or other workloads
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["quartz-api"]
+    verbs: ["get", "patch", "update"]
+  # Replicasets are required by kubectl rollout undo to find the previous revision
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  # Inspect pods and logs during rollout status checks
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: github-actions-deployer-binding
+  namespace: default
+subjects:
+  - kind: ServiceAccount
+    name: github-actions-runner
+    namespace: default
+roleRef:
+  kind: Role
+  name: github-actions-deployer
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: github-actions-runner-netpol
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      app: github-actions-runner
+  policyTypes:
+    - Egress
+  egress:
+    # Allow CoreDNS resolution
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow outbound HTTPS (GitHub runner communication + k8s API server)
+    # Blocks internal cluster traffic to PostgreSQL (5432) and Valkey (6379)
+    - ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: github-actions-runner
+  namespace: default
+  labels:
+    app: github-actions-runner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: github-actions-runner
+  template:
+    metadata:
+      labels:
+        app: github-actions-runner
+    spec:
+      serviceAccountName: github-actions-runner
+      initContainers:
+        - name: install-kubectl
+          image: alpine:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -euo pipefail
+              ARCH=$(uname -m)
+              case $ARCH in
+                x86_64) ARCH=amd64 ;;
+                aarch64) ARCH=arm64 ;;
+              esac
+              K8S_VERSION="v1.31.0"
+              echo "Downloading kubectl ${K8S_VERSION} for linux/${ARCH}..."
+              wget -qO /tools/kubectl "https://dl.k8s.io/release/${K8S_VERSION}/bin/linux/${ARCH}/kubectl"
+              wget -qO /tmp/kubectl.sha256 "https://dl.k8s.io/release/${K8S_VERSION}/bin/linux/${ARCH}/kubectl.sha256"
+              echo "$(cat /tmp/kubectl.sha256)  /tools/kubectl" | sha256sum -c -
+              chmod +x /tools/kubectl
+              echo "kubectl verified and installed successfully."
+          volumeMounts:
+            - name: tools
+              mountPath: /tools
+      containers:
+        - name: runner
+          image: myoung34/github-runner:ubuntu-jammy
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: REPO_URL
+              value: "https://github.com/Jacobinoo/quartz-drive"
+            - name: RUNNER_NAME
+              value: "k3s-in-cluster-runner"
+            - name: LABELS
+              value: "k3s,self-hosted"
+            - name: RUNNER_WORKDIR
+              value: "/tmp/runner/work"
+            # Ephemeral mode: runner deregisters after each job, pod restarts clean
+            - name: EPHEMERAL
+              value: "true"
+            - name: ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: github-runner-secret
+                  key: pat
+          volumeMounts:
+            - name: tools
+              mountPath: /usr/local/bin/kubectl
+              subPath: kubectl
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: tools
+          emptyDir: {}

@@ -3,6 +3,7 @@ package signup
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
@@ -282,25 +283,86 @@ func (h *Handler) SignupM3(w http.ResponseWriter, r *http.Request) error {
 	}
 	emailID := uuid.NewString()
 
-	// Handle database lookups & inserting + sending emails in the background worker
-	// This also prevents timing attacks to enumerate the emails registered in our system
-	task, err := worker.NewSignupProcessingTask(cfRay, reqIDStr, emailID, m3.User.Email, registrationSession.HashedEmailHex, userID, passwordFileRecord, &m3)
-	if err != nil {
-		return apperrors.NewInternal(err)
-	}
+	resp := map[string]string{"status": "ok"}
 
-	taskTimeLimit := 10 * time.Second
-	enqueuedTaskInfo, err := h.asynqClient.Enqueue(task, asynq.Timeout(taskTimeLimit), asynq.MaxRetry(3))
-	if err != nil {
-		return apperrors.NewInternal(err)
-	}
+	// In development, generate the verification link immediately and return it in the response
+	// so the developer can click "Verify Account" right away without checking terminal logs.
+	if config.Cfg.App.Env == "development" {
+		magicLink, err := h.processDevSignup(r.Context(), userID, m3.User.Email, registrationSession.HashedEmailHex, passwordFileRecord)
+		if err != nil {
+			slog.WarnContext(r.Context(), "failed to generate dev signup link", "error", err)
+		} else {
+			resp["devVerificationUrl"] = magicLink
+			fmt.Println("============================================================")
+			fmt.Printf("🔗 [LOCAL DEV MAGIC LINK] for %s:\n%s\n", m3.User.Email, magicLink)
+			fmt.Println("============================================================")
+		}
+	} else {
+		// Handle database lookups & inserting + sending emails in the background worker
+		// This also prevents timing attacks to enumerate the emails registered in our system
+		task, err := worker.NewSignupProcessingTask(cfRay, reqIDStr, emailID, m3.User.Email, registrationSession.HashedEmailHex, userID, passwordFileRecord, &m3)
+		if err != nil {
+			return apperrors.NewInternal(err)
+		}
 
-	slog.InfoContext(r.Context(), "enqueued a signup processing task", "task_id", enqueuedTaskInfo.ID, "timeout", taskTimeLimit)
+		taskTimeLimit := 10 * time.Second
+		enqueuedTaskInfo, err := h.asynqClient.Enqueue(task, asynq.Timeout(taskTimeLimit), asynq.MaxRetry(3))
+		if err != nil {
+			return apperrors.NewInternal(err)
+		}
+
+		slog.InfoContext(r.Context(), "enqueued a signup processing task", "task_id", enqueuedTaskInfo.ID, "timeout", taskTimeLimit)
+	}
 
 	w.WriteHeader(http.StatusAccepted)
-	err = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	err = json.NewEncoder(w).Encode(resp)
 	if err != nil {
 		return apperrors.NewInternal(err)
 	}
 	return nil
+}
+
+func (h *Handler) processDevSignup(ctx context.Context, userID uuid.UUID, emailStr, hashedEmailHex string, passwordFileRecord []byte) (string, error) {
+	encryptedEmail, err := crypto.EncryptEmail([]byte(emailStr))
+	if err != nil {
+		return "", fmt.Errorf("failed to encrypt email: %w", err)
+	}
+
+	tokenBytes := make([]byte, 64)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return "", fmt.Errorf("failed to generate random token: %w", err)
+	}
+	tokenHex := fmt.Sprintf("%x", tokenBytes)
+
+	hashedTokenBytes := sha256.Sum256(tokenBytes)
+	hashedTokenStr := fmt.Sprintf("%x", hashedTokenBytes)
+
+	pendingReg := dto.RedisPendingRegistration{
+		UserID:             userID,
+		EncryptedEmail:     encryptedEmail,
+		HashedEmail:        hashedEmailHex,
+		RegistrationRecord: base64.RawURLEncoding.EncodeToString(passwordFileRecord),
+	}
+
+	redisBytes, err := json.Marshal(pendingReg)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal pending registration: %w", err)
+	}
+
+	encryptedRedisBytes, err := crypto.EncryptRedisPayload(redisBytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to encrypt redis payload: %w", err)
+	}
+
+	const redisSignupVerificationTTL = 15 * time.Minute
+	if err := h.redis.Set(ctx, "pending_reg:"+hashedTokenStr, encryptedRedisBytes, redisSignupVerificationTTL).Err(); err != nil {
+		return "", fmt.Errorf("failed to save pending registration to redis: %w", err)
+	}
+
+	frontendURL := config.Cfg.App.FrontendURL
+	if frontendURL == "" {
+		frontendURL = "http://localhost:3000"
+	}
+	magicLink := fmt.Sprintf("%s/verify-email#token=%s", frontendURL, tokenHex)
+	return magicLink, nil
 }

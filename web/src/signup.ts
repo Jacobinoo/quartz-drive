@@ -129,9 +129,10 @@ export async function signUp(
 
     const m3ResponseData = await m3Response.json();
 
-    if (m3Response.status < 200 && m3Response.status >= 300) {
-        throw new Error("Could not sign up.");
+    if (!m3Response.ok) {
+        throw new Error(m3ResponseData.message || "Could not sign up.");
     }
 
     console.debug(m3ResponseData);
+    return m3ResponseData;
 }

@@ -35,6 +35,9 @@ export function SignupForm({
     const [error, setError] = useState<string>("");
 
     const [signupComplete, setSignupComplete] = useState<boolean>(false);
+    const [devVerificationUrl, setDevVerificationUrl] = useState<string | null>(
+        null
+    );
 
     useEffect(() => {
         if (!password) {
@@ -119,9 +122,49 @@ export function SignupForm({
                             Check your email
                         </CardTitle>
                         <CardDescription>
-                            We just sent a verification link to {email}.
+                            We just sent a verification link to{" "}
+                            <span className="font-medium text-foreground">
+                                {email}
+                            </span>
+                            .
                         </CardDescription>
                     </CardHeader>
+                    {devVerificationUrl ? (
+                        <CardContent className="pt-0">
+                            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs space-y-3 text-left">
+                                <div className="font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1.5 text-sm">
+                                    Local Development
+                                </div>
+                                <p className="text-muted-foreground leading-relaxed">
+                                    No real email was sent. Since you are
+                                    running in local development mode, you can
+                                    verify your account immediately:
+                                </p>
+                                <a
+                                    href={devVerificationUrl}
+                                    className="inline-flex items-center justify-center w-full px-4 py-2.5 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-white font-medium text-sm rounded-lg transition-colors shadow-sm"
+                                >
+                                    Verify Account Now &rarr;
+                                </a>
+                                <p className="text-[11px] text-muted-foreground/80 text-center">
+                                    Alternatively, the link is also printed in
+                                    your server logs.
+                                </p>
+                            </div>
+                        </CardContent>
+                    ) : process.env.NODE_ENV === "development" ? (
+                        <CardContent className="pt-0">
+                            <div className="p-3 bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-lg text-xs text-muted-foreground text-left">
+                                <span className="font-semibold text-foreground flex items-center gap-1.5 mb-1">
+                                    Development Mode
+                                </span>
+                                No email was sent. Check server logs:
+                                <pre className="mt-1.5 p-1.5 bg-black/5 dark:bg-black/30 rounded font-mono text-[11px] select-all">
+                                    docker logs server-quartz-api-1
+                                </pre>
+                            </div>
+                        </CardContent>
+                    ) : null}
                 </Card>
             </div>
         );
@@ -156,6 +199,11 @@ export function SignupForm({
                             signUp(email, password, captchaToken)
                                 .then((res) => {
                                     console.log("Sign up successfully.");
+                                    if (res?.devVerificationUrl) {
+                                        setDevVerificationUrl(
+                                            res.devVerificationUrl
+                                        );
+                                    }
                                     setSignupComplete(true);
                                 })
                                 .catch((err: Error) => {
@@ -297,16 +345,16 @@ export function SignupForm({
 }
 
 function deriveUsernameFromEmail(email: string) {
-    let _email = email.trim();
+    const _email = email.trim();
     if (email.trim() == "") {
         return "";
     }
 
-    let username = _email.split("@")[0];
+    const username = _email.split("@")[0];
     if (username == null) {
         return "";
     }
-    let usernameTrimmed = username.trim();
+    const usernameTrimmed = username.trim();
 
     if (usernameTrimmed == "") {
         return "";

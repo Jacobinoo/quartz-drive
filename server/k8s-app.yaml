@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quartz-api
+  labels:
+    app: quartz-api
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: quartz-api
+  template:
+    metadata:
+      labels:
+        app: quartz-api
+    spec:
+      containers:
+        - name: quartz-api
+          image: server-quartz-api:latest
+          envFrom:
+            - secretRef:
+                name: quartz-env
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+
+          readinessProbe:
+            httpGet:
+              port: 8080
+              path: /up
+            initialDelaySeconds: 3
+            periodSeconds: 1
+            failureThreshold: 1
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quartz-api-service
+spec:
+  selector:
+    app: quartz-api
+  ports:
+    - protocol: TCP
+      port: 8080 #port the service exposes internally
+      targetPort: 8080 #port on the container (matches containerPort on Deployment)
+  type: ClusterIP

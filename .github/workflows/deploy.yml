@@ -7,8 +7,17 @@ on:
     paths:
       - 'server/**'
       - '.github/workflows/deploy.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'server/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
 jobs:
   test:
+    name: Run Unit Tests
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -25,10 +34,12 @@ jobs:
         run: go test -v ./...
         working-directory: ./server
 
-  build-and-deploy:
+  build:
+    name: Build & Push ARM64 Container
     needs: test
-    runs-on: ubuntu-latest
-
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Use native ARM64 hosted runner to build Ampere images fast without QEMU emulation
+    runs-on: ubuntu-24.04-arm
     steps:
       - name: Check out code
         uses: actions/checkout@v7
@@ -42,30 +53,37 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/quartz-server
-          tags: |
-            # :latest — always updated on master push
-            type=raw,value=latest
-            # :sha-a3f9c1b — immutable commit pin for precise rollbacks
-            type=sha,prefix=sha-,format=short
-            # :build-142 — monotonic build number, easy to compare
-            type=raw,value=build-${{ github.run_number }}
-
       - name: Build and push quartz-server image
         uses: docker/build-push-action@v7
         with:
           context: server
           file: server/Dockerfile.prod
+          platforms: linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/quartz-server:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/quartz-server:${{ github.sha }}
           build-args: |
             BUILD_VERSION=sha-${{ github.sha }}-build-${{ github.run_number }}
-          platforms: linux/amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  deploy:
+    name: Kubernetes Rolling Update
+    needs: build
+    # Deploy only runs on push/dispatch to master, never on PRs/forks
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/master'
+    runs-on: [self-hosted, k3s]
+    steps:
+      - name: Roll out and verify
+        run: |
+          echo "Deploying image: ${{ secrets.DOCKERHUB_USERNAME }}/quartz-server:${{ github.sha }}"
+          kubectl -n default set image deployment/quartz-api \
+            quartz-api=${{ secrets.DOCKERHUB_USERNAME }}/quartz-server:${{ github.sha }}
 
+          if ! kubectl -n default rollout status deployment/quartz-api --timeout=180s; then
+            echo "Rollout failed or timed out! Rolling back to previous revision..."
+            kubectl -n default rollout undo deployment/quartz-api
+            exit 1
+          fi
+          echo "Rollout successfully completed and verified."

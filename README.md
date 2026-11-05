@@ -104,13 +104,13 @@ cp example.env .env.development
 ```
 
 ### 3. Setup required services
-This command will set up the local infrastructure (API server, PostgreSQL database, Valkey, and SeaweedFS S3 object storage):
+This command will set up the local infrastructure (API server, PostgreSQL database, Valkey, and SeaweedFS S3 object storage). Wait until the dev build process completes:
 ```bash
-docker compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml up
 ```
 
 ### 4. Run the frontend
-This command will run the Next.js development server:
+This command will run the Next.js development server. First, open a new terminal or detach (d):
 ```bash
 cd ../web
 cp example.env .env.development

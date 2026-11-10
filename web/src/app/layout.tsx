@@ -4,8 +4,6 @@ import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/components/auth-provider";
-import { SpeedInsights } from "@vercel/speed-insights/next";
-import { Analytics } from "@vercel/analytics/next";
 import { PostHogProvider } from "@/app/providers";
 import { CookieBanner } from "@/app/cookie-banner";
 
@@ -46,8 +44,6 @@ export default function RootLayout({
                                 {children}
                                 <CookieBanner />
                             </PostHogProvider>
-                            <SpeedInsights />
-                            <Analytics />
                         </AuthProvider>
                     </TooltipProvider>
                 </ThemeProvider>

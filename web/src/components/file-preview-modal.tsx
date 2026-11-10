@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
     Download,
@@ -48,12 +48,17 @@ export function FilePreviewModal({
     const [loaded, setLoaded] = useState(false);
     const [showLoader, setShowLoader] = useState(false);
     const [showInfo, setShowInfo] = useState(false);
+    const imgRef = useRef<HTMLImageElement | null>(null);
 
     // Reset transient view state whenever a new file is opened
     useEffect(() => {
         setZoom(1);
         setRotation(0);
-        setLoaded(false);
+        if (imgRef.current?.complete) {
+            setLoaded(true);
+        } else {
+            setLoaded(false);
+        }
     }, [url]);
 
     // Delay the loading spinner to prevent flickering on fast files
@@ -391,10 +396,20 @@ export function FilePreviewModal({
                                 </div>
                             )}
                             <img
+                                ref={(img) => {
+                                    imgRef.current = img;
+                                    if (img?.complete) {
+                                        setLoaded(true);
+                                    }
+                                }}
                                 src={url!}
                                 alt={file.plaintextName}
                                 draggable={false}
                                 onLoad={() => setLoaded(true)}
+                                onError={() => {
+                                    console.error("Failed to decode image preview in browser");
+                                    setLoaded(true);
+                                }}
                                 style={{
                                     transform: `scale(${zoom}) rotate(${rotation}deg)`,
                                     transition: "transform 150ms ease-out",

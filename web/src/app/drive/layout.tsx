@@ -6,6 +6,9 @@ import { useEffect } from "react";
 import { initializeDriveKeys } from "@/crypto/drive";
 import { AppHeader } from "@/components/app-header";
 import { DemoBanner } from "@/components/demo-banner";
+import { DownloadManager } from "@/components/download-manager";
+import { TransferList } from "@/components/transfer-list";
+import { UploadManager } from "@/components/upload-manager";
 
 export default function DriveLayout({
     children,
@@ -23,6 +26,10 @@ export default function DriveLayout({
                 <DemoBanner />
                 <AppHeader />
                 {children}
+
+                <UploadManager />
+                <DownloadManager />
+                <TransferList />
             </SidebarInset>
         </SidebarProvider>
     );

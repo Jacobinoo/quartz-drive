@@ -1,1 +1,24 @@
 .idea/
+
+tmp/
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+*.tfplan
+tfplan
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+!*.tfvars.json.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+crash.log
+crash.*.log
+.terraformrc
+terraform.rc
+**/state.json

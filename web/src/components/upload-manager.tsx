@@ -1,28 +1,43 @@
 "use client";
 
-import { getSodium } from "@/lib/crypto/sodium";
 import { useEffect, useRef } from "react";
 import { useUploadStore } from "@/hooks/use-upload-store";
-import {
-    UploadWorkerInput,
-    UploadWorkerOutput,
-} from "@/types/crypto-worker-types";
-import { finishFileUpload } from "@/crypto/upload";
+import { UploadWorkerOutput } from "@/types/crypto-worker-types";
 import { useDriveStore } from "@/lib/driveStore";
 import { addSingleSearchItem } from "@/lib/SearchIndexStore";
 import { getAccessToken, getCsrfToken } from "@/lib/authStore";
 
+const MAX_CONCURRENT_UPLOADS = 3;
+
 export function UploadManager() {
     const jobs = useUploadStore((s) => s.jobs);
     const updateJob = useUploadStore((s) => s.updateJob);
-    const cancelJob = useUploadStore((s) => s.cancelJob);
 
     const workerInstances = useRef<Map<string, Worker>>(new Map());
 
     useEffect(() => {
-        const pending = jobs.filter((j) => j.status === "IDLE");
+        const currentJobIds = new Set(jobs.map((j) => j.id));
+        workerInstances.current.forEach((worker, id) => {
+            if (!currentJobIds.has(id)) {
+                console.log(`Canceling and terminating worker for job: ${id}`);
+                worker.terminate();
+                workerInstances.current.delete(id);
+            }
+        });
 
-        pending.forEach((job) => {
+        const availableSlots = Math.max(
+            0,
+            MAX_CONCURRENT_UPLOADS - workerInstances.current.size
+        );
+        if (availableSlots === 0) return;
+
+        const toStart = jobs
+            .filter(
+                (j) => j.status === "IDLE" && !workerInstances.current.has(j.id)
+            )
+            .slice(0, availableSlots);
+
+        toStart.forEach((job) => {
             console.log("worker starting new job", job);
             if (workerInstances.current.has(job.id)) return;
 
@@ -31,6 +46,11 @@ export function UploadManager() {
                 { type: "module" }
             );
             workerInstances.current.set(job.id, worker);
+
+            const cleanupWorker = () => {
+                worker.terminate();
+                workerInstances.current.delete(job.id);
+            };
 
             worker.onmessage = async (e: MessageEvent<UploadWorkerOutput>) => {
                 const data = e.data;
@@ -49,13 +69,13 @@ export function UploadManager() {
                             activity: data.activity,
                         });
                         break;
-                    case "SUCCESS":
-                        // 1. Find the job in the store
-                        const job = useUploadStore
+                    case "SUCCESS": {
+                        cleanupWorker();
+                        const finishedJob = useUploadStore
                             .getState()
                             .jobs.find((j) => j.id === data.taskId);
 
-                        if (job) {
+                        if (finishedJob) {
                             try {
                                 updateJob(data.taskId, {
                                     status: "SUCCESS",
@@ -80,18 +100,25 @@ export function UploadManager() {
                                 });
                             }
                         }
-                        worker.terminate();
-                        workerInstances.current.delete(data.taskId);
                         break;
+                    }
                     case "ERROR":
+                        cleanupWorker();
                         updateJob(data.taskId, {
                             status: "ERROR",
                             errorMessage: data.message,
                         });
-                        worker.terminate();
-                        workerInstances.current.delete(data.taskId);
                         break;
                 }
+            };
+
+            worker.onerror = (err) => {
+                console.error("upload worker crashed:", err);
+                cleanupWorker();
+                updateJob(job.id, {
+                    status: "ERROR",
+                    errorMessage: "Upload worker failed",
+                });
             };
 
             worker.postMessage({
@@ -105,16 +132,15 @@ export function UploadManager() {
                 csrfToken: getCsrfToken() || undefined,
             });
         });
-
-        const currentJobIds = new Set(jobs.map((j) => j.id));
-        workerInstances.current.forEach((worker, id) => {
-            if (!currentJobIds.has(id)) {
-                console.log(`Canceling and terminating worker for job: ${id}`);
-                worker.terminate();
-                workerInstances.current.delete(id);
-            }
-        });
     }, [jobs, updateJob]);
+
+    useEffect(() => {
+        return () => {
+            workerInstances.current.forEach((w) => {
+                w.terminate();
+            });
+        };
+    }, []);
 
     return null;
 }

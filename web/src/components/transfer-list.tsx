@@ -68,9 +68,11 @@ export function TransferList() {
                                   ? job.activity || "Uploading..."
                                   : job.status === "IDLE"
                                     ? "Waiting for upload..."
-                                    : job.status === "ERROR"
-                                      ? job.errorMessage || "Upload error"
-                                      : "Status: Unknown"}
+                                    : job.status === "INIT"
+                                      ? "Preparing..."
+                                      : job.status === "ERROR"
+                                        ? job.errorMessage || "Upload error"
+                                        : "Status: Unknown"}
                         </p>
                     </div>
                 ))}

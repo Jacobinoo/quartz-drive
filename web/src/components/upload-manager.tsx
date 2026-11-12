@@ -139,6 +139,7 @@ export function UploadManager() {
             workerInstances.current.forEach((w) => {
                 w.terminate();
             });
+            workerInstances.current.clear();
         };
     }, []);
 

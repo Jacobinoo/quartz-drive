@@ -1,7 +1,6 @@
 "use client";
 import { config } from "@/config/env";
 
-import AppSidebar from "@/components/app-sidebar";
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -12,24 +11,20 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { TransferList } from "@/components/transfer-list";
 import { UploadManager } from "@/components/upload-manager";
 import { DownloadManager } from "@/components/download-manager";
-import { Button } from "@/components/ui/button";
-import { FormEvent, useEffect, useState } from "react";
-import { redirect, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { FileList } from "@/components/file-list";
-import { NewDriveItemButton } from "@/components/new-drive-item-button";
 import { FolderKey, useDriveStore } from "@/lib/driveStore";
 import { getAccountSigningPrivateKey } from "@/lib/authStore";
 import { getSodium } from "@/lib/crypto/sodium";
 import { customFetch } from "@/lib/api";
-import { SearchBar } from "@/components/search-bar";
 import { getAccessToken } from "@/lib/authStore";
 import { Users } from "lucide-react";
 import { quantumSeal, quantumSealOpen } from "@/crypto/kem";
+import { FullscreenDropzone } from "@/components/fullscreen-dropzone";
 
 export default function DriveHomePage() {
     const router = useRouter();
@@ -240,6 +235,7 @@ export default function DriveHomePage() {
                 <UploadManager />
                 <DownloadManager />
                 <TransferList />
+                <FullscreenDropzone />
             </div>
         </>
     );

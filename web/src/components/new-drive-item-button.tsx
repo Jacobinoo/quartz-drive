@@ -20,21 +20,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useUploadStore } from "@/hooks/use-upload-store";
 import { openFilePicker } from "@/lib/utils/file-picker";
-import { getSodium } from "@/lib/crypto/sodium";
-import { initFileUpload } from "@/crypto/upload";
 import { getAccessToken, getAccountSigningPrivateKey } from "@/lib/authStore";
-import { FolderKey, useDriveStore } from "@/lib/driveStore";
 import { createEncryptedFolderPayload } from "@/crypto/folder";
 import { customFetch } from "@/lib/api";
 import { addSingleSearchItem } from "@/lib/SearchIndexStore";
-import { UUID } from "crypto";
-import { quantumSeal } from "@/crypto/kem";
 import { enqueueFileUploads } from "@/lib/upload/enqueue-files";
+import { useDriveStore } from "@/lib/driveStore";
 
 export function NewDriveItemButton() {
-    const addToQueue = useUploadStore((s) => s.addToQueue);
     const [isFolderDialogOpen, setIsFolderDialogOpen] = useState(false);
     const [newFolderName, setNewFolderName] = useState("");
 
@@ -42,7 +36,7 @@ export function NewDriveItemButton() {
         console.log("opening file picker");
 
         const files = await openFilePicker({ multiple: true });
-        if (files.length > 0) await enqueueFileUploads(files, addToQueue);
+        if (files.length > 0) await enqueueFileUploads(files);
     };
     const handleCreateFolder = async () => {
         if (!newFolderName.trim()) return;

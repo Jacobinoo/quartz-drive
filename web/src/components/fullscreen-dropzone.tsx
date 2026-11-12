@@ -3,11 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { CloudUpload } from "lucide-react";
 import { useDriveStore } from "@/lib/driveStore";
-import { useUploadStore } from "@/hooks/use-upload-store";
 import { enqueueFileUploads } from "@/lib/upload/enqueue-files";
 
 export function FullscreenDropzone() {
-    const addToQueue = useUploadStore((s) => s.addToQueue);
     const [isDragging, setIsDragging] = useState(false);
     const dragDepth = useRef(0);
 
@@ -47,7 +45,7 @@ export function FullscreenDropzone() {
             const activeFolder = useDriveStore.getState().getCurrentFolder();
             if (!activeFolder) return;
 
-            enqueueFileUploads(files, addToQueue, activeFolder);
+            enqueueFileUploads(files);
         };
 
         window.addEventListener("dragenter", handleDragEnter);

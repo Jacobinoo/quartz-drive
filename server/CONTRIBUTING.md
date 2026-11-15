@@ -6,7 +6,7 @@ Please follow this cheat sheet for all contributions.
 
 ---
 
-## 🚀 The Development Workflow (Cheat Sheet)
+## The Development Workflow (Cheat Sheet)
 
 We do **not** use a `dev` branch. `master` is our single source of truth and must always contain working, deployable code.
 
@@ -50,7 +50,7 @@ git branch -d feature/<your-feature-name>
 
 ---
 
-## 🛠 Fixing Merge Conflicts (The Safe Way)
+## Fixing Merge Conflicts (The Safe Way)
 If someone else merges code into `master` while you are still working on your branch, you might get a conflict. **Never use `rebase` unless you are a Git expert.** Instead, use a standard merge:
 
 ```bash

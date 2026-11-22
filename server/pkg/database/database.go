@@ -42,9 +42,10 @@ func New() (db *gorm.DB, err error) {
 
 			sqlDB, err := db.DB()
 			if err == nil {
-				sqlDB.SetMaxIdleConns(10)
 				sqlDB.SetMaxOpenConns(50)
-				sqlDB.SetConnMaxLifetime(time.Hour)
+				sqlDB.SetMaxIdleConns(10)
+				sqlDB.SetConnMaxIdleTime(2 * time.Minute)
+				sqlDB.SetConnMaxLifetime(15 * time.Minute)
 			}
 
 			if config.Cfg.DB.AutoMigrate {

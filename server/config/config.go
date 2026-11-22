@@ -247,6 +247,6 @@ func (c *Config) Init() {
 }
 
 func (db *DB) GetDSN() string {
-	return fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=%s port=%s application_name=%s",
+	return fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=%s port=%s application_name=%s keepalives=1 keepalives_idle=30 keepalives_interval=10 keepalives_count=3 connect_timeout=10",
 		db.Host, db.User, db.Password, db.Name, db.SSLMode, db.Port, db.ConnectingApplicationName)
 }

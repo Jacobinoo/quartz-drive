@@ -1160,7 +1160,7 @@ func (h *Handler) ListTrash(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var links []model.Link
-	err := h.db.Unscoped().
+	err := h.db.WithContext(r.Context()).Unscoped().
 		Joins("JOIN nodes ON nodes.id = links.child_node_id").
 		Where("nodes.owner_id = ?", userID).
 		Where("links.deleted_at IS NOT NULL").
@@ -1168,7 +1168,7 @@ func (h *Handler) ListTrash(w http.ResponseWriter, r *http.Request) error {
 		Find(&links).Error
 
 	if err != nil {
-		return apperrors.NewInternal(fmt.Errorf("failed to fetch trash"))
+		return apperrors.NewInternal(fmt.Errorf("failed to fetch trash: %w", err))
 	}
 
 	var response []dto.FileListResponseItem

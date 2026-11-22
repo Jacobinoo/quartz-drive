@@ -13,7 +13,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const authPaths = [
         "/signin",
-        "/internal/signin",
         "/signup",
         "/forgot-password",
         "/reset-password",

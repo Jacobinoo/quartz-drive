@@ -80,9 +80,37 @@ jobs:
           echo "Deploying image: ${{ secrets.DOCKERHUB_USERNAME }}/quartz-server:${{ github.sha }}"
           kubectl -n default set image deployment/quartz-api \
             quartz-api=${{ secrets.DOCKERHUB_USERNAME }}/quartz-server:${{ github.sha }}
+          
+          POD_LOGS=$(kubectl -n default logs -l app=quartz-api --tail=30 --all-containers=true 2>&1 | tail -c 1800)
+          POD_STATUS=$(kubectl -n default get pods -l app=quartz-api -o wide 2>&1)
+          
+          if [ -n "${{ secrets.DEPLOY_ALERT_WEBHOOK }}" ]; then
+            PAYLOAD=$(jq -n \
+              --arg sha "${{ github.sha }}" \
+              --arg status "$POD_STATUS" \
+              --arg logs "$POD_LOGS" \
+              '{content: ("**Deployment Status for quartz-api (`" + $sha[0:7] + "`)**\n```\n" + $status + "\n```\n**Last Container Logs:**\n```\n" + $logs + "\n```")}')
+          
+            curl -s -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "${{ secrets.DEPLOY_ALERT_WEBHOOK }}" > /dev/null || true
+          fi
 
           if ! kubectl -n default rollout status deployment/quartz-api --timeout=180s; then
-            echo "Rollout failed or timed out! Rolling back to previous revision..."
+            echo "::error::Rollout failed! Sending diagnostics..."
+          
+            POD_LOGS=$(kubectl -n default logs -l app=quartz-api --tail=30 --all-containers=true 2>&1 | tail -c 1800)
+            POD_STATUS=$(kubectl -n default get pods -l app=quartz-api -o wide 2>&1)
+          
+            if [ -n "${{ secrets.DEPLOY_ALERT_WEBHOOK }}" ]; then
+              PAYLOAD=$(jq -n \
+                --arg sha "${{ github.sha }}" \
+                --arg status "$POD_STATUS" \
+                --arg logs "$POD_LOGS" \
+                '{content: ("**Deployment Failed for quartz-api (`" + $sha[0:7] + "`)**\n```\n" + $status + "\n```\n**Last Container Logs:**\n```\n" + $logs + "\n```")}')
+          
+              curl -s -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "${{ secrets.DEPLOY_ALERT_WEBHOOK }}" > /dev/null || true
+            fi
+
+            echo "Rollout failed or timed out. Rolling back to previous revision..."
             kubectl -n default rollout undo deployment/quartz-api
             exit 1
           fi

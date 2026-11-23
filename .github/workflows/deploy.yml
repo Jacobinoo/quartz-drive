@@ -95,12 +95,7 @@ jobs:
             # Discord message limit is 2000 characters. Keep status <= 400, logs <= 1200.
             local payload=""
             if command -v python3 >/dev/null 2>&1; then
-              payload=$(python3 -c '
-import sys, json
-title, status, logs = sys.argv[1], sys.argv[2][:400], sys.argv[3][:1200]
-msg = f"{title}\n```\n{status}\n```\n**Last Container Logs:**\n```\n{logs}\n```"
-print(json.dumps({"content": msg}))
-' "$title" "$status" "$logs")
+              payload=$(python3 -c 'import sys, json; msg = f"{sys.argv[1]}\n```\n{sys.argv[2][:400]}\n```\n**Last Container Logs:**\n```\n{sys.argv[3][:1200]}\n```"; print(json.dumps({"content": msg}))' "$title" "$status" "$logs")
             elif command -v jq >/dev/null 2>&1; then
               payload=$(jq -n \
                 --arg title "$title" \
@@ -136,7 +131,7 @@ print(json.dumps({"content": msg}))
             POD_STATUS=$(kubectl -n default get pods -l app=quartz-api -o wide 2>&1)
             POD_LOGS=$(kubectl -n default logs -l app=quartz-api --tail=35 --all-containers=true 2>&1)
 
-            send_discord_alert "**Deployment FAILED for quartz-api (\`${COMMIT_SHA:0:7}\`)**" "$POD_STATUS" "$POD_LOGS"
+            send_discord_alert "🚨 **Deployment FAILED for quartz-api (\`${COMMIT_SHA:0:7}\`)**" "$POD_STATUS" "$POD_LOGS"
 
             echo "Rolling back to previous revision..."
             kubectl -n default rollout undo deployment/quartz-api
@@ -149,5 +144,5 @@ print(json.dumps({"content": msg}))
             echo "DEPLOY_ALERT_ON_SUCCESS is enabled (1). Sending success notification..."
             POD_STATUS=$(kubectl -n default get pods -l app=quartz-api -o wide 2>&1)
             POD_LOGS=$(kubectl -n default logs -l app=quartz-api --tail=25 --all-containers=true 2>&1)
-            send_discord_alert "**Deployment SUCCEEDED for quartz-api (\`${COMMIT_SHA:0:7}\`)**" "$POD_STATUS" "$POD_LOGS"
+            send_discord_alert "✅ **Deployment SUCCEEDED for quartz-api (\`${COMMIT_SHA:0:7}\`)**" "$POD_STATUS" "$POD_LOGS"
           fi

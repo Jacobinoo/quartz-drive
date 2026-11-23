@@ -76,42 +76,78 @@ jobs:
     runs-on: [self-hosted, k3s]
     steps:
       - name: Roll out and verify
+        env:
+          DEPLOY_ALERT_WEBHOOK: ${{ secrets.DEPLOY_ALERT_WEBHOOK }}
+          DEPLOY_ALERT_ON_SUCCESS: ${{ vars.DEPLOY_ALERT_ON_SUCCESS }}
+          COMMIT_SHA: ${{ github.sha }}
+          IMAGE_TAG: ${{ secrets.DOCKERHUB_USERNAME }}/quartz-server:${{ github.sha }}
         run: |
-          echo "Deploying image: ${{ secrets.DOCKERHUB_USERNAME }}/quartz-server:${{ github.sha }}"
-          kubectl -n default set image deployment/quartz-api \
-            quartz-api=${{ secrets.DOCKERHUB_USERNAME }}/quartz-server:${{ github.sha }}
-          
-          POD_LOGS=$(kubectl -n default logs -l app=quartz-api --tail=30 --all-containers=true 2>&1 | tail -c 1800)
-          POD_STATUS=$(kubectl -n default get pods -l app=quartz-api -o wide 2>&1)
-          
-          if [ -n "${{ secrets.DEPLOY_ALERT_WEBHOOK }}" ]; then
-            PAYLOAD=$(jq -n \
-              --arg sha "${{ github.sha }}" \
-              --arg status "$POD_STATUS" \
-              --arg logs "$POD_LOGS" \
-              '{content: ("**Deployment Status for quartz-api (`" + $sha[0:7] + "`)**\n```\n" + $status + "\n```\n**Last Container Logs:**\n```\n" + $logs + "\n```")}')
-          
-            curl -s -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "${{ secrets.DEPLOY_ALERT_WEBHOOK }}" > /dev/null || true
-          fi
+          send_discord_alert() {
+            local title="$1"
+            local status="$2"
+            local logs="$3"
 
-          if ! kubectl -n default rollout status deployment/quartz-api --timeout=180s; then
-            echo "::error::Rollout failed! Sending diagnostics..."
-          
-            POD_LOGS=$(kubectl -n default logs -l app=quartz-api --tail=30 --all-containers=true 2>&1 | tail -c 1800)
-            POD_STATUS=$(kubectl -n default get pods -l app=quartz-api -o wide 2>&1)
-          
-            if [ -n "${{ secrets.DEPLOY_ALERT_WEBHOOK }}" ]; then
-              PAYLOAD=$(jq -n \
-                --arg sha "${{ github.sha }}" \
-                --arg status "$POD_STATUS" \
-                --arg logs "$POD_LOGS" \
-                '{content: ("**Deployment Failed for quartz-api (`" + $sha[0:7] + "`)**\n```\n" + $status + "\n```\n**Last Container Logs:**\n```\n" + $logs + "\n```")}')
-          
-              curl -s -H "Content-Type: application/json" -X POST -d "$PAYLOAD" "${{ secrets.DEPLOY_ALERT_WEBHOOK }}" > /dev/null || true
+            if [ -z "$DEPLOY_ALERT_WEBHOOK" ]; then
+              echo "DEPLOY_ALERT_WEBHOOK secret is not set or empty; skipping Discord alert."
+              return 0
             fi
 
-            echo "Rollout failed or timed out. Rolling back to previous revision..."
+            # Discord message limit is 2000 characters. Keep status <= 400, logs <= 1200.
+            local payload=""
+            if command -v python3 >/dev/null 2>&1; then
+              payload=$(python3 -c '
+import sys, json
+title, status, logs = sys.argv[1], sys.argv[2][:400], sys.argv[3][:1200]
+msg = f"{title}\n```\n{status}\n```\n**Last Container Logs:**\n```\n{logs}\n```"
+print(json.dumps({"content": msg}))
+' "$title" "$status" "$logs")
+            elif command -v jq >/dev/null 2>&1; then
+              payload=$(jq -n \
+                --arg title "$title" \
+                --arg status "$(echo "$status" | head -c 400)" \
+                --arg logs "$(echo "$logs" | tail -c 1200)" \
+                '{content: ($title + "\n```\n" + $status + "\n```\n**Last Container Logs:**\n```\n" + $logs + "\n```")}')
+            else
+              echo "::warning::Neither python3 nor jq is available on this runner to format JSON alert."
+              return 1
+            fi
+
+            # Send to Discord and inspect HTTP response status
+            local response
+            response=$(curl -s -w "\n%{http_code}" -H "Content-Type: application/json" -X POST -d "$payload" "$DEPLOY_ALERT_WEBHOOK")
+            local http_code
+            http_code=$(echo "$response" | tail -n 1)
+            local body
+            body=$(echo "$response" | sed '$d')
+
+            if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+              echo "Discord alert sent successfully (HTTP $http_code)."
+            else
+              echo "::warning::Failed to send Discord alert (HTTP $http_code): $body"
+            fi
+          }
+
+          echo "Deploying image: $IMAGE_TAG"
+          kubectl -n default set image deployment/quartz-api quartz-api="$IMAGE_TAG"
+
+          if ! kubectl -n default rollout status deployment/quartz-api --timeout=180s; then
+            echo "::error::Rollout failed or timed out! Collecting diagnostics..."
+
+            POD_STATUS=$(kubectl -n default get pods -l app=quartz-api -o wide 2>&1)
+            POD_LOGS=$(kubectl -n default logs -l app=quartz-api --tail=35 --all-containers=true 2>&1)
+
+            send_discord_alert "**Deployment FAILED for quartz-api (\`${COMMIT_SHA:0:7}\`)**" "$POD_STATUS" "$POD_LOGS"
+
+            echo "Rolling back to previous revision..."
             kubectl -n default rollout undo deployment/quartz-api
             exit 1
           fi
+
           echo "Rollout successfully completed and verified."
+
+          if [ "$DEPLOY_ALERT_ON_SUCCESS" = "1" ]; then
+            echo "DEPLOY_ALERT_ON_SUCCESS is enabled (1). Sending success notification..."
+            POD_STATUS=$(kubectl -n default get pods -l app=quartz-api -o wide 2>&1)
+            POD_LOGS=$(kubectl -n default logs -l app=quartz-api --tail=25 --all-containers=true 2>&1)
+            send_discord_alert "**Deployment SUCCEEDED for quartz-api (\`${COMMIT_SHA:0:7}\`)**" "$POD_STATUS" "$POD_LOGS"
+          fi
